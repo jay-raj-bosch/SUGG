@@ -45,7 +45,7 @@ const MySuggestions = () => {
   const defaultTab = filterParam === "drafts" ? "saved" : "submitted";
 
   const empNo = user?.employeeNo;
-  const allSubs   = [...getSubmittedSuggestions(), ...getDailyCIPSuggestions()].filter(s => s.employeeNo === empNo);
+  const allSubs   = getSubmittedSuggestions().filter(s => s.employeeNo === empNo);
   const allDrafts = getDraftSuggestions().filter(s => s.employeeNo === empNo);
 
   const CLOSED_STATUSES = new Set(["Approved & Closed", "Implemented", "Rejected", "Closed"]);

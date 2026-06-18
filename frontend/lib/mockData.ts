@@ -1,4 +1,4 @@
-﻿// TODO [BACKEND]: This entire file should be replaced with real API calls
+// TODO [BACKEND]: This entire file should be replaced with real API calls
 // TODO [BACKEND]: Database tables needed:
 //   - employees (employeeNo, name, department, email, ntid, plantCode, bankDetails)
 //   - suggestions (id, suggestionNo, subject, type, category, status, date, employeeNo, range, presentMethod, proposedMethod, benefits, pendingWith, daysPending)
@@ -262,6 +262,7 @@ export const mockSuggestions: Suggestion[] = [
     evaluatedBy: "30698710",
     evaluatedByName: "Suresh M",
     evaluatedOn: "2026-02-18",
+    pendingSince: "2026-02-18",
     daysPending: 3,
     employeeNo: "30698665",
     employeeName: "Karthik",
@@ -465,6 +466,7 @@ export const mockSuggestions: Suggestion[] = [
     evaluatedBy: "30698710",
     evaluatedByName: "Suresh M",
     evaluatedOn: "2026-02-24",
+    pendingSince: "2026-02-24",
     daysPending: 5,
     employeeNo: "30698704",
     employeeName: "Priya Devi",
@@ -617,6 +619,7 @@ export const mockSuggestions: Suggestion[] = [
     approvedByBpsAdmin: "30698720",
     approvedByBpsAdminName: "Vijay Sharma",
     approvedByBpsAdminOn: "2026-03-05",
+    pendingSince: "2026-03-05",
     daysPending: 2,
     employeeNo: "30698702",
     employeeName: "Anita Sharma",

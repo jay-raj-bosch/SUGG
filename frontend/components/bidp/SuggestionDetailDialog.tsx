@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { Save, Send, Trash2, CalendarDays, User, Users, FileText, Award, Clock, Info, Percent, ChevronRight, ChevronLeft, Paperclip, Download, ZoomIn, Image, ArrowRightLeft } from "lucide-react";
 import { type AttachmentItem, formatFileSize, isImageMime } from "@/lib/attachmentUtils";
 import { teamMemberOptions, moderatorOptions, flmOptions } from "@/lib/bidp/suggestionConstants";
+import { calculateDaysPending } from "@/lib/bidp/approvalPipeline";
 
 // TODO [BACKEND]: Replace with API call — PUT /api/suggestions/:id for updates
 // TODO [BACKEND]: Submit action should call POST /api/suggestions/:id/submit
@@ -397,7 +398,7 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs font-medium text-muted-foreground">Days Pending</Label>
-                  <p className="text-sm text-foreground">{suggestion.daysPending ?? "—"}</p>
+                  <p className="text-sm text-foreground">{calculateDaysPending(suggestion)}</p>
                 </div>
               </div>
             )}
@@ -589,7 +590,7 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
                       : role;
                     return <Row label="Pending With" value={display} />;
                   })()}
-                  {suggestion.daysPending != null && <Row label="Days Pending" value={String(suggestion.daysPending)} />}
+                  <Row label="Days Pending" value={String(calculateDaysPending(suggestion))} />
                 </div>
               </>
             )}

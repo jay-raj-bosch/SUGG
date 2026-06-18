@@ -8,6 +8,7 @@ import { Paperclip, FileX2, FileText, Image as ImageIcon, X, ArrowRightLeft, Che
 import { Suggestion, AuditEntry, statusColors } from "@/lib/mockData";
 import type { AttachmentItem } from "@/lib/attachmentUtils";
 import { teamMemberOptions } from "@/lib/bidp/suggestionConstants";
+import { calculateDaysPending } from "@/lib/bidp/approvalPipeline";
 
 interface Props {
   suggestion: Suggestion | null;
@@ -708,7 +709,7 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                   <InfoItem icon={Tag} label="Type" value={suggestion.type} />
                   <InfoItem icon={Tag} label="Category" value={suggestion.category} />
                   <InfoItem icon={Building2} label="Range / Area" value={suggestion.range} />
-                  <InfoItem icon={Clock} label="Days Pending" value={suggestion.daysPending != null ? String(suggestion.daysPending) : undefined} />
+                  <InfoItem icon={Clock} label="Days Pending" value={String(calculateDaysPending(suggestion))} />
                 </div>
               </div>
 
@@ -831,9 +832,9 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                         <span className="ml-2 font-bold">— {forwardedName}</span>
                       )}
                     </p>
-                    {suggestion.daysPending != null && suggestion.daysPending > 0 && (
-                      <p className="text-[10px] text-amber-600 dark:text-amber-400">Waiting for {suggestion.daysPending} day{suggestion.daysPending !== 1 ? "s" : ""}</p>
-                    )}
+                    {(() => { const dp = calculateDaysPending(suggestion); return dp > 0 ? (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400">Waiting for {dp} day{dp !== 1 ? "s" : ""}</p>
+                    ) : null; })()}
                   </div>
                 </div>
               );

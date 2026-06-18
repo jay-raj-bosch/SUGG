@@ -1,0 +1,171 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+Kannada:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 215 28% 17%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 28% 17%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 28% 17%;
+
+    --primary: 215 70% 28%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 174 55% 40%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 210 18% 93%;
+    --muted-foreground: 215 14% 46%;
+
+    --accent: 38 92% 55%;
+    --accent-foreground: 215 28% 17%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 215 28% 17%;
+
+    --info: 205 85% 55%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 214 20% 88%;
+    --input: 214 20% 88%;
+    --ring: 215 70% 28%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 215 70% 22%;
+    --sidebar-foreground: 210 30% 90%;
+    --sidebar-primary: 174 55% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 60% 30%;
+    --sidebar-accent-foreground: 210 30% 95%;
+    --sidebar-border: 215 50% 30%;
+    --sidebar-ring: 174 55% 50%;
+
+    --header-background: 215 70% 22%;
+    --header-foreground: 210 30% 95%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(215 70% 28%), hsl(215 70% 18%));
+    --gradient-accent: linear-gradient(135deg, hsl(174 55% 40%), hsl(174 55% 30%));
+    --gradient-header: linear-gradient(90deg, hsl(215 70% 22%), hsl(215 60% 28%));
+
+    --shadow-card: 0 1px 3px 0 hsl(215 28% 17% / 0.06), 0 1px 2px -1px hsl(215 28% 17% / 0.06);
+    --shadow-elevated: 0 4px 12px -2px hsl(215 28% 17% / 0.1), 0 2px 6px -2px hsl(215 28% 17% / 0.06);
+
+    --font-display: 'Inter', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-kannada: 'Noto Sans Kannada', sans-serif;
+  }
+
+  .dark {
+    --background: 215 28% 10%;
+    --foreground: 210 30% 90%;
+    --card: 215 28% 14%;
+    --card-foreground: 210 30% 90%;
+    --popover: 215 28% 14%;
+    --popover-foreground: 210 30% 90%;
+    --primary: 210 60% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 174 50% 45%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 215 20% 20%;
+    --muted-foreground: 215 14% 60%;
+    --accent: 38 80% 55%;
+    --accent-foreground: 215 28% 10%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 215 20% 22%;
+    --input: 215 20% 22%;
+    --ring: 210 60% 55%;
+    --sidebar-background: 215 30% 12%;
+    --sidebar-foreground: 210 20% 80%;
+    --sidebar-primary: 174 50% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 25% 18%;
+    --sidebar-accent-foreground: 210 20% 90%;
+    --sidebar-border: 215 20% 18%;
+    --sidebar-ring: 174 50% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+  }
+}
+
+@layer components {
+  .header-gradient {
+    background: var(--gradient-header);
+  }
+
+  .card-shadow {
+    box-shadow: var(--shadow-card);
+  }
+
+  .card-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .kannada-text {
+    font-family: var(--font-kannada);
+  }
+
+  .status-badge-pending {
+    @apply bg-warning/15 text-warning;
+  }
+
+  .status-badge-approved {
+    @apply bg-success/15 text-success;
+  }
+
+  .status-badge-rejected {
+    @apply bg-destructive/15 text-destructive;
+  }
+
+  .status-badge-draft {
+    @apply bg-muted text-muted-foreground;
+  }
+
+  .kpi-card {
+    @apply rounded-lg border bg-card p-5 card-shadow transition-all hover:card-elevated;
+  }
+}
+
+@layer utilities {
+  .text-gradient-primary {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .scrollbar-hidden {
+    scrollbar-width: none;       /* Firefox */
+    -ms-overflow-style: none;   /* IE / Edge */
+  }
+  .scrollbar-hidden::-webkit-scrollbar {
+    display: none;              /* Chrome / Safari / Opera */
+  }
+}

@@ -113,6 +113,7 @@ export const translations: Record<string, Record<Language, string>> = {
   // ── Tabs ──
   "All Pending": { kannada: "ಎಲ್ಲಾ ಬಾಕಿ", tamil: "அனைத்து நிலுவை", hindi: "सभी लंबित", telugu: "అన్ని పెండింగ్" },
   "Submitted": { kannada: "ಸಲ್ಲಿಸಲಾಗಿದೆ", tamil: "சமர்ப்பிக்கப்பட்டது", hindi: "जमा किया", telugu: "సమర్పించబడింది" },
+  "All Submissions": { kannada: "ಎಲ್ಲಾ ಸಲ್ಲಿಕೆಗಳು", tamil: "அனைத்து சமர்ப்பிப்புகள்", hindi: "सभी प्रस्तुतियाँ", telugu: "అన్ని సమర్పణలు" },
   "Saved": { kannada: "ಉಳಿಸಲಾಗಿದೆ", tamil: "சேமிக்கப்பட்டது", hindi: "सहेजा गया", telugu: "సేవ్ చేయబడింది" },
   "Daily CIP": { kannada: "ದೈನಿಕ CIP", tamil: "தினசரி CIP", hindi: "दैनिक CIP", telugu: "రోజువారీ CIP" },
   "SFC Evaluation": { kannada: "SFC ಮೌಲ್ಯಮಾಪನ", tamil: "SFC மதிப்பீடு", hindi: "SFC मूल्यांकन", telugu: "SFC మూల్యాంకనం" },

@@ -25,7 +25,7 @@ import { calculateDaysPending } from "@/lib/bidp/approvalPipeline";
 
 const MySuggestions = () => {
   const [searchParams] = useSearchParams();
-  const { getSubmittedSuggestions, getDraftSuggestions, getDailyCIPSuggestions, deleteSuggestion } = useSuggestions();
+  const { getSubmittedSuggestions, getDraftSuggestions, deleteSuggestion } = useSuggestions();
   const { user } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
@@ -45,7 +45,7 @@ const MySuggestions = () => {
   const defaultTab = filterParam === "drafts" ? "saved" : "submitted";
 
   const empNo = user?.employeeNo;
-  const allSubs   = [...getSubmittedSuggestions(), ...getDailyCIPSuggestions()].filter(s => s.employeeNo === empNo);
+  const allSubs   = getSubmittedSuggestions().filter(s => s.employeeNo === empNo);
   const allDrafts = getDraftSuggestions().filter(s => s.employeeNo === empNo);
 
   const CLOSED_STATUSES = new Set(["Approved & Closed", "Implemented", "Rejected", "Closed"]);
@@ -209,10 +209,11 @@ const MySuggestions = () => {
 
         {/* ── Desktop table (≥ sm) ── */}
         <div className="hidden sm:block space-y-2">
-          <div className="overflow-auto rounded-md border" style={{ maxHeight: "calc(100vh - 320px)", minHeight: "200px" }}>
+          <div className="overflow-auto rounded-md border" style={{ maxHeight: "calc(100vh - 230px)" }}>
             <table className="min-w-[820px] w-full text-xs">
               <thead className="sticky top-0 z-20">
                 <tr className="border-b text-left bg-muted">
+                  <th className="py-2 px-2 font-medium text-muted-foreground whitespace-nowrap w-12">Sl No</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground whitespace-nowrap"><TH en="Suggestion No" /></th>
                   <th className="py-2 px-2 font-medium text-muted-foreground whitespace-nowrap"><TH en="Subject" /></th>
                   <th className="py-2 px-2 font-medium text-muted-foreground whitespace-nowrap"><TH en="Pending With" /></th>
@@ -223,12 +224,14 @@ const MySuggestions = () => {
                 </tr>
               </thead>
               <tbody>
-                {pageRows.map(s => {
+                {pageRows.map((s, idx) => {
                   const pw = formatPendingWith(s);
                   const isClosed = CLOSED_STATUSES.has(s.status);
                   const days = isClosed ? null : calculateDaysPending(s);
+                  const slNo = (safePage - 1) * rowsPerPage + idx + 1;
                   return (
                     <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="py-2.5 px-2 text-muted-foreground">{slNo}</td>
                       <td className="py-2.5 px-2 font-mono">{s.suggestionNo}</td>
                       <td className="py-2.5 px-2 max-w-[220px]"><span className="block truncate" title={s.subject}>{s.subject}</span></td>
                       <td className="py-2.5 px-2 whitespace-nowrap">
@@ -274,7 +277,7 @@ const MySuggestions = () => {
                   );
                 })}
                 {pageRows.length === 0 && (
-                  <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">No suggestions found</td></tr>
+                  <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">No suggestions found</td></tr>
                 )}
               </tbody>
             </table>
@@ -316,7 +319,6 @@ const MySuggestions = () => {
               <SelectItem value="Draft">Draft</SelectItem>
               <SelectItem value="Submitted">Submitted</SelectItem>
               <SelectItem value="Under Evaluation">Under Evaluation</SelectItem>
-              <SelectItem value="Approved">Approved</SelectItem>
               <SelectItem value="Approved &amp; Closed">Approved &amp; Closed</SelectItem>
               <SelectItem value="Rejected">Rejected</SelectItem>
               <SelectItem value="Implemented">Implemented</SelectItem>
@@ -331,10 +333,10 @@ const MySuggestions = () => {
           <TabsTrigger value="saved">Saved / {t("Saved")} ({drafts.length}{anyFilter ? `/${allDrafts.length}` : ""})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="submitted">
+        <TabsContent value="submitted" className="mt-2">
           <Card className="card-shadow"><CardContent className="pt-4">{renderTable(subs, false, currentPageSubs, setCurrentPageSubs)}</CardContent></Card>
         </TabsContent>
-        <TabsContent value="saved">
+        <TabsContent value="saved" className="mt-2">
           <Card className="card-shadow"><CardContent className="pt-4">{renderTable(drafts, true, currentPageDrafts, setCurrentPageDrafts)}</CardContent></Card>
         </TabsContent>
       </Tabs>

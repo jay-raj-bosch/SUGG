@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { statusColors, Suggestion } from "@/lib/mockData";
-import { CheckCircle2, Clock, FileText, Send, UserCheck, Award, AlertCircle, XCircle, IndianRupee, ChevronRight, Undo2 } from "lucide-react";
+import { CheckCircle2, Clock, FileText, Send, UserCheck, Award, AlertCircle, XCircle, IndianRupee, ChevronRight, Undo2, Timer } from "lucide-react";
 import { getPipeline } from "@/lib/bidp/approvalPipeline";
 import { flmOptions, teamMemberOptions } from "@/lib/bidp/suggestionConstants";
 
@@ -42,7 +42,23 @@ interface TimelineEvent {
   detail: string;
   icon: React.ReactNode;
   state: "completed" | "active" | "pending" | "rejected" | "sentBack";
+  daysTaken?: number;  // days between this step and the previous one
 }
+
+/** Calculate calendar days between two ISO date strings */
+const daysBetween = (from: string, to: string): number => {
+  if (!from || !to || from === "—" || to === "—") return 0;
+  const a = new Date(from); a.setHours(0,0,0,0);
+  const b = new Date(to);   b.setHours(0,0,0,0);
+  return Math.max(0, Math.round((b.getTime() - a.getTime()) / 86400000));
+};
+
+const daysSinceToday = (from: string): number => {
+  if (!from || from === "—") return 0;
+  const a = new Date(from); a.setHours(0,0,0,0);
+  const b = new Date();      b.setHours(0,0,0,0);
+  return Math.max(0, Math.round((b.getTime() - a.getTime()) / 86400000));
+};
 
 /**
  * Build timeline from the suggestion state + approval pipeline.
@@ -83,6 +99,7 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
     detail: "Sent for FLM review",
     icon: <Send className={ic} />,
     state: "completed",
+    daysTaken: 0,
   });
 
   // DCIP → auto-closed
@@ -127,6 +144,7 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
         : "Pending FLM review",
     icon: <UserCheck className={ic} />,
     state: flmDone ? "completed" : flmIsActive ? "active" : isRejected && s.rejectedBy && !flmDone ? "rejected" : "pending",
+    daysTaken: flmDone && s.evaluatedOn ? daysBetween(s.date, s.evaluatedOn) : flmIsActive ? daysSinceToday(s.date) : undefined,
   });
 
   // If FLM hasn't evaluated yet AND not rejected, stop here — don't show further pipeline
@@ -181,9 +199,11 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
           : isActive ? "Pending manager approval" : "Awaiting",
         icon: <UserCheck className={ic} />,
         state: managerDone ? "completed" : isActive ? "active" : "pending",
+        daysTaken: managerDone && s.approvedByManagerOn && s.evaluatedOn ? daysBetween(s.evaluatedOn, s.approvedByManagerOn) : isActive && s.evaluatedOn ? daysSinceToday(s.evaluatedOn) : undefined,
       });
     } else if (step.level === "BPS Admin") {
       const isActive = s.status === "Pending BPS Admin" && !bpsAdminDone;
+      const prevDate = s.approvedByManagerOn || s.evaluatedOn;
       events.push({
         label: "BPS Admin",
         date: s.approvedByBpsAdminOn || "\u2014",
@@ -192,9 +212,11 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
           : isActive ? "Pending BPS Admin approval" : "Awaiting",
         icon: <UserCheck className={ic} />,
         state: bpsAdminDone ? "completed" : isActive ? "active" : "pending",
+        daysTaken: bpsAdminDone && s.approvedByBpsAdminOn && prevDate ? daysBetween(prevDate, s.approvedByBpsAdminOn) : isActive && prevDate ? daysSinceToday(prevDate) : undefined,
       });
     } else if (step.level === "BPS DH") {
       const isActive = s.status === "Pending BPS DH" && !bpsDhDone;
+      const prevDateDh = s.approvedByBpsAdminOn || s.approvedByManagerOn || s.evaluatedOn;
       events.push({
         label: "BPS DH",
         date: s.approvedByBpsDhOn || "\u2014",
@@ -203,6 +225,7 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
           : isActive ? "Pending BPS DH approval" : "Awaiting",
         icon: <UserCheck className={ic} />,
         state: bpsDhDone ? "completed" : isActive ? "active" : "pending",
+        daysTaken: bpsDhDone && s.approvedByBpsDhOn && prevDateDh ? daysBetween(prevDateDh, s.approvedByBpsDhOn) : isActive && prevDateDh ? daysSinceToday(prevDateDh) : undefined,
       });
     }
   }
@@ -345,7 +368,16 @@ const SuggestionTimelineDialog = ({ suggestion, open, onOpenChange }: Props) => 
                 </div>
                 {/* Content */}
                 <div className="ml-2">
-                  <p className={`text-sm ${styles.label}`}>{event.label}</p>
+                  <p className={`text-sm ${styles.label}`}>
+                    {event.label}
+                    {event.daysTaken != null && event.daysTaken >= 0 && (
+                      <span className={`ml-2 inline-flex items-center gap-0.5 text-[10px] font-normal ${
+                        event.state === "active" ? "text-primary" : "text-muted-foreground"
+                      }`}>
+                        <Timer className="h-2.5 w-2.5" />{event.daysTaken}d
+                      </span>
+                    )}
+                  </p>
                   <p className="text-xs text-muted-foreground">{event.detail}</p>
                   {event.date !== "—" && (
                     <p className="text-[10px] text-muted-foreground/60 mt-0.5">{event.date}</p>

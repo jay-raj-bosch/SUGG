@@ -611,18 +611,51 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
             {suggestion.sendBackHistory && suggestion.sendBackHistory.length > 0 && (
               <>
                 <SectionHead icon={Clock} title="Send-Back History" />
-                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-3 space-y-2">
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-3 space-y-2.5">
                   {suggestion.sendBackHistory.map((sb, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-xs border-b border-amber-200/50 dark:border-amber-800/50 last:border-0 pb-2 last:pb-0">
-                      <div className="h-5 w-5 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center shrink-0">
-                        <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">{idx + 1}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-amber-800 dark:text-amber-300">Sent back by {sb.from}</span>
-                          <span className="text-amber-600/70 dark:text-amber-400/60">on {sb.date}</span>
+                    <div key={idx} className="border-l-2 border-amber-300 dark:border-amber-600 pl-2.5 py-1 space-y-1">
+                      <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                        <div className="h-5 w-5 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center shrink-0">
+                          <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">{idx + 1}</span>
                         </div>
+                        <span className="font-semibold text-amber-800 dark:text-amber-300">
+                          {sb.fromName || sb.from} ({sb.from})
+                        </span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className="font-semibold text-amber-800 dark:text-amber-300">
+                          {sb.toName || sb.to} ({sb.to})
+                        </span>
+                        <span className="text-amber-600/70 dark:text-amber-400/60">on {sb.date}</span>
                       </div>
+                      {sb.reason && (
+                        <div className="rounded-md bg-background/80 border border-amber-200/50 dark:border-amber-800/50 px-2.5 py-2 ml-7">
+                          <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Reason</p>
+                          <p className="text-[11px] leading-relaxed whitespace-pre-wrap">{sb.reason}</p>
+                        </div>
+                      )}
+                      {sb.attachments && sb.attachments.length > 0 && (
+                        <div className="ml-7 space-y-1">
+                          <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                            <Paperclip className="h-2.5 w-2.5" /> Attachments ({sb.attachments.length})
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {sb.attachments.map((att, ai) => (
+                              att.url ? (
+                                <a key={ai} href={att.url} download={att.name} target="_blank" rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-[10px] bg-background border px-2 py-1 rounded-md hover:bg-muted transition-colors max-w-[180px]">
+                                  <Download className="h-2.5 w-2.5 shrink-0 text-primary" />
+                                  <span className="truncate">{att.name}</span>
+                                </a>
+                              ) : (
+                                <span key={ai} className="inline-flex items-center gap-1 text-[10px] bg-muted border px-2 py-1 rounded-md max-w-[180px]">
+                                  <Paperclip className="h-2.5 w-2.5 shrink-0" />
+                                  <span className="truncate">{att.name}</span>
+                                </span>
+                              )
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

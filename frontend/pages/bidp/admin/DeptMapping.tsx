@@ -1,5 +1,5 @@
 // DeptMapping — wired to /api/dept-mappings
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Input } from "@/components/ui/input";
@@ -19,24 +19,8 @@ import {
 import { toast } from "sonner";
 import { Plus, Search, Trash2, Pencil, Check, X } from "lucide-react";
 import { useNotifications } from "@/contexts/NotificationContext";
+import { useDeptMappings } from "@/contexts/DeptMappingContext";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
-
-interface DeptEntry {
-  id: string;
-  dept: string;
-  mapped: string;
-}
-
-const initialDepts: DeptEntry[] = [
-  { id: "1", dept: "BIDP1/TEF", mapped: "TEF" },
-  { id: "2", dept: "BIDP2/QAL", mapped: "QAL" },
-  { id: "3", dept: "BIDP1/HRD", mapped: "HRD" },
-  { id: "4", dept: "BIDP1/MNT", mapped: "MNT" },
-  { id: "5", dept: "BIDP3/LOG", mapped: "LOG" },
-  { id: "6", dept: "BIDP2/RND", mapped: "RND" },
-  { id: "7", dept: "BIDP1/FIN", mapped: "FIN" },
-  { id: "8", dept: "BIDP1/ITS", mapped: "ITS" },
-];
 
 const knownDepartments = [
   "BIDP1/TEF", "BIDP2/QAL", "BIDP1/HRD", "BIDP1/MNT",
@@ -47,24 +31,13 @@ const knownDepartments = [
 const DeptMapping = () => {
   const { t } = useLanguage();
   const { addNotification } = useNotifications();
-  const [depts, setDepts] = useState<DeptEntry[]>(initialDepts);
+  const { entries: depts, addEntry, updateEntry, removeEntry } = useDeptMappings();
   const [search, setSearch] = useState("");
   const [deptName, setDeptName] = useState("");
   const [mappedName, setMappedName] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingMapped, setEditingMapped] = useState("");
-
-  // Load from backend on mount
-  useEffect(() => {
-    apiService.fetchDeptMappings()
-      .then(rows => {
-        if (rows.length) {
-          setDepts(rows.map(r => ({ id: String(r.id), dept: r.dept_name, mapped: r.mapped_name })));
-        }
-      })
-      .catch(() => { /* keep mock data */ });
-  }, []);
 
   const filtered = depts.filter(d =>
     d.dept.toLowerCase().includes(search.toLowerCase()) ||
@@ -80,13 +53,14 @@ const DeptMapping = () => {
     if (depts.some(d => d.dept.toLowerCase() === deptName.trim().toLowerCase())) {
       toast.error("Department already exists"); return;
     }
+    let newEntry = { id: String(Date.now()), dept: deptName.trim(), mapped: mappedName.trim() };
     try {
       const created = await apiService.addDeptMapping(deptName.trim(), mappedName.trim());
-      setDepts(prev => [...prev, { id: String(created.id), dept: created.dept_name, mapped: created.mapped_name }]);
+      newEntry = { id: String(created.id), dept: created.dept_name, mapped: created.mapped_name };
     } catch {
-      // fallback: local add
-      setDepts(prev => [...prev, { id: String(Date.now()), dept: deptName.trim(), mapped: mappedName.trim() }]);
+      // fallback: local add with generated id
     }
+    addEntry(newEntry);
     setDeptName(""); setMappedName("");
     toast.success(`Department "${deptName.trim()}" mapped to "${mappedName.trim()}"`);
     addNotification(`Dept mapping added: ${deptName.trim()} → ${mappedName.trim()}`, "info");
@@ -111,7 +85,7 @@ const DeptMapping = () => {
     try {
       await apiService.updateDeptMapping(parseInt(id), editingMapped.trim());
     } catch { /* fallback: local update */ }
-    setDepts(prev => prev.map(d => d.id === id ? { ...d, mapped: editingMapped.trim() } : d));
+    updateEntry(id, editingMapped.trim());
     const entry = depts.find(d => d.id === id);
     toast.success(`Updated mapping: ${entry?.dept} → ${editingMapped.trim()}`);
     addNotification(`Dept mapping updated: ${entry?.dept} → ${editingMapped.trim()}`, "info");
@@ -125,7 +99,7 @@ const DeptMapping = () => {
     try {
       await apiService.removeDeptMapping(parseInt(entry.id));
     } catch { /* keep local delete even if backend fails */ }
-    setDepts(prev => prev.filter(d => d.id !== pendingDeleteId));
+    removeEntry(entry.id);
     toast.success(`Mapping "${entry.dept} → ${entry.mapped}" deleted`);
     addNotification(`Dept mapping deleted: ${entry.dept} → ${entry.mapped}`, "info");
     setPendingDeleteId(null);

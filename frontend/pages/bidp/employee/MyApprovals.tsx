@@ -27,6 +27,7 @@ import {
   buildSendBackUpdate,
   getPreviousStep,
   getNextStep,
+  getPipeline,
   getPipelineDisplay,
   calculateDaysPending,
   type ApprovalLevel,
@@ -44,6 +45,9 @@ const MyApprovals = () => {
   const [rejectReason, setRejectReason] = useState("");
   const [sendBackOpen, setSendBackOpen] = useState(false);
   const [sendBackReason, setSendBackReason] = useState("");
+  const [sendBackTargetLevel, setSendBackTargetLevel] = useState<string>("");
+  const [sendBackAttachFiles, setSendBackAttachFiles] = useState<AttachmentItem[]>([]);
+  const sendBackFileInputRef = useRef<HTMLInputElement>(null);
   const [awardAmount, setAwardAmount] = useState("");
   const [activeTypeFilter, setActiveTypeFilter] = useState<string>("all");
 
@@ -155,20 +159,33 @@ const MyApprovals = () => {
   const currentLevel = user?.bidpRole ? roleToApprovalLevel(user.bidpRole) : null;
 
   // Determine the effective award amount for pipeline routing (SSS/SFC use evaluated amount)
-  const effectiveAmount = useMemo(() => {
+  // Returns null when FLM hasn't calculated/entered the amount yet (so we can disable the forward dropdown)
+  const effectiveAmount = useMemo((): number | null => {
     if (!selected) return 0;
     if (currentLevel === "FLM" && selected.type === "Simple Suggestion Scheme") {
-      return sssCalculatedAmount ?? selected.awardAmount ?? 0;
+      // null means "not yet calculated" — don't fall back to 0
+      return sssCalculatedAmount ?? (selected.awardAmount != null ? selected.awardAmount : null);
     }
     if (currentLevel === "FLM" && selected.type === "Shop Floor CIP") {
-      return sfcFinalPoints ?? selected.awardAmount ?? 0;
+      return sfcFinalPoints ?? (selected.awardAmount != null ? selected.awardAmount : null);
     }
+    // CTF and other non-MIC types at FLM: amount is entered manually
+    if (currentLevel === "FLM" && selected.type !== "My Idea Card") {
+      const amt = parseFloat(awardAmount);
+      // If the suggestion already has an award amount (e.g. send-back), use it; otherwise null until entered
+      return selected.awardAmount != null ? selected.awardAmount : (Number.isFinite(amt) && amt > 0 ? amt : null);
+    }
+    // MIC (fixed amount) or non-FLM levels: use existing award amount
     return (selected.awardAmount ?? parseFloat(awardAmount)) || 0;
   }, [selected, currentLevel, sssCalculatedAmount, sfcFinalPoints, awardAmount]);
+
+  // Whether the FLM still needs to calculate the amount before forwarding
+  const amountNotYetCalculated = effectiveAmount === null;
 
   // Next approval level based on type + effective amount
   const nextApprovalLevel = useMemo(() => {
     if (!selected || !currentLevel) return null;
+    if (effectiveAmount === null) return null; // not yet calculated
     return getNextStep(selected.type, effectiveAmount, currentLevel)?.level ?? null;
   }, [selected, currentLevel, effectiveAmount]);
 
@@ -283,9 +300,25 @@ const MyApprovals = () => {
         ? sfcAttachFiles.map(f => ({ name: f.name, type: f.type, url: f.url }))
         : undefined;
       const auditMetadata: Record<string, any> | undefined = isSSS
-        ? { evaluationType: "SSS", totalPoints: sssTotalPoints, weightage: sssWeightage, forwardTo: sssForwardTo }
+        ? {
+            evaluationType: "SSS",
+            selections: sssSelections,
+            totalPoints: sssTotalPoints,
+            weightage: sssWeightage,
+            calculatedAmount: sssCalculatedAmount,
+            forwardTo: sssForwardTo,
+          }
         : isSFC
-        ? { evaluationType: "SFC", kaizenPoints: sfcKaizenPoints, gembaTotal: sfcGembaTotal, finalPoints: sfcFinalPoints, forwardTo: sfcForwardTo }
+        ? {
+            evaluationType: "SFC",
+            selectedMonth: sfcSelectedMonth,
+            selectedWeightage: sfcSelectedWeightage,
+            kaizenPoints: sfcKaizenPoints,
+            gembaSelections: sfcGembaSelections,
+            gembaTotal: sfcGembaTotal,
+            finalPoints: sfcFinalPoints,
+            forwardTo: sfcForwardTo,
+          }
         : forwardTo
         ? { forwardTo }
         : undefined;
@@ -364,9 +397,8 @@ const MyApprovals = () => {
     setSelected(null);
   };
 
-  const canSendBack = selected && currentLevel && currentLevel !== "FLM"
-    ? !!getPreviousStep(selected.type, selected.awardAmount ?? 0, currentLevel)
-    : false;
+  // All approval roles can send back (FLM sends to Employee, others to prior levels)
+  const canSendBack = !!(selected && currentLevel);
 
   // Derive whether the Evaluate/Approve button should be enabled
   const canApprove = useMemo(() => {
@@ -393,8 +425,71 @@ const MyApprovals = () => {
 
   const openSendBack = () => {
     setSendBackReason("");
+    setSendBackTargetLevel("");
+    setSendBackAttachFiles([]);
     setSendBackOpen(true);
   };
+
+  // Compute which levels the suggestion can be sent back to, with names
+  const sendBackLevelOptions = useMemo(() => {
+    if (!selected || !currentLevel) return [];
+    const amount = selected.awardAmount ?? 0;
+    const pipeline = getPipeline(selected.type, amount);
+    const currentIndex = pipeline.findIndex(s => s.level === currentLevel);
+    const options: Array<{ value: string; label: string; name: string; sublabel?: string }> = [];
+
+    // Employee option — the original suggestor (available for all levels including FLM)
+    options.push({
+      value: "Employee",
+      label: "Employee",
+      name: selected.employeeName || selected.employeeNo || "Employee",
+      sublabel: selected.employeeNo ? `(${selected.employeeNo}) ${selected.department || ""}` : undefined,
+    });
+
+    // All pipeline levels before the current one
+    for (let i = 0; i < currentIndex; i++) {
+      const step = pipeline[i];
+      let personName = "";
+      let personNo = "";
+      let personDept = "";
+      if (step.level === "FLM") {
+        personName = selected.evaluatedByName || "";
+        personNo = selected.evaluatedBy || selected.assignedFlm || "";
+      } else if (step.level === "Manager") {
+        personName = selected.approvedByManagerName || "";
+        personNo = selected.approvedByManager || "";
+      } else if (step.level === "BPS Admin") {
+        personName = selected.approvedByBpsAdminName || "";
+        personNo = selected.approvedByBpsAdmin || "";
+      } else if (step.level === "BPS DH") {
+        personName = selected.approvedByBpsDhName || "";
+        personNo = selected.approvedByBpsDh || "";
+      }
+      // Also check if there's a name in the approvers list
+      if (!personName && personNo) {
+        const approver = sssApprovers.find(a => a.employee_no === personNo);
+        if (approver) {
+          personName = approver.name;
+          personDept = approver.department || "";
+        }
+      }
+      options.push({
+        value: step.level,
+        label: step.level,
+        name: personName || step.level,
+        sublabel: personNo ? `(${personNo})${personDept ? ` ${personDept}` : ""}` : undefined,
+      });
+    }
+
+    return options;
+  }, [selected, currentLevel, sssApprovers]);
+
+  // Resolve name of the selected send-back target
+  const sendBackTargetName = useMemo(() => {
+    if (!sendBackTargetLevel) return "";
+    const opt = sendBackLevelOptions.find(o => o.value === sendBackTargetLevel);
+    return opt?.name || sendBackTargetLevel;
+  }, [sendBackTargetLevel, sendBackLevelOptions]);
 
   const handleSendBack = () => {
     if (!selected || !user || !currentLevel) return;
@@ -402,16 +497,32 @@ const MyApprovals = () => {
       toast.error("Please provide a reason for sending back");
       return;
     }
-    const prevStep = getPreviousStep(selected.type, selected.awardAmount ?? 0, currentLevel);
-    const targetLevel = prevStep?.level || "FLM";
-    const updates = buildSendBackUpdate(selected, currentLevel, user.employeeNo, user.name, sendBackReason.trim(), { department: user.department });
+    if (!sendBackTargetLevel) {
+      toast.error("Please select which level to send back to");
+      return;
+    }
+    const targetLevel = sendBackTargetLevel as ApprovalLevel | "Employee";
+    const attachments = sendBackAttachFiles.map(f => ({ name: f.name, type: f.type, url: f.url }));
+    const updates = buildSendBackUpdate(
+      selected,
+      currentLevel,
+      user.employeeNo,
+      user.name,
+      sendBackReason.trim(),
+      {
+        department: user.department,
+        targetLevel,
+        toName: sendBackTargetName,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      },
+    );
     updateSuggestion(selected.id, updates);
     toast.success("Suggestion sent back successfully", {
-      description: `${selected.suggestionNo} has been sent back to ${targetLevel} for review.\nReason: ${sendBackReason.trim()}`,
+      description: `${selected.suggestionNo} has been sent back to ${sendBackTargetName} (${targetLevel}) for review.`,
       duration: 5000,
     });
     addNotification(
-      `${selected.suggestionNo} sent back by ${user.name} (${currentLevel}) to ${targetLevel} — Reason: ${sendBackReason.trim()}`,
+      `${selected.suggestionNo} sent back by ${user.name} (${currentLevel}) to ${sendBackTargetName} (${targetLevel}) — Reason: ${sendBackReason.trim()}`,
       "warning"
     );
     setSendBackOpen(false);
@@ -660,18 +771,28 @@ const MyApprovals = () => {
           {images.length > 0 && (
             <div className="space-y-2">
               <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                <ImageIcon className="h-3 w-3" /> Images
+                <ImageIcon className="h-3 w-3" /> Images ({images.length})
               </p>
               <div className="flex flex-wrap gap-2">
                 {images.map((att, i) => (
-                  <button key={att.id} type="button"
-                    onClick={() => { setLightboxImages(images); setLightboxIndex(i); setLightboxOpen(true); }}
-                    className="relative group focus:outline-none rounded">
-                    <img src={att.url} alt={att.name} className="h-20 w-20 object-cover rounded border hover:opacity-80 transition-opacity" />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded">
-                      <ZoomIn className="h-5 w-5 text-white" />
-                    </div>
-                  </button>
+                  <div key={att.id} className="relative group">
+                    <button type="button"
+                      onClick={() => { setLightboxImages(images); setLightboxIndex(i); setLightboxOpen(true); }}
+                      className="focus:outline-none rounded">
+                      <img src={att.url} alt={att.name} className="h-20 w-20 object-cover rounded border hover:opacity-80 transition-opacity" />
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded">
+                        <ZoomIn className="h-5 w-5 text-white" />
+                      </div>
+                    </button>
+                    {/* Download button */}
+                    <a href={att.url} download={att.name}
+                      className="absolute top-1 right-1 h-5 w-5 rounded bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={e => e.stopPropagation()}
+                      title={`Download ${att.name}`}>
+                      <Download className="h-3 w-3 text-white" />
+                    </a>
+                    <p className="text-[8px] text-muted-foreground truncate max-w-[80px] mt-0.5 text-center">{att.name}</p>
+                  </div>
                 ))}
               </div>
             </div>
@@ -680,18 +801,19 @@ const MyApprovals = () => {
             <div className="space-y-1.5">
               {images.length > 0 && <Separator />}
               <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                <FileText className="h-3 w-3" /> Documents
+                <FileText className="h-3 w-3" /> Documents ({docs.length})
               </p>
               <div className="space-y-1.5">
                 {docs.map(att => (
-                  <div key={att.id} className="flex items-center gap-2.5 p-2 rounded-md border bg-background hover:bg-muted/40 transition-colors">
+                  <div key={att.id} className="flex items-center gap-2.5 p-2 rounded-md border bg-background hover:bg-muted/40 transition-colors group">
                     <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <span className="text-xs font-medium flex-1 truncate">{att.name}</span>
                     <span className="text-[10px] text-muted-foreground shrink-0">{formatFileSize(att.size)}</span>
                     <a href={att.url} download={att.name}
-                      className="shrink-0 text-primary hover:text-primary/80 transition-colors"
+                      className="shrink-0 inline-flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors font-medium"
                       onClick={e => e.stopPropagation()}>
                       <Download className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Download</span>
                     </a>
                   </div>
                 ))}
@@ -700,9 +822,10 @@ const MyApprovals = () => {
           )}
           {/* Legacy attachment filename */}
           {legacyAttachment && allAttachments.length === 0 && (
-            <div className="flex items-center gap-2 p-2 rounded-md border bg-background">
+            <div className="flex items-center gap-2.5 p-2 rounded-md border bg-background">
               <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <span className="text-xs font-medium">{legacyAttachment}</span>
+              <span className="text-xs font-medium flex-1">{legacyAttachment}</span>
+              <span className="text-[10px] text-muted-foreground italic shrink-0">File reference</span>
             </div>
           )}
         </div>
@@ -750,7 +873,7 @@ const MyApprovals = () => {
             {myApprovals.length > 0 && (
               <div className="flex items-center gap-2">
                 <Select value={activeTypeFilter} onValueChange={setActiveTypeFilter}>
-                  <SelectTrigger className="w-52 h-8 text-xs">
+                  <SelectTrigger className={`w-52 h-8 text-xs ${activeTypeFilter !== "all" ? "filter-active" : ""}`}>
                     <SelectValue placeholder="Filter by type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1154,12 +1277,35 @@ const MyApprovals = () => {
                             </div>
                             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                               <ChevronRight className="h-3 w-3" />
-                              <span>Sent back to: <strong className="text-foreground">{sb.to}</strong></span>
+                              <span>Sent back to: <strong className="text-foreground">{sb.toName || sb.to}</strong> ({sb.to})</span>
                             </div>
                             {sb.reason && (
                               <div className="rounded-md bg-background/80 border px-2.5 py-2">
                                 <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Reason</p>
                                 <p className="text-[11px] leading-relaxed whitespace-pre-wrap">{sb.reason}</p>
+                              </div>
+                            )}
+                            {sb.attachments && sb.attachments.length > 0 && (
+                              <div className="space-y-1">
+                                <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                                  <Paperclip className="h-2.5 w-2.5" /> Attachments ({sb.attachments.length})
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {sb.attachments.map((att, ai) => (
+                                    att.url ? (
+                                      <a key={ai} href={att.url} download={att.name} target="_blank" rel="noreferrer"
+                                        className="inline-flex items-center gap-1 text-[10px] bg-background border px-2 py-1 rounded-md hover:bg-muted transition-colors max-w-[180px]">
+                                        <Download className="h-2.5 w-2.5 shrink-0 text-primary" />
+                                        <span className="truncate">{att.name}</span>
+                                      </a>
+                                    ) : (
+                                      <span key={ai} className="inline-flex items-center gap-1 text-[10px] bg-muted border px-2 py-1 rounded-md max-w-[180px]">
+                                        <Paperclip className="h-2.5 w-2.5 shrink-0" />
+                                        <span className="truncate">{att.name}</span>
+                                      </span>
+                                    )
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </div>
@@ -1331,7 +1477,11 @@ const MyApprovals = () => {
                         <Label className="text-xs font-medium">
                           Forward For Approval <span className="text-[10px] text-muted-foreground font-normal">/ ಅನುಮೋದನೆಗಾಗಿ ಫಾರ್ವರ್ಡ್ ಮಾಡಿ</span>
                         </Label>
-                        {nextApprovalLevel ? (
+                        {amountNotYetCalculated ? (
+                          <div className="h-9 flex items-center px-3 rounded-md border border-dashed border-muted-foreground/30 bg-muted/20">
+                            <span className="text-xs text-muted-foreground/60 italic">Calculate award amount first to determine approval route</span>
+                          </div>
+                        ) : nextApprovalLevel ? (
                           <Select value={sssForwardTo} onValueChange={setSssForwardTo}>
                             <SelectTrigger className="h-9 text-xs">
                               <SelectValue placeholder={`Select ${nextApprovalLevel}`} />
@@ -1628,7 +1778,11 @@ const MyApprovals = () => {
                         <Label className="text-xs font-medium">
                           Forward for opinion to <span className="text-[10px] text-muted-foreground font-normal">/ ಅನುಮೋದನೆಗಾಗಿ ಫಾರ್ವರ್ಡ್ ಮಾಡಿ</span>
                         </Label>
-                        {nextApprovalLevel ? (
+                        {amountNotYetCalculated ? (
+                          <div className="h-9 flex items-center px-3 rounded-md border border-dashed border-muted-foreground/30 bg-muted/20">
+                            <span className="text-xs text-muted-foreground/60 italic">Calculate final points first to determine approval route</span>
+                          </div>
+                        ) : nextApprovalLevel ? (
                           <Select value={sfcForwardTo} onValueChange={setSfcForwardTo}>
                             <SelectTrigger className="h-9 text-xs">
                               <SelectValue placeholder={`Select ${nextApprovalLevel}`} />
@@ -1741,11 +1895,17 @@ const MyApprovals = () => {
                               onChange={e => setAwardAmount(e.target.value)}
                               className={`h-9 text-sm max-w-xs ${!awardAmount.trim() ? "border-amber-300 dark:border-amber-600" : ""}`}
                             />
-                            <p className="text-[10px] text-muted-foreground">
-                              {parseFloat(awardAmount) > 500
-                                ? "Amount > ₹500 → will require Manager approval before BPS"
-                                : "Amount ≤ ₹500 → will go directly to BPS Admin"}
-                            </p>
+                            {awardAmount.trim() && Number.isFinite(parseFloat(awardAmount)) && parseFloat(awardAmount) > 0 ? (
+                              <p className="text-[10px] text-muted-foreground">
+                                {parseFloat(awardAmount) > 500
+                                  ? "Amount > ₹500 → will require Manager approval before BPS"
+                                  : "Amount ≤ ₹500 → will go directly to BPS Admin"}
+                              </p>
+                            ) : (
+                              <p className="text-[10px] text-muted-foreground/50 italic">
+                                Enter amount to determine approval route
+                              </p>
+                            )}
                           </div>
                         ) : (
                           <div className="flex items-center gap-2 h-9 px-3 rounded-lg border bg-muted/30 w-fit">
@@ -1757,7 +1917,17 @@ const MyApprovals = () => {
                     )}
 
                     {/* Forward to next level */}
-                    {nextApprovalLevel && (
+                    {amountNotYetCalculated ? (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium flex items-center gap-2">
+                          <Send className="h-3 w-3 text-muted-foreground" />
+                          Forward For Approval <span className="text-[10px] text-muted-foreground font-normal">/ ಅನುಮೋದನೆಗಾಗಿ ಫಾರ್ವರ್ಡ್ ಮಾಡಿ</span>
+                        </Label>
+                        <div className="h-9 flex items-center px-3 rounded-md border border-dashed border-muted-foreground/30 bg-muted/20">
+                          <span className="text-xs text-muted-foreground/60 italic">Enter award amount first to determine approval route</span>
+                        </div>
+                      </div>
+                    ) : nextApprovalLevel ? (
                       <div className="space-y-1.5">
                         <Label className="text-xs font-medium flex items-center gap-2">
                           <Send className="h-3 w-3 text-muted-foreground" />
@@ -1784,8 +1954,7 @@ const MyApprovals = () => {
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
-                    {!nextApprovalLevel && (
+                    ) : (
                       <div className="flex items-center gap-2 text-[11px] px-3 py-2 rounded-lg border bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-700 dark:text-emerald-400">
                         <ChevronRight className="h-3.5 w-3.5 shrink-0" />
                         <span>This is the final approval step — suggestion will be <strong>Approved & Closed</strong> after your action.</span>
@@ -1846,8 +2015,14 @@ const MyApprovals = () => {
                   <XCircle className="h-3.5 w-3.5" /> Reject
                 </Button>
                 {canSendBack && (
-                  <Button variant="outline" size="sm" className="gap-1.5 h-9 text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950" onClick={openSendBack}>
-                    <Undo2 className="h-3.5 w-3.5" /> Send Back
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 h-9 relative overflow-hidden border-amber-400/60 bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 shadow-sm hover:shadow-md hover:from-amber-100 hover:to-orange-100 hover:border-amber-500 dark:from-amber-950/40 dark:to-orange-950/30 dark:text-amber-300 dark:border-amber-600/50 dark:hover:from-amber-950/60 dark:hover:to-orange-950/50 dark:hover:border-amber-500 transition-all duration-200 group"
+                    onClick={openSendBack}
+                  >
+                    <Undo2 className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-x-0.5 group-hover:-rotate-12" />
+                    <span className="font-semibold">Send Back</span>
                   </Button>
                 )}
                 <Button
@@ -1927,81 +2102,128 @@ const MyApprovals = () => {
 
       {/* ── Send Back Dialog ── */}
       <Dialog open={sendBackOpen} onOpenChange={setSendBackOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-base flex items-center gap-2">
-              <Undo2 className="h-4 w-4 text-amber-600" />
-              Send Back for Revision
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              {selected?.suggestionNo} — This action will return the suggestion to the previous approval level for corrections.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {/* Info banner */}
-            <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-1.5">
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-muted-foreground">Suggestion:</span>
-                <span className="font-medium">{selected?.subject}</span>
+        <DialogContent className="max-w-md p-0 overflow-hidden rounded-xl">
+          {/* Header with gradient */}
+          <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-4 text-white">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <Undo2 className="h-4 w-4" />
               </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-muted-foreground">Employee:</span>
-                <span className="font-medium">{selected?.employeeName} ({selected?.employeeNo})</span>
+              <div>
+                <h3 className="text-sm font-bold">Send Back for Revision</h3>
+                <p className="text-[11px] opacity-80 mt-0.5">{selected?.suggestionNo}</p>
               </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-muted-foreground">Current Level:</span>
-                <Badge variant="outline" className="text-[10px] h-4">{currentLevel}</Badge>
+            </div>
+          </div>
+
+          <div className="px-5 py-4 space-y-4">
+            {/* Compact info strip */}
+            <div className="grid grid-cols-3 gap-3 rounded-lg border bg-muted/20 px-3 py-2.5">
+              <div className="space-y-0.5">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">Subject</p>
+                <p className="text-[11px] font-medium text-foreground truncate" title={selected?.subject}>{selected?.subject}</p>
               </div>
-              {selected && currentLevel && (
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Will be sent to:</span>
-                  <Badge variant="outline" className="text-[10px] h-4 border-amber-300 text-amber-700 dark:text-amber-400">
-                    {getPreviousStep(selected.type, selected.awardAmount ?? 0, currentLevel)?.level || "FLM"}
-                  </Badge>
+              <div className="space-y-0.5">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">Employee</p>
+                <p className="text-[11px] font-medium text-foreground">{selected?.employeeName}</p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">Your Level</p>
+                <Badge variant="outline" className="text-[10px] h-5 font-semibold">{currentLevel}</Badge>
+              </div>
+            </div>
+
+            {/* Send Back To — Level selector */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                Send Back To
+                <span className="text-[10px] text-muted-foreground font-normal">/ ಯಾರಿಗೆ ಹಿಂತಿರುಗಿಸಿ</span>
+                <span className="text-destructive">*</span>
+              </Label>
+              <Select value={sendBackTargetLevel} onValueChange={setSendBackTargetLevel}>
+                <SelectTrigger className={`h-10 text-xs ${!sendBackTargetLevel ? "border-amber-300 dark:border-amber-600 bg-amber-50/30 dark:bg-amber-950/10" : "border-emerald-300 dark:border-emerald-600"}`}>
+                  <SelectValue placeholder="Select level to send back to" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sendBackLevelOptions.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[9px] h-4 shrink-0 border-amber-300 text-amber-700 dark:text-amber-400">
+                          {opt.label}
+                        </Badge>
+                        <span className="font-medium">{opt.name}</span>
+                        {opt.sublabel && <span className="text-muted-foreground text-[10px]">{opt.sublabel}</span>}
+                      </div>
+                    </SelectItem>
+                  ))}
+                  {sendBackLevelOptions.length === 0 && (
+                    <SelectItem value="_none" disabled className="text-xs text-muted-foreground">
+                      No levels available to send back to
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              {sendBackTargetLevel && (
+                <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 px-2.5 py-1.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                  <ChevronRight className="h-3 w-3" />
+                  <span>Will be sent back to <strong>{sendBackTargetName}</strong> ({sendBackTargetLevel})</span>
                 </div>
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs font-medium">
-                Reason / Comments for Send Back <span className="text-destructive">*</span>
+            {/* Reason */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                Reason / Comments
+                <span className="text-[10px] text-muted-foreground font-normal">/ ಕಾರಣ</span>
+                <span className="text-destructive">*</span>
               </Label>
               <Textarea
-                placeholder="Please provide clear instructions on what needs to be corrected or additional information required..."
+                placeholder="Please provide clear instructions on what needs to be corrected..."
                 value={sendBackReason}
                 onChange={e => setSendBackReason(e.target.value)}
-                rows={4}
-                className="text-sm"
+                rows={3}
+                className={`text-sm resize-none ${!sendBackReason.trim() ? "border-amber-300 dark:border-amber-600 bg-amber-50/30 dark:bg-amber-950/10" : ""}`}
               />
-              <p className="text-[10px] text-muted-foreground">
-                This reason will be visible to the previous approver and the employee.
+              <p className="text-[10px] text-muted-foreground italic">
+                This reason will be visible to the recipient for necessary corrections.
               </p>
             </div>
 
             {/* Previous send-back history (if any) */}
             {selected?.sendBackHistory && selected.sendBackHistory.length > 0 && (
-              <div className="rounded-md border bg-muted/30 p-2.5 space-y-1.5">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Previous Send-Back History</p>
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                  <Clock className="h-2.5 w-2.5" /> Previous Send-Backs ({selected.sendBackHistory.length})
+                </p>
                 {selected.sendBackHistory.map((sb, idx) => (
-                  <div key={idx} className="text-[11px] text-muted-foreground pl-2 border-l-2 border-amber-300 dark:border-amber-600">
-                    <span className="font-medium text-foreground">{sb.fromName} ({sb.from})</span> → {sb.to} on {sb.date}
-                    <p className="italic mt-0.5">"{sb.reason}"</p>
+                  <div key={idx} className="text-[11px] text-muted-foreground pl-2 border-l-2 border-amber-300 dark:border-amber-600 space-y-0.5">
+                    <div>
+                      <span className="font-medium text-foreground">{sb.fromName || sb.from}</span>
+                      <span className="mx-1">→</span>
+                      <span className="font-medium text-foreground">{sb.toName || sb.to}</span>
+                      <span className="text-[10px] ml-1.5 opacity-60">({sb.date})</span>
+                    </div>
+                    {sb.reason && <p className="italic text-[10px]">"{sb.reason}"</p>}
                   </div>
                 ))}
               </div>
             )}
           </div>
-          <DialogFooter className="gap-2 sm:gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={() => setSendBackOpen(false)}>Cancel</Button>
+
+          {/* Footer */}
+          <div className="border-t px-5 py-3 flex justify-end gap-2 bg-muted/10">
+            <Button variant="outline" size="sm" onClick={() => setSendBackOpen(false)} className="hover:bg-muted/60">Cancel</Button>
             <Button
               size="sm"
-              className="gap-1 bg-amber-500 hover:bg-amber-600 text-white"
+              className="gap-1.5 relative overflow-hidden bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md hover:shadow-lg transition-all duration-200 group disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={handleSendBack}
-              disabled={!sendBackReason.trim()}
+              disabled={!sendBackReason.trim() || !sendBackTargetLevel}
             >
-              <Undo2 className="h-3.5 w-3.5" /> Confirm Send Back
+              <Undo2 className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-x-0.5 group-hover:-rotate-12" />
+              <span className="font-semibold">Confirm Send Back</span>
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

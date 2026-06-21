@@ -374,11 +374,11 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
           id: `syn-sb-${idx}`,
           action: "Sent Back",
           performedBy: "",
-          performedByName: sb.fromName,
+          performedByName: sb.fromName || sb.from,
           role: sb.from,
           date: sb.date ? new Date(sb.date).toISOString() : "",
           comments: sb.reason,
-          forwardedTo: sb.to,
+          forwardedTo: sb.toName ? `${sb.toName} (${sb.to})` : sb.to,
         });
       });
     }
@@ -603,11 +603,247 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                     </div>
                   )}
 
-                  {/* Evaluation Details — FLM Approved/Evaluated entries only */}
+                  {/* Evaluation Sheet — FLM Approved/Evaluated entries only */}
                   {entry.role === "FLM" && (entry.action === "Approved" || entry.action === "Evaluated") && entry.metadata && Object.keys(entry.metadata).length > 0 && (() => {
-                    const visibleEntries = Object.entries(entry.metadata).filter(([key, val]) => {
+                    const meta = entry.metadata;
+                    const evalType = meta.evaluationType;
+
+                    // ── SSS Evaluation Sheet ──
+                    if (evalType === "SSS") {
+                      const SSS_CRITERIA_LABELS = [
+                        { label: "Position or Grade Factor",       optA: { label: "1 – Workmen",               pts: 0.5 }, optB: { label: "2 – Supervisor & Above",   pts: 1 } },
+                        { label: "Merit Factor",                   optA: { label: "0.5 – Routine",             pts: 0.5 }, optB: { label: "1 – Innovative",            pts: 1 } },
+                        { label: "Technical Value of Suggestion",  optA: { label: "0.5 – Routine",             pts: 0.5 }, optB: { label: "1 – Innovative",            pts: 1 } },
+                        { label: "Effort Factor",                  optA: { label: "0.5 – Normal Effort",       pts: 0.5 }, optB: { label: "1 – Extra Effort",          pts: 1 } },
+                        { label: "Safety Factor",                  optA: { label: "0.5 – Good",                pts: 0.5 }, optB: { label: "1 – Excellent",             pts: 1 } },
+                        { label: "Applicability",                  optA: { label: "0 – Wider Operation",       pts: 0   }, optB: { label: "1 – Wider Application",     pts: 1 } },
+                        { label: "Recurring Benefit",              optA: { label: "0 – One Time Benefit",      pts: 0   }, optB: { label: "1 – Recurring in Nature",   pts: 1 } },
+                        { label: "Customer Satisfaction",          optA: { label: "0 – NA",                    pts: 0   }, optB: { label: "1 – Customer Satisfaction", pts: 1 } },
+                        { label: "Cycle Time Reduction",           optA: { label: "0 – NA",                    pts: 0   }, optB: { label: "1 – Cycle Time Reduction",  pts: 1 } },
+                        { label: "Systems & Procedures",           optA: { label: "0 – NA",                    pts: 0   }, optB: { label: "1 – Improves System",       pts: 1 } },
+                      ];
+                      const selections: (null | "A" | "B")[] = Array.isArray(meta.selections) ? meta.selections : [];
+                      const totalPoints = meta.totalPoints ?? 0;
+                      const weightage = meta.weightage ?? "";
+                      const calculatedAmount = meta.calculatedAmount ?? null;
+
+                      return (
+                        <div className="space-y-3">
+                          {/* Header */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center">
+                                <Award className="h-3.5 w-3.5 text-primary" />
+                              </div>
+                              <h3 className="text-xs font-bold uppercase tracking-wide text-foreground">SSS Evaluation Sheet</h3>
+                            </div>
+                            <span className="text-[10px] text-muted-foreground bg-muted px-2.5 py-0.5 rounded-full">
+                              {selections.filter(s => s !== null).length}/10 criteria assessed
+                            </span>
+                          </div>
+
+                          {/* Criteria grid — matching FLM form layout */}
+                          <div className="rounded-xl border shadow-sm overflow-hidden">
+                            {/* Table header */}
+                            <div className="grid items-center bg-primary text-primary-foreground text-[11px] font-semibold px-4 py-2.5"
+                              style={{ gridTemplateColumns: "2.5rem 1fr 1fr 4rem" }}>
+                              <span className="text-center">Sr.</span>
+                              <span>Criteria</span>
+                              <span className="text-center">Options</span>
+                              <span className="text-center">Score</span>
+                            </div>
+
+                            {SSS_CRITERIA_LABELS.map((row, i) => {
+                              const sel = selections[i];
+                              const pts = sel === "A" ? row.optA.pts : sel === "B" ? row.optB.pts : null;
+                              return (
+                                <div key={i} className={`grid items-start px-4 py-2.5 border-b last:border-0 gap-x-3 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"} border-l-3 ${sel ? "border-l-emerald-400" : "border-l-muted-foreground/20"}`}
+                                  style={{ gridTemplateColumns: "2.5rem 1fr 1fr 4rem" }}>
+                                  {/* Sr. */}
+                                  <span className="text-center text-xs text-muted-foreground font-semibold pt-0.5">{i + 1}</span>
+                                  {/* Criteria label */}
+                                  <span className="text-xs font-medium leading-snug pt-0.5">{row.label}</span>
+                                  {/* Options — read-only, showing both with selected highlighted */}
+                                  <div className="flex flex-col gap-1.5">
+                                    {(["A", "B"] as const).map(opt => {
+                                      const option = opt === "A" ? row.optA : row.optB;
+                                      const isSelected = sel === opt;
+                                      return (
+                                        <div key={opt} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-[11px] transition-all ${
+                                          isSelected
+                                            ? "bg-primary/10 border-primary/50 text-primary font-medium shadow-sm"
+                                            : "border-transparent text-muted-foreground/60"
+                                        }`}>
+                                          {/* Radio dot (read-only visual) */}
+                                          <div className={`h-3.5 w-3.5 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                                            isSelected ? "border-primary" : "border-muted-foreground/30"
+                                          }`}>
+                                            {isSelected && <div className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                                          </div>
+                                          <span className="leading-snug">{option.label} <span className="font-bold">({option.pts} pts)</span></span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  {/* Score */}
+                                  <div className="flex justify-center pt-1">
+                                    <span className={`w-11 text-center rounded-lg border-2 py-1 text-xs font-black transition-all ${
+                                      sel
+                                        ? "bg-primary/10 text-primary border-primary/30"
+                                        : "bg-muted/20 text-muted-foreground/40 border-dashed border-muted-foreground/20"
+                                    }`}>
+                                      {pts != null ? pts : "—"}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {/* Total row */}
+                            <div className="grid items-center px-4 py-3 bg-primary/5 border-t-2 border-primary/20"
+                              style={{ gridTemplateColumns: "2.5rem 1fr 1fr 4rem" }}>
+                              <span />
+                              <span className="text-xs font-black uppercase tracking-wide">Total Points</span>
+                              <div className="flex justify-end pr-4">
+                                {/* Progress bar */}
+                                <div className="w-full max-w-[200px] h-2 rounded-full bg-muted overflow-hidden">
+                                  <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${(selections.filter(s => s !== null).length / 10) * 100}%` }} />
+                                </div>
+                              </div>
+                              <div className="flex justify-center">
+                                <span className="w-11 text-center rounded-lg border-2 border-primary/50 bg-primary/15 text-primary py-1 text-sm font-black">
+                                  {totalPoints}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Weightage + Calculated Amount card */}
+                          <div className="rounded-xl border bg-muted/5 p-4">
+                            <div className="grid grid-cols-3 gap-4 items-center">
+                              <div className="space-y-0.5 text-center">
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Total Points</p>
+                                <p className="text-xl font-black text-primary">{totalPoints}</p>
+                              </div>
+                              <div className="space-y-0.5 text-center">
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Weightage (₹/pt)</p>
+                                <p className="text-xl font-black text-foreground">{weightage || "—"}</p>
+                              </div>
+                              <div className="flex items-center justify-center gap-2 h-10 px-4 rounded-lg border bg-primary/5 border-primary/20">
+                                <Award className="h-4 w-4 text-primary" />
+                                <span className={`text-base font-black ${calculatedAmount != null ? "text-primary" : "text-muted-foreground/40"}`}>
+                                  {calculatedAmount != null ? `₹${Number(calculatedAmount).toLocaleString()}` : "—"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // ── SFC Evaluation Sheet ──
+                    if (evalType === "SFC") {
+                      const SFC_MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+                      const SFC_MONTH_POINTS = [25, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2];
+                      const SFC_WEIGHTAGE_OPTIONS = [
+                        { label: "x1 (1st Kaizen)",  value: 1 },
+                        { label: "x1.25 (2nd Kaizen)", value: 1.25 },
+                        { label: "x1.5 (3rd Kaizen)",  value: 1.5 },
+                        { label: "x1.75 (4th Kaizen)", value: 1.75 },
+                      ];
+                      const SFC_GEMBA_ROWS = [
+                        { label: "Importance of the project to the value stream", max: 30 },
+                        { label: "Sustenance of actions", max: 5 },
+                        { label: "Horizontal Deployment", max: 5 },
+                        { label: "Evaluation of project / Kaizen Sheet", max: 30 },
+                        { label: "Standardization", max: 15 },
+                        { label: "Presentation of project to RC/RH", max: 15 },
+                      ];
+
+                      const selectedMonth = meta.selectedMonth;
+                      const selectedWeightage = meta.selectedWeightage;
+                      const kaizenPoints = meta.kaizenPoints ?? null;
+                      const gembaSelections: (number | null)[] = Array.isArray(meta.gembaSelections) ? meta.gembaSelections : [];
+                      const gembaTotal = meta.gembaTotal ?? null;
+                      const finalPoints = meta.finalPoints ?? null;
+
+                      const monthLabel = selectedMonth != null ? SFC_MONTHS[selectedMonth] : "—";
+                      const monthPts = selectedMonth != null ? SFC_MONTH_POINTS[selectedMonth] : null;
+                      const weightageLabel = selectedWeightage != null ? SFC_WEIGHTAGE_OPTIONS[selectedWeightage]?.label : "—";
+                      const weightageVal = selectedWeightage != null ? SFC_WEIGHTAGE_OPTIONS[selectedWeightage]?.value : null;
+
+                      return (
+                        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 overflow-hidden">
+                          <div className="px-4 py-2.5 bg-blue-100/80 dark:bg-blue-900/30 border-b border-blue-200 dark:border-blue-800">
+                            <p className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wide flex items-center gap-1.5">
+                              <Award className="h-3.5 w-3.5" />
+                              SFC Evaluation Sheet — FLM Assessment
+                            </p>
+                          </div>
+                          <div className="p-3 space-y-3">
+                            {/* Kaizen scoring */}
+                            <div className="grid grid-cols-3 gap-3">
+                              <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-100/40 dark:bg-blue-900/20 px-3 py-2 text-center">
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase">Month</p>
+                                <p className="text-sm font-bold text-blue-700 dark:text-blue-400">{monthLabel}{monthPts != null ? ` (${monthPts} pts)` : ""}</p>
+                              </div>
+                              <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-100/40 dark:bg-blue-900/20 px-3 py-2 text-center">
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase">Weightage</p>
+                                <p className="text-sm font-bold text-blue-700 dark:text-blue-400">{weightageLabel}</p>
+                              </div>
+                              <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-100/40 dark:bg-blue-900/20 px-3 py-2 text-center">
+                                <p className="text-[10px] font-semibold text-muted-foreground uppercase">Kaizen Points</p>
+                                <p className="text-lg font-bold text-blue-700 dark:text-blue-400">{kaizenPoints ?? "—"}</p>
+                              </div>
+                            </div>
+
+                            {/* Gemba scoring table */}
+                            <div className="overflow-x-auto rounded-md border border-blue-200 dark:border-blue-800">
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="bg-blue-100/60 dark:bg-blue-900/30 border-b border-blue-200 dark:border-blue-800">
+                                    <th className="text-left px-3 py-2 font-semibold text-blue-900 dark:text-blue-200">SNo</th>
+                                    <th className="text-left px-3 py-2 font-semibold text-blue-900 dark:text-blue-200">Gemba Criteria</th>
+                                    <th className="text-center px-3 py-2 font-semibold text-blue-900 dark:text-blue-200">Max</th>
+                                    <th className="text-center px-3 py-2 font-semibold text-blue-900 dark:text-blue-200">Scored</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {SFC_GEMBA_ROWS.map((row, i) => {
+                                    const scored = gembaSelections[i];
+                                    return (
+                                      <tr key={i} className={`border-b border-blue-100 dark:border-blue-800/50 ${i % 2 === 0 ? "bg-background" : "bg-blue-50/30 dark:bg-blue-950/10"}`}>
+                                        <td className="px-3 py-1.5 text-muted-foreground font-medium">{i + 1}</td>
+                                        <td className="px-3 py-1.5 font-medium text-foreground">{row.label}</td>
+                                        <td className="px-3 py-1.5 text-center text-muted-foreground font-medium">{row.max}</td>
+                                        <td className="px-3 py-1.5 text-center font-bold text-blue-700 dark:text-blue-400">{scored ?? "—"}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                  <tr className="bg-blue-100/40 dark:bg-blue-900/20 font-bold">
+                                    <td colSpan={2} className="px-3 py-2 text-right text-blue-900 dark:text-blue-200">Gemba Total</td>
+                                    <td className="px-3 py-2 text-center text-muted-foreground">100</td>
+                                    <td className="px-3 py-2 text-center text-blue-700 dark:text-blue-400 text-sm">{gembaTotal ?? "—"}</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {/* Final calculation */}
+                            <div className="rounded-lg border border-blue-300 dark:border-blue-700 bg-blue-100/50 dark:bg-blue-900/30 px-4 py-3 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-blue-800 dark:text-blue-300">Final Points (Kaizen + Gemba)</span>
+                              <span className="text-xl font-bold text-blue-700 dark:text-blue-400">{finalPoints ?? "—"}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // ── Generic fallback for other metadata ──
+                    const visibleEntries = Object.entries(meta).filter(([key, val]) => {
                       if (val == null || val === "" || val === 0) return false;
-                      if (key === "forwardTo") return false; // shown separately above
+                      if (key === "forwardTo" || key === "evaluationType") return false;
+                      if (Array.isArray(val)) return false;
                       return true;
                     });
                     if (visibleEntries.length === 0) return null;
@@ -708,7 +944,16 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                   <InfoItem icon={Calendar} label="Date" value={formatDate(suggestion.date)} />
                   <InfoItem icon={Tag} label="Type" value={suggestion.type} />
                   <InfoItem icon={Tag} label="Category" value={suggestion.category} />
-                  <InfoItem icon={Building2} label="Range / Area" value={suggestion.range} />
+                  <InfoItem icon={Building2} label="Range / Area" value={
+                    suggestion.range
+                    || suggestion.formData?.range as string
+                    || (() => {
+                      const dept = suggestion.department || "";
+                      const parts = dept.split("/");
+                      return parts.length > 1 ? parts[parts.length - 1].trim() : dept.trim();
+                    })()
+                    || "—"
+                  } />
                   <InfoItem icon={Clock} label="Days Pending" value={String(calculateDaysPending(suggestion))} />
                 </div>
               </div>
@@ -735,46 +980,86 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                   </div>
                 </div>
 
-                {/* Team members if any */}
-                {(suggestion.formData?.teamMembers as string[] | undefined)?.length ? (
-                  <div className="pt-2 border-t border-border/40">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5 mb-2">
-                      <Users className="h-3 w-3" /> Team Members
-                    </p>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {(suggestion.formData!.teamMembers as string[]).map((m, i) => {
-                        const di = m.indexOf("\u2013");
-                        let mName: string;
-                        let mNo: string;
-                        if (di !== -1) {
-                          mName = m.slice(0, di).trim();
-                          mNo   = m.slice(di + 1).trim();
-                        } else {
-                          const opt = teamMemberOptions.find(o => o.value === m);
-                          if (opt) {
-                            mName = opt.name;
-                          } else {
-                            mName = "";
-                          }
-                          mNo = m;
-                        }
-                        const dept = teamMemberOptions.find(o => o.value === mNo)?.dept || "";
-                        return (
-                          <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border bg-primary/5 border-primary/20">
-                            <div className="h-6 w-6 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
-                              <span className="text-[9px] font-bold text-primary">{i + 1}</span>
-                            </div>
-                            <span className="text-[11px] leading-tight min-w-0 truncate">
-                              <span className="font-semibold text-foreground">{mName || mNo}</span>
-                              {mNo && mName && <span className="font-mono text-muted-foreground"> ({mNo})</span>}
-                              {dept && <span className="text-muted-foreground/70"> · {dept}</span>}
-                            </span>
-                          </div>
-                        );
-                      })}
+                {/* On Behalf person details */}
+                {suggestion.formData?.suggestionFor === "behalf" && suggestion.formData?.mainSuggestor && (() => {
+                  const suggestorId = suggestion.formData.mainSuggestor as string;
+                  const match = teamMemberOptions.find(o => o.value === suggestorId);
+                  const suggestorName = match?.name || "";
+                  const suggestorDept = match?.dept || "";
+                  return (
+                    <div className="pt-2 border-t border-border/40">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5 mb-2">
+                        <User className="h-3 w-3" /> On Behalf Of
+                      </p>
+                      <div className="rounded-lg border overflow-hidden shadow-sm">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-primary text-primary-foreground text-[10px] font-semibold">
+                              <th className="px-3 py-2 text-left">Employee Name</th>
+                              <th className="px-3 py-2 text-left">Emp No</th>
+                              <th className="px-3 py-2 text-left">Department</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr className="bg-background">
+                              <td className="px-3 py-2 font-semibold text-foreground">{suggestorName || "—"}</td>
+                              <td className="px-3 py-2 font-mono text-muted-foreground">{suggestorId}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{suggestorDept || "—"}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                ) : null}
+                  );
+                })()}
+
+                {/* Team members if any */}
+                {(suggestion.formData?.teamMembers as string[] | undefined)?.length ? (() => {
+                  const members = (suggestion.formData!.teamMembers as string[]).map((m) => {
+                    const di = m.indexOf("\u2013");
+                    let mName: string;
+                    let mNo: string;
+                    if (di !== -1) {
+                      mName = m.slice(0, di).trim();
+                      mNo   = m.slice(di + 1).trim();
+                    } else {
+                      const opt = teamMemberOptions.find(o => o.value === m);
+                      mName = opt ? opt.name : "";
+                      mNo = m;
+                    }
+                    const dept = teamMemberOptions.find(o => o.value === mNo)?.dept || "";
+                    return { mName, mNo, dept };
+                  });
+                  return (
+                    <div className="pt-2 border-t border-border/40">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5 mb-2">
+                        <Users className="h-3 w-3" /> Team Members ({members.length})
+                      </p>
+                      <div className="rounded-lg border overflow-hidden shadow-sm">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-primary text-primary-foreground text-[10px] font-semibold">
+                              <th className="px-3 py-2 text-left w-10">SNo</th>
+                              <th className="px-3 py-2 text-left">Employee Name</th>
+                              <th className="px-3 py-2 text-left">Emp No</th>
+                              <th className="px-3 py-2 text-left">Department</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {members.map((member, i) => (
+                              <tr key={i} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"}`}>
+                                <td className="px-3 py-2 text-muted-foreground font-medium">{i + 1}</td>
+                                <td className="px-3 py-2 font-semibold text-foreground">{member.mName || "—"}</td>
+                                <td className="px-3 py-2 font-mono text-muted-foreground">{member.mNo || "—"}</td>
+                                <td className="px-3 py-2 text-muted-foreground">{member.dept || "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })() : null}
               </div>
             </div>
 

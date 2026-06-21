@@ -250,24 +250,52 @@ export function buildSendBackUpdate(
   senderEmpNo: string,
   senderName: string,
   reason: string,
-  options?: { department?: string },
+  options?: {
+    department?: string;
+    targetLevel?: ApprovalLevel | "Employee";
+    toName?: string;
+    attachments?: Array<{ name: string; type: string; url?: string }>;
+  },
 ): Partial<Suggestion> {
   const amount = suggestion.awardAmount ?? 0;
-  const prev = getPreviousStep(suggestion.type, amount, currentLevel);
   const now = new Date().toISOString().split("T")[0];
+
+  // Determine target: explicit selection or default to previous step
+  let resolvedTarget: string;
+  let resolvedStatus: string;
+  let resolvedPendingWith: string;
+
+  if (options?.targetLevel === "Employee") {
+    // Send all the way back to the employee
+    resolvedTarget = "Employee";
+    resolvedStatus = "Sent Back";
+    resolvedPendingWith = "Employee - Revision Required";
+  } else if (options?.targetLevel) {
+    // A specific pipeline level was selected
+    const pipeline = getPipeline(suggestion.type, amount);
+    const targetStep = pipeline.find(s => s.level === options.targetLevel);
+    resolvedTarget = options.targetLevel;
+    resolvedStatus = "Sent Back";
+    resolvedPendingWith = targetStep ? targetStep.pendingWith + " - Revision" : "FLM";
+  } else {
+    // Default: previous step
+    const prev = getPreviousStep(suggestion.type, amount, currentLevel);
+    resolvedTarget = prev ? prev.level : "FLM";
+    resolvedStatus = "Sent Back";
+    resolvedPendingWith = prev ? prev.pendingWith + " - Revision" : "FLM";
+  }
 
   const entry = {
     from: currentLevel,
     fromName: senderName,
-    to: prev ? prev.level : "FLM",
+    to: resolvedTarget,
+    toName: options?.toName,
     reason,
     date: now,
+    attachments: options?.attachments?.length ? options.attachments : undefined,
   };
 
   const history = [...(suggestion.sendBackHistory || []), entry];
-
-  const targetStatus = prev ? prev.status : "Submitted";
-  const targetLevel = prev ? prev.level : "FLM";
 
   // Build audit entry
   const auditEntry: AuditEntry = {
@@ -279,15 +307,16 @@ export function buildSendBackUpdate(
     role: currentLevel,
     date: new Date().toISOString(),
     fromStatus: suggestion.status,
-    toStatus: targetStatus,
+    toStatus: resolvedStatus,
     comments: reason,
-    forwardedTo: targetLevel,
+    forwardedTo: resolvedTarget,
+    attachments: options?.attachments?.length ? options.attachments : undefined,
   };
 
   const base: Partial<Suggestion> = {
-    status: targetStatus,
-    pendingWith: prev ? prev.pendingWith : "FLM",
-    approvalLevel: targetLevel,
+    status: resolvedStatus,
+    pendingWith: resolvedPendingWith,
+    approvalLevel: resolvedTarget === "Employee" ? "FLM" : resolvedTarget,
     daysPending: 0,
     pendingSince: now,
     sendBackHistory: history,

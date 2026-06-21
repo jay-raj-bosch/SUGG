@@ -148,8 +148,24 @@
     @apply bg-muted text-muted-foreground;
   }
 
+  .status-badge-sent-back {
+    @apply bg-orange-100 text-orange-700 border-orange-300;
+  }
+
+  .dark .status-badge-sent-back {
+    @apply bg-orange-950/30 text-orange-400 border-orange-700;
+  }
+
   .kpi-card {
     @apply rounded-lg border bg-card p-5 card-shadow transition-all hover:card-elevated;
+  }
+
+  /* Active filter highlight — applied to SelectTrigger / Input when a non-default value is selected */
+  .filter-active {
+    @apply bg-indigo-50 border-indigo-400 ring-1 ring-indigo-200 text-indigo-700 font-medium;
+  }
+  .dark .filter-active {
+    @apply bg-indigo-950/30 border-indigo-500 ring-indigo-800 text-indigo-300;
   }
 }
 

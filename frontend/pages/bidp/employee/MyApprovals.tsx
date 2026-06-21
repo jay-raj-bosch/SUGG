@@ -611,7 +611,7 @@ const MyApprovals = () => {
           ? (() => {
               const found = sssApprovers.find(a => a.employee_no === stf.flm) ||
                             flmOptions.find(f => f.value === stf.flm);
-              const name = found ? ("name" in found ? found.name : found.name) : undefined;
+              const name = found ? found.name : undefined;
               return name ? `${name} (${stf.flm})` : stf.flm;
             })()
           : undefined} />

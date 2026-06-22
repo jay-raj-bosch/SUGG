@@ -1,4 +1,4 @@
-﻿import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { NotificationProvider } from "@/contexts/NotificationContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { PlantProvider } from "@/contexts/PlantContext";
 import { CategoryProvider } from "@/contexts/CategoryContext";
+import { DeptMappingProvider } from "@/contexts/DeptMappingContext";
 import PlantGuard from "@/components/PlantGuard";
 
 // â”€â”€ Landing pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -88,6 +89,7 @@ const App = () => (
             <NotificationProvider>
               <LanguageProvider>
                 <CategoryProvider>
+                <DeptMappingProvider>
                 <Toaster />
                 <Sonner />
                 <BrowserRouter> 
@@ -184,6 +186,7 @@ const App = () => (
 
                   </Routes>
                 </BrowserRouter>
+              </DeptMappingProvider>
               </CategoryProvider>
             </LanguageProvider>
             </NotificationProvider>

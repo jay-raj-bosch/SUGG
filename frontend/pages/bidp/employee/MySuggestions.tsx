@@ -86,9 +86,8 @@ const MySuggestions = () => {
   const openView = (s: Suggestion) => { setSelectedSuggestion(s); setDialogOpen(true); };
 
   const openEdit = (s: Suggestion) => {
-    // Defensive: only Draft suggestions are editable. UI already hides the
-    // edit button for non-drafts, but guard here too in case of route abuse.
-    if (s.status !== "Draft") {
+    // Allow editing for Draft and Sent Back suggestions
+    if (s.status !== "Draft" && s.status !== "Sent Back") {
       return;
     }
     // Build the full form state from stored formData, or fall back to basic fields
@@ -108,7 +107,8 @@ const MySuggestions = () => {
         benefits: s.benefits,
       },
     };
-    localStorage.setItem(EDIT_KEY, JSON.stringify({ editingId: s.id, returnTo: "/employee/my-suggestions?filter=drafts", ...formData }));
+    const returnTo = s.status === "Sent Back" ? "/employee/my-suggestions" : "/employee/my-suggestions?filter=drafts";
+    localStorage.setItem(EDIT_KEY, JSON.stringify({ editingId: s.id, returnTo, ...formData }));
     navigate(`${plantPrefix}/employee/new-suggestion`);
   };
   const openTimeline = (s: Suggestion) => { setTimelineSuggestion(s); setTimelineOpen(true); };
@@ -177,7 +177,7 @@ const MySuggestions = () => {
           {pageRows.map(s => {
             const pw = formatPendingWith(s);
             return (
-              <div key={s.id} className="rounded-lg border bg-card p-3 space-y-2">
+              <div key={s.id} className={`rounded-lg border bg-card p-3 space-y-2 ${s.status === "Sent Back" ? "border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/20" : ""}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-xs font-mono text-muted-foreground">{s.suggestionNo}</p>
@@ -198,6 +198,9 @@ const MySuggestions = () => {
                       <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => openEdit(s)}><Edit className="h-3.5 w-3.5" /> Edit</Button>
                       <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-destructive hover:text-destructive" onClick={() => confirmDelete(s)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </>
+                  )}
+                  {!showDraftActions && s.status === "Sent Back" && (
+                    <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-amber-600" onClick={() => openEdit(s)}><Edit className="h-3.5 w-3.5" /> Edit & Resubmit</Button>
                   )}
                   <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => openTimeline(s)}><Clock className="h-3.5 w-3.5" /> Timeline</Button>
                 </div>
@@ -229,8 +232,9 @@ const MySuggestions = () => {
                   const isClosed = CLOSED_STATUSES.has(s.status);
                   const days = isClosed ? null : calculateDaysPending(s);
                   const slNo = (safePage - 1) * rowsPerPage + idx + 1;
+                  const isSentBack = s.status === "Sent Back";
                   return (
-                    <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                    <tr key={s.id} className={`border-b last:border-0 transition-colors ${isSentBack ? "bg-amber-50/60 hover:bg-amber-100/60 dark:bg-amber-950/20 dark:hover:bg-amber-950/30" : "hover:bg-muted/30"}`}>
                       <td className="py-2.5 px-2 text-muted-foreground">{slNo}</td>
                       <td className="py-2.5 px-2 font-mono">{s.suggestionNo}</td>
                       <td className="py-2.5 px-2 max-w-[220px]"><span className="block truncate" title={s.subject}>{s.subject}</span></td>
@@ -270,6 +274,12 @@ const MySuggestions = () => {
                               <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => confirmDelete(s)} title="Delete"><Trash2 className="h-3.5 w-3.5" /></Button>
                             </>
                           )}
+                          {/* Edit button for sent-back suggestions in the submitted tab */}
+                          {!showDraftActions && s.status === "Sent Back" && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-100/50" onClick={() => openEdit(s)} title="Edit & Resubmit">
+                              <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openTimeline(s)} title="Timeline"><Clock className="h-3.5 w-3.5" /></Button>
                         </div>
                       </td>
@@ -297,7 +307,7 @@ const MySuggestions = () => {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground">Filter by type:</span>
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="h-8 w-48 text-xs">
+            <SelectTrigger className={`h-8 w-48 text-xs ${typeFilter !== "all" ? "filter-active" : ""}`}>
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent>
@@ -311,7 +321,7 @@ const MySuggestions = () => {
           </Select>
           <span className="text-xs text-muted-foreground">Status:</span>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-8 w-40 text-xs">
+            <SelectTrigger className={`h-8 w-40 text-xs ${statusFilter !== "all" ? "filter-active" : ""}`}>
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent>
@@ -320,6 +330,7 @@ const MySuggestions = () => {
               <SelectItem value="Submitted">Submitted</SelectItem>
               <SelectItem value="Under Evaluation">Under Evaluation</SelectItem>
               <SelectItem value="Approved &amp; Closed">Approved &amp; Closed</SelectItem>
+              <SelectItem value="Sent Back">Sent Back</SelectItem>
               <SelectItem value="Rejected">Rejected</SelectItem>
               <SelectItem value="Implemented">Implemented</SelectItem>
             </SelectContent>

@@ -12,7 +12,7 @@ import { useState, useEffect, useMemo } from "react";
 import { statusColors, ranges } from "@/lib/mockData";
 import type { Suggestion } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
-import { downloadCSV, downloadTablePDF } from "@/lib/pdfUtils";
+import { downloadCSV, downloadXLSX, downloadTablePDF } from "@/lib/pdfUtils";
 
 const reportTypes = ["NEFT Report", "Manpower Report", "Employee Involvement", "Non-Participant Report"];
 
@@ -37,8 +37,10 @@ const NeftReport = () => {
   const isManpower           = reportType === "Manpower Report";
   const isNonParticipant      = reportType === "Non-Participant Report";
   const isEmployeeInvolvement = reportType === "Employee Involvement";
+  const isNeft                = reportType === "NEFT Report";
   const isRangeReport         = isManpower;
 
+  // ── Filtered suggestions for all report types ────────────────────────────
   const filteredData = useMemo(() => {
     return allSuggestions.filter(s => {
       if (isRangeReport) {
@@ -47,18 +49,65 @@ const NeftReport = () => {
       }
       if (fromDate && s.date < fromDate) return false;
       if (toDate && s.date > toDate) return false;
-      if (reportType === "NEFT Report") return !!s.awardAmount;
+
+      // NEFT Report: only "Approved & Closed", exclude Daily CIP, must have positive amount
+      if (isNeft) {
+        if (s.status !== "Approved & Closed") return false;
+        if (s.type === "Daily CIP") return false;
+        if (!s.awardAmount || s.awardAmount <= 0) return false;
+        return true;
+      }
+
       if (reportType === "Employee Involvement") {
         if (range !== "all" && s.range !== range) return false;
         return true;
       }
       if (isNonParticipant) {
         if (range !== "all" && s.range !== range) return false;
-        return true; // identifies participants; non-participants derived in getNonParticipantRows
+        return true;
       }
       return true;
     });
-  }, [allSuggestions, isRangeReport, range, fromDate, toDate, reportType, isNonParticipant]);
+  }, [allSuggestions, isRangeReport, range, fromDate, toDate, reportType, isNonParticipant, isNeft]);
+
+  // ── NEFT aggregated rows: group by employee, sum amounts ─────────────────
+  interface NeftRow {
+    empNo: string;
+    empName: string;
+    department: string;
+    latestDate: string;      // most recent award date
+    totalAmount: number;
+    suggestionCount: number; // how many suggestions contributed
+  }
+
+  const neftRows = useMemo((): NeftRow[] => {
+    if (!isNeft) return [];
+    const empMap = new Map<string, NeftRow>();
+    filteredData.forEach(s => {
+      const key = s.employeeNo || s.id;
+      if (!empMap.has(key)) {
+        empMap.set(key, {
+          empNo: s.employeeNo || "—",
+          empName: s.employeeName || "—",
+          department: s.department || "—",
+          latestDate: s.date || "",
+          totalAmount: 0,
+          suggestionCount: 0,
+        });
+      }
+      const row = empMap.get(key)!;
+      row.totalAmount += s.awardAmount || 0;
+      row.suggestionCount += 1;
+      // Track latest date
+      if (s.date && s.date > row.latestDate) {
+        row.latestDate = s.date;
+      }
+    });
+    // Sort by employee name
+    return Array.from(empMap.values()).sort((a, b) => a.empName.localeCompare(b.empName));
+  }, [isNeft, filteredData]);
+
+  const neftGrandTotal = useMemo(() => neftRows.reduce((sum, r) => sum + r.totalAmount, 0), [neftRows]);
 
   const getFilteredData = () => filteredData;
 
@@ -101,16 +150,16 @@ const NeftReport = () => {
       const rows = npRows.map((e, i) => [String(i + 1), e.name, e.employeeNo, e.department, e.category]);
       return { headers, rows };
     }
-    const headers = ["Suggestion No", "Employee", "Range", "Type", "Category", "Status", "Date", "Award Amount"];
-    const rows = getFilteredData().map(s => [
-      s.suggestionNo,
-      s.employeeName || "",
-      s.range || "",
-      s.type,
-      s.category,
-      s.status,
-      s.date,
-      s.awardAmount ? `₹${s.awardAmount}` : "-",
+
+    // ── NEFT Report: aggregated by employee ──
+    const headers = ["SNo", "Emp No", "Employee Name", "Department", "Date", "Total Amount (₹)"];
+    const rows = neftRows.map((r, i) => [
+      String(i + 1),
+      r.empNo,
+      r.empName,
+      r.department,
+      formatDate(r.latestDate),
+      `₹${r.totalAmount.toLocaleString()}`,
     ]);
     return { headers, rows };
   };
@@ -119,14 +168,31 @@ const NeftReport = () => {
     if (!reportType) { toast.error("Please select a report type"); return; }
     setShowResults(true);
     setCurrentPage(1);
-    toast.success(`Generated ${getFilteredData().length} record(s)`);
+    if (isNeft) {
+      toast.success(`Generated ${neftRows.length} employee(s) from ${filteredData.length} suggestion(s)`);
+    } else {
+      toast.success(`Generated ${getFilteredData().length} record(s)`);
+    }
   };
 
   const handleExportExcel = () => {
     if (!reportType) { toast.error("Please select a report type"); return; }
     const { headers, rows } = getReportData();
-    downloadCSV(headers, rows, `${reportType.replace(/\s/g, "_")}_${fromDate || "all"}_to_${toDate || "all"}.csv`);
-    toast.success("Excel (CSV) downloaded!");
+    const filters: Record<string, string> = {
+      "Report Type": reportType,
+      ...(fromDate ? { "From Date": formatDate(fromDate) } : {}),
+      ...(toDate ? { "To Date": formatDate(toDate) } : {}),
+      ...(range !== "all" && (isRangeReport || isNonParticipant || isEmployeeInvolvement) ? { "Range": range } : {}),
+      ...(isNeft ? { "Total Employees": String(neftRows.length), "Grand Total": `₹${neftGrandTotal.toLocaleString()}` } : {}),
+    };
+    downloadXLSX(
+      reportType,
+      headers,
+      rows,
+      `${reportType.replace(/\s/g, "_")}_${fromDate || "all"}_to_${toDate || "all"}.xlsx`,
+      filters,
+    );
+    toast.success("Excel (.xlsx) downloaded!");
   };
 
   const handleExportPDF = () => {
@@ -167,10 +233,18 @@ const NeftReport = () => {
   const involvementPct = totalManpower > 0 ? ((involved / totalManpower) * 100).toFixed(1) : "0.0";
   const period         = `${fromDate || "—"} - ${toDate || "—"}`;
 
-  const activeRowCount = isEmployeeInvolvement ? invRows.length : isNonParticipant ? npRows.length : filteredData.length;
+  const activeRowCount = isNeft ? neftRows.length : isEmployeeInvolvement ? invRows.length : isNonParticipant ? npRows.length : filteredData.length;
   const totalPages     = Math.max(1, Math.ceil(activeRowCount / rowsPerPage));
   const pageStart      = (currentPage - 1) * rowsPerPage;
   const pageEnd        = currentPage * rowsPerPage;
+
+  // Format date YYYY-MM-DD → DD/MM/YYYY
+  const formatDate = (d?: string) => {
+    if (!d) return "—";
+    const parts = d.split("-");
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return d;
+  };
 
   const paginationControls = (
     <div className="flex items-center justify-between pt-3 border-t mt-2 gap-2 flex-wrap">
@@ -207,7 +281,7 @@ const NeftReport = () => {
             <div className="space-y-1.5">
               <Label className="text-xs">Report Type <span className="text-[9px] opacity-70">/ {t("Suggestion Type")}</span></Label>
               <Select value={reportType} onValueChange={v => { setReportType(v); setShowResults(false); setRange("all"); }}>
-                <SelectTrigger><SelectValue placeholder="Select report" /></SelectTrigger>
+                <SelectTrigger className={reportType ? "filter-active" : ""}><SelectValue placeholder="Select report" /></SelectTrigger>
                 <SelectContent>
                   {reportTypes.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                 </SelectContent>
@@ -215,17 +289,17 @@ const NeftReport = () => {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">From Date <span className="text-[9px] opacity-70">/ {t("From Date")}</span></Label>
-              <Input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setShowResults(false); }} disabled={isRangeReport} className={isRangeReport ? "opacity-30 cursor-not-allowed" : ""} />
+              <Input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setShowResults(false); }} disabled={isRangeReport} className={`${isRangeReport ? "opacity-30 cursor-not-allowed" : ""} ${!isRangeReport && fromDate ? "filter-active" : ""}`} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">To Date <span className="text-[9px] opacity-70">/ {t("To Date")}</span></Label>
-              <Input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setShowResults(false); }} disabled={isRangeReport} className={isRangeReport ? "opacity-30 cursor-not-allowed" : ""} />
+              <Input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setShowResults(false); }} disabled={isRangeReport} className={`${isRangeReport ? "opacity-30 cursor-not-allowed" : ""} ${!isRangeReport && toDate ? "filter-active" : ""}`} />
             </div>
             {(isRangeReport || isNonParticipant || isEmployeeInvolvement) && (
               <div className="space-y-1.5">
                 <Label className="text-xs">Range <span className="text-[9px] opacity-70">/ {t("Range")}</span></Label>
                 <Select value={range} onValueChange={v => { setRange(v); setShowResults(false); }}>
-                  <SelectTrigger><SelectValue placeholder="All Ranges" /></SelectTrigger>
+                  <SelectTrigger className={range !== "all" ? "filter-active" : ""}><SelectValue placeholder="All Ranges" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Ranges</SelectItem>
                     {ranges.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
@@ -267,9 +341,9 @@ const NeftReport = () => {
                     {(isNonParticipant || isEmployeeInvolvement) && ` | Range: ${range === "all" ? "All Ranges" : range}`}
                   </>}
             </span>
-            {reportType === "NEFT Report" && (
-              <span className="text-xs font-medium text-primary">
-                Total NEFT: ₹{filteredData.reduce((sum, s) => sum + (s.awardAmount || 0), 0).toLocaleString()}
+            {isNeft && (
+              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-700 px-3 py-1 rounded-lg">
+                Grand Total: ₹{neftGrandTotal.toLocaleString()}
               </span>
             )}
           </div>
@@ -432,45 +506,42 @@ const NeftReport = () => {
               </CardContent>
             </Card>
           ) : (
+            /* ── NEFT Report — aggregated per employee ── */
             <Card className="card-shadow">
               <CardContent className="pt-4">
                 <div className="overflow-auto max-h-[520px] rounded-md border">
-                  <table className="min-w-[800px] text-sm">
+                  <table className="w-full text-sm">
                     <thead className="sticky top-0 z-20">
                       <tr className="border-b text-left bg-muted/90">
-                        <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap sticky left-0 z-30 bg-muted/90 border-r shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)]"><TH en="Suggestion No" /></th>
-                        <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Employee" /></th>
-                        <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Range" /></th>
-                        <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Type" /></th>
-                        <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Category" /></th>
-                        <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Status" /></th>
-                        <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Date" /></th>
-                        <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap text-right"><TH en="Amount" /> (₹)</th>
+                        <th className="pb-2 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap sticky left-0 z-30 bg-muted/90 border-r shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)]"><TH en="SNo" /></th>
+                        <th className="pb-2 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Emp No" /></th>
+                        <th className="pb-2 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Employee Name" /></th>
+                        <th className="pb-2 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Department" /></th>
+                        <th className="pb-2 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Date" /></th>
+                        <th className="pb-2 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap text-right"><TH en="Amount" /> (₹)</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredData.length === 0 ? (
-                        <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">No records match the criteria</td></tr>
+                      {neftRows.length === 0 ? (
+                        <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No approved & closed suggestions found for this period</td></tr>
                       ) : (
-                        filteredData.slice(pageStart, pageEnd).map(s => (
-                          <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                            <td className="py-2 px-2 font-mono text-xs sticky left-0 z-10 bg-background border-r shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">{s.suggestionNo}</td>
-                            <td className="py-2 px-2 text-xs">
-                              <div>{s.employeeName}</div>
-                              <div className="text-muted-foreground">{s.employeeNo}</div>
-                            </td>
-                            <td className="py-2 px-2 text-xs font-medium">{s.range || "—"}</td>
-                            <td className="py-2 px-2 text-xs text-muted-foreground">{s.type}</td>
-                            <td className="py-2 px-2 text-xs">{s.category}</td>
-                            <td className="py-2 px-2">
-                              <Badge variant="outline" className={`text-[10px] ${statusColors[s.status] || ""}`}>{s.status}</Badge>
-                            </td>
-                            <td className="py-2 px-2 text-xs">{s.date}</td>
-                            <td className="py-2 px-2 text-xs text-right font-semibold">
-                              {s.awardAmount ? `₹${s.awardAmount.toLocaleString()}` : "-"}
-                            </td>
-                          </tr>
-                        ))
+                        <>
+                          {neftRows.slice(pageStart, pageEnd).map((r, i) => (
+                            <tr key={r.empNo} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                              <td className="py-2.5 px-3 text-xs text-muted-foreground sticky left-0 z-10 bg-background border-r shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">{pageStart + i + 1}</td>
+                              <td className="py-2.5 px-3 text-xs font-mono">{r.empNo}</td>
+                              <td className="py-2.5 px-3 text-xs font-semibold">{r.empName}</td>
+                              <td className="py-2.5 px-3 text-xs">{r.department}</td>
+                              <td className="py-2.5 px-3 text-xs">{formatDate(r.latestDate)}</td>
+                              <td className="py-2.5 px-3 text-xs text-right font-bold text-emerald-700 dark:text-emerald-400">
+                                ₹{r.totalAmount.toLocaleString()}
+                                {r.suggestionCount > 1 && (
+                                  <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">({r.suggestionCount} suggestions)</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </>
                       )}
                     </tbody>
                   </table>

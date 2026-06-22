@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { statusColors, suggestionTypes, ranges } from "@/lib/mockData";
+import { statusColors, suggestionTypes } from "@/lib/mockData";
 import type { Suggestion } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
 import { Search, Download, FileText, SendHorizonal, ChevronLeft, ChevronRight } from "lucide-react";
@@ -18,6 +18,7 @@ import GeneralEnquiryDetailDialog from "@/components/bidp/GeneralEnquiryDetailDi
 import { calculateDaysPending } from "@/lib/bidp/approvalPipeline";
 import { teamMemberOptions, flmOptions } from "@/lib/bidp/suggestionConstants";
 import { useCategories } from "@/contexts/CategoryContext";
+import { useDeptMappings } from "@/contexts/DeptMappingContext";
 
 // Statuses where all pending columns collapse to "Closed"
 const CLOSED_STATUSES = ["Approved & Closed", "Implemented", "Rejected", "Closed"];
@@ -108,6 +109,7 @@ const GeneralEnquiry = () => {
   const [range, setRange] = useState("all");
   const [suggestionType, setSuggestionType] = useState("all");
   const [category, setCategory] = useState("all");
+  const [onBehalfFilter, setOnBehalfFilter] = useState("all");
   const [allSuggestions, setAllSuggestions] = useState<Suggestion[]>([]);
   const [results, setResults] = useState<Suggestion[]>([]);
   const [searched, setSearched] = useState(false);
@@ -119,6 +121,7 @@ const GeneralEnquiry = () => {
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [allEmployees, setAllEmployees] = useState<apiService.Employee[]>([]);
   const { categories: categoryOptions } = useCategories();
+  const { mapDept, entries: deptEntries } = useDeptMappings();
 
   // Load suggestions and employees from backend on mount
   // Exclude drafts — drafts are only visible to the owning employee in MySuggestions
@@ -145,6 +148,12 @@ const GeneralEnquiry = () => {
       sublabel: e.department,
     })), [allEmployees]);
 
+  // Build dropdown options from department mapping entries (all mapped names)
+  const deptFilterOptions = useMemo(() => {
+    const unique = new Set(deptEntries.map(e => e.mapped));
+    return Array.from(unique).sort();
+  }, [deptEntries]);
+
   const totalPages = Math.max(1, Math.ceil(results.length / rowsPerPage));
   const pageRows   = results.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
@@ -168,9 +177,15 @@ const GeneralEnquiry = () => {
         s.employeeNo?.toLowerCase().includes(employeeNo.trim().toLowerCase())
       );
     }
-    if (range !== "all") filtered = filtered.filter(s => s.range === range);
+    if (range !== "all") filtered = filtered.filter(s => mapDept(s.department) === range);
     if (suggestionType !== "all") filtered = filtered.filter(s => s.type === suggestionType);
     if (category !== "all") filtered = filtered.filter(s => s.category === category);
+    if (onBehalfFilter !== "all") {
+      filtered = filtered.filter(s => {
+        const isOnBehalf = s.formData?.suggestionFor === "behalf";
+        return onBehalfFilter === "yes" ? isOnBehalf : !isOnBehalf;
+      });
+    }
     setResults(filtered);
     setSearched(true);
     setCurrentPage(1);
@@ -180,13 +195,14 @@ const GeneralEnquiry = () => {
   const handleReset = () => {
     setFromDate(""); setToDate(""); setSuggestionNo(""); setStatus("all");
     setEmployeeNo(""); setRange("all"); setSuggestionType("all"); setCategory("all");
+    setOnBehalfFilter("all");
     setResults(allSuggestions); setSearched(false); setCurrentPage(1);
   };
 
   const exportData = useMemo(() => {
     const headers = [
       "Serial No", "Requested By (Name)", "Requested By (Emp No)", "Team Members", "Department",
-      "Suggestion No", "Suggestion Date", "Status", "Current Level", "Suggestion Level",
+      "Suggestion No", "Suggestion Date", "On Behalf", "Status", "Current Level", "Suggestion Level",
       "Pending With Eno", "Pending With Name", "Pending With Department", "Days Pending",
     ];
     const rows = results.map((s, i) => {
@@ -203,16 +219,17 @@ const GeneralEnquiry = () => {
         }
         return m;
       }).join(" | ");
+      const isOnBehalf = fd.suggestionFor === "behalf" ? "Yes" : "No";
       return [
-        String(i + 1), s.employeeName || "", s.employeeNo || "", teamStr, s.department || "",
-        s.suggestionNo, s.date, s.status,
+        String(i + 1), s.employeeName || "", s.employeeNo || "", teamStr, mapDept(s.department),
+        s.suggestionNo, s.date, isOnBehalf, s.status,
         p.currentLevel, getSuggestionLevel(s.type, s.status),
         p.pendingWithEno, p.pendingWithName, p.pendingWithDept,
         isClosed ? "0" : String(calculateDaysPending(s)),
       ];
     });
     return { headers, rows };
-  }, [results]);
+  }, [results, mapDept]);
 
   const handleExportCSV = () => {
     const { headers, rows } = exportData;
@@ -238,6 +255,7 @@ const GeneralEnquiry = () => {
     if (range !== "all") filters["Range"] = range;
     if (suggestionType !== "all") filters["Suggestion Type"] = suggestionType;
     if (category !== "all") filters["Category"] = category;
+    if (onBehalfFilter !== "all") filters["On Behalf"] = onBehalfFilter === "yes" ? "Yes" : "No";
     downloadXLSX(
       "General Enquiry Report",
       headers,
@@ -252,6 +270,9 @@ const GeneralEnquiry = () => {
     <span>{en} <span className="text-[9px] opacity-70">/ {t(en)}</span></span>
   );
 
+  // Helper: apply highlight class when a filter has an active (non-default) value
+  const af = (isActive: boolean) => isActive ? "filter-active" : "";
+
   return (
     <div className="max-w-6xl flex flex-col h-full gap-4">
       <h2 className="text-xl font-bold text-foreground">General Enquiry <span className="text-sm font-normal text-muted-foreground">/ {t("General Enquiry")}</span></h2>
@@ -261,11 +282,11 @@ const GeneralEnquiry = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs">From Date <span className="text-[10px] text-muted-foreground font-normal">/ {t("From Date")}</span></Label>
-              <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+              <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className={af(!!fromDate)} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">To Date <span className="text-[10px] text-muted-foreground font-normal">/ {t("To Date")}</span></Label>
-              <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} />
+              <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className={af(!!toDate)} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Suggestion No <span className="text-[10px] text-muted-foreground font-normal">/ {t("Suggestion No")}</span></Label>
@@ -279,7 +300,7 @@ const GeneralEnquiry = () => {
             <div className="space-y-1.5">
               <Label className="text-xs">Status <span className="text-[10px] text-muted-foreground font-normal">/ {t("Status")}</span></Label>
               <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectTrigger className={af(status !== "all")}><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="Pending">Pending</SelectItem>
@@ -287,6 +308,7 @@ const GeneralEnquiry = () => {
                   <SelectItem value="Under Evaluation">Under Evaluation</SelectItem>
                   <SelectItem value="Approved">Approved</SelectItem>
                   <SelectItem value="Approved & Closed">Approved &amp; Closed</SelectItem>
+                  <SelectItem value="Sent Back">Sent Back</SelectItem>
                   <SelectItem value="Rejected">Rejected</SelectItem>
                   <SelectItem value="Implemented">Implemented</SelectItem>
                 </SelectContent>
@@ -304,17 +326,17 @@ const GeneralEnquiry = () => {
             <div className="space-y-1.5">
               <Label className="text-xs">Range <span className="text-[10px] text-muted-foreground font-normal">/ {t("Range")}</span></Label>
               <Select value={range} onValueChange={setRange}>
-                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectTrigger className={af(range !== "all")}><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
-                  {ranges.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  {deptFilterOptions.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Suggestion Type <span className="text-[10px] text-muted-foreground font-normal">/ {t("Suggestion Type")}</span></Label>
               <Select value={suggestionType} onValueChange={setSuggestionType}>
-                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectTrigger className={af(suggestionType !== "all")}><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   {suggestionTypes.map(st => <SelectItem key={st} value={st}>{st}</SelectItem>)}
@@ -324,10 +346,21 @@ const GeneralEnquiry = () => {
             <div className="space-y-1.5">
               <Label className="text-xs">Category <span className="text-[10px] text-muted-foreground font-normal">/ {t("Category")}</span></Label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectTrigger className={af(category !== "all")}><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   {categoryOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">On Behalf <span className="text-[10px] text-muted-foreground font-normal">/ {t("On Behalf")}</span></Label>
+              <Select value={onBehalfFilter} onValueChange={setOnBehalfFilter}>
+                <SelectTrigger className={af(onBehalfFilter !== "all")}><SelectValue placeholder="All" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="yes">Yes</SelectItem>
+                  <SelectItem value="no">No</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -378,6 +411,7 @@ const GeneralEnquiry = () => {
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Suggestion No</th>
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Subject</th>
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Suggestion Date</th>
+                  <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">On Behalf</th>
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Status</th>
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Current Level</th>
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Suggestion Level</th>
@@ -391,12 +425,13 @@ const GeneralEnquiry = () => {
               <tbody>
                 {pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="py-8 text-center text-muted-foreground text-sm">No records found.</td>
+                    <td colSpan={15} className="py-8 text-center text-muted-foreground text-sm">No records found.</td>
                   </tr>
                 ) : (
                   pageRows.map((s, i) => {
                     const p = parsePendingWith(s.pendingWith, s.status, allEmployees, s);
                     const isClosed = CLOSED_STATUSES.includes(s.status);
+                    const isSentBack = s.status === "Sent Back";
                     const globalIdx = (currentPage - 1) * rowsPerPage + i + 1;
                     return (
                       <tr
@@ -405,6 +440,8 @@ const GeneralEnquiry = () => {
                         className={`border-b last:border-0 cursor-pointer transition-colors ${
                           selectedRowId === s.id
                             ? "bg-indigo-100 hover:bg-indigo-100 dark:bg-indigo-900/40 dark:hover:bg-indigo-900/50"
+                            : isSentBack
+                            ? "bg-amber-50/60 hover:bg-amber-100/60 dark:bg-amber-950/20 dark:hover:bg-amber-950/30"
                             : "hover:bg-muted/40"
                         }`}
                       >
@@ -419,12 +456,19 @@ const GeneralEnquiry = () => {
                             <span className="text-[10px] text-muted-foreground font-mono">{s.employeeNo || ""}</span>
                           </div>
                         </td>
-                        <td className="py-2 px-2">{s.department || "—"}</td>
+                        <td className="py-2 px-2" title={s.department || ""}>{mapDept(s.department)}</td>
                         <td className="py-2 px-2 font-mono whitespace-nowrap">{s.suggestionNo}</td>
                         <td className="py-2 px-2 max-w-[180px]">
                           <span className="block truncate" title={s.subject}>{s.subject || "—"}</span>
                         </td>
                         <td className="py-2 px-2 whitespace-nowrap">{s.date}</td>
+                        <td className="py-2 px-2 text-center">
+                          {s.formData?.suggestionFor === "behalf" ? (
+                            <Badge variant="outline" className="text-[10px] bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700">Yes</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">No</span>
+                          )}
+                        </td>
                         <td className="py-2 px-2">
                           <Badge variant="outline" className={`text-[10px] ${statusColors[s.status] || ""}`}>{s.status}</Badge>
                         </td>

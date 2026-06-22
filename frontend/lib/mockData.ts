@@ -80,7 +80,7 @@ export const statusColors: Record<string, string> = {
   "Pending BPS Admin": "status-badge-pending",
   "Pending BPS DH": "status-badge-pending",
   "Pending BPS": "status-badge-pending",
-  "Sent Back": "status-badge-pending",
+  "Sent Back": "status-badge-sent-back",
   Closed: "status-badge-draft",
   // JaP workflow statuses
   "Pending Feasibility Review": "status-badge-pending",
@@ -142,9 +142,11 @@ export interface Suggestion {
   sendBackHistory?: Array<{
     from: string;        // level that sent back (e.g. "Manager")
     fromName: string;    // name of person who sent back
-    to: string;          // level sent back to (e.g. "FLM")
+    to: string;          // level sent back to (e.g. "FLM" or "Employee")
+    toName?: string;     // name of person it was sent back to
     reason: string;
     date: string;        // ISO date
+    attachments?: Array<{ name: string; type: string; url?: string }>;  // files attached
   }>;
   // Reopen metadata
   reopenRemark?: string;               // admin remark when reopening rejected suggestion

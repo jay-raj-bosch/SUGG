@@ -34,7 +34,7 @@ const BidPUnifiedLayout = () => {
   if (!user) return null;
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="flex flex-col overflow-hidden" style={{ zoom: 0.85, height: 'calc(100vh / 0.85)', width: 'calc(100vw / 0.85)' }}>
       <AppHeader
         isAdmin
         onMenuToggle={() => setMobileOpen(o => !o)}
@@ -44,7 +44,7 @@ const BidPUnifiedLayout = () => {
         {/* Mobile overlay */}
         {mobileOpen && (
           <div
-            className="fixed inset-0 z-40 bg-black/50 md:hidden"
+            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
             onClick={() => setMobileOpen(false)}
             aria-hidden="true"
           />
@@ -53,7 +53,7 @@ const BidPUnifiedLayout = () => {
         {/* Mobile drawer */}
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-50 w-64 bg-sidebar flex flex-col border-r border-sidebar-border transition-transform duration-300 md:hidden overflow-y-auto",
+            "fixed inset-y-0 left-0 z-50 w-64 bg-sidebar flex flex-col border-r border-sidebar-border transition-transform duration-300 lg:hidden overflow-y-auto",
             mobileOpen ? "translate-x-0 shadow-xl" : "-translate-x-full"
           )}
         >
@@ -61,12 +61,12 @@ const BidPUnifiedLayout = () => {
         </aside>
 
         {/* Desktop sidebar */}
-        <aside className="hidden md:flex w-60 bg-sidebar shrink-0 flex-col border-r border-sidebar-border min-h-0 overflow-y-auto">
+        <aside className="hidden lg:flex w-56 bg-sidebar shrink-0 flex-col border-r border-sidebar-border min-h-0 overflow-y-auto">
           <BidPCombinedSidebarContent />
         </aside>
 
-        <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 bg-background">
-          <div className="animate-fade-in">
+        <main className="flex-1 overflow-y-auto p-2 sm:p-3 md:p-4 lg:p-5 bg-background min-w-0">
+          <div className="animate-fade-in max-w-full">
             <Outlet />
           </div>
         </main>

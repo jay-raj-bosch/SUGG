@@ -15,7 +15,8 @@ import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePlant } from "@/contexts/PlantContext";
 import { toast } from "sonner";
-import { ArrowRightLeft, AlertCircle, CheckCircle2, Search, Clock } from "lucide-react";
+import { ArrowRightLeft, AlertCircle, CheckCircle2, Search, Clock, ChevronLeft, ChevronRight } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
 import { calculateDaysPending } from "@/lib/bidp/approvalPipeline";
 import { useNotifications } from "@/contexts/NotificationContext";
@@ -44,11 +45,11 @@ const TransferSuggestion = () => {
   const [newEmployeeNo, setNewEmployeeNo] = useState("");
   const [reason, setReason] = useState("");
   const [transferred, setTransferred] = useState(false);
-  const [transferLog, setTransferLog] = useState<TransferRecord[]>([
-    { id: "1", suggestionNo: "SSS-2026-001", subject: "Safety Guard Improvement", fromName: "Karthik", fromEmpNo: "30698665", toName: "Suresh M", toEmpNo: "30698710", reason: "Department restructuring", date: "2026-02-15", auditId: "TRF-001234" },
-  ]);
+  const [transferLog, setTransferLog] = useState<TransferRecord[]>([]);
   const [searchLog, setSearchLog] = useState("");
   const [allEmployees, setAllEmployees] = useState<apiService.Employee[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
 
   // Load employees from backend on mount
   useEffect(() => {
@@ -289,33 +290,33 @@ const TransferSuggestion = () => {
 
       {/* Transfer History Log */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-foreground">Transfer History</h3>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="text-sm font-semibold text-foreground">Transfer History <span className="text-xs font-normal text-muted-foreground">({filteredLog.length} record{filteredLog.length !== 1 ? "s" : ""})</span></h3>
           <div className="relative w-56">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-            <Input className="pl-8 h-8 text-xs" placeholder="Search history..." value={searchLog} onChange={e => setSearchLog(e.target.value)} />
+            <Input className="pl-8 h-8 text-xs" placeholder="Search history..." value={searchLog} onChange={e => { setSearchLog(e.target.value); setCurrentPage(1); }} />
           </div>
         </div>
         <Card className="card-shadow">
           <CardContent className="pt-3">
-            <div className="overflow-x-auto">
+            <div className="overflow-auto max-h-[420px] rounded-md border">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left">
-                    <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">Suggestion</th>
-                    <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">From</th>
-                    <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">To</th>
-                    <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">Reason</th>
-                    <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">Date</th>
-                    <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">Status</th>
-                    <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">Audit ID</th>
+                <thead className="sticky top-0 z-20">
+                  <tr className="border-b text-left bg-muted/90">
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Suggestion</th>
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">From</th>
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">To</th>
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Reason</th>
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Date</th>
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Status</th>
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Audit ID</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredLog.length === 0 ? (
                     <tr><td colSpan={7} className="py-6 text-center text-muted-foreground text-xs">No transfer records</td></tr>
                   ) : (
-                    filteredLog.map(r => (
+                    filteredLog.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage).map((r, i) => (
                       <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="py-2 px-2">
                           <p className="font-mono text-xs">{r.suggestionNo}</p>
@@ -330,7 +331,7 @@ const TransferSuggestion = () => {
                           <p className="text-muted-foreground">{r.toEmpNo}</p>
                         </td>
                         <td className="py-2 px-2 text-xs text-muted-foreground max-w-[150px] truncate">{r.reason}</td>
-                        <td className="py-2 px-2 text-xs">{r.date}</td>
+                        <td className="py-2 px-2 text-xs whitespace-nowrap">{r.date}</td>
                         <td className="py-2 px-2">
                           <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">Completed</Badge>
                         </td>
@@ -341,6 +342,29 @@ const TransferSuggestion = () => {
                 </tbody>
               </table>
             </div>
+            {/* Pagination controls */}
+            {filteredLog.length > 0 && (
+              <div className="flex items-center justify-between pt-3 border-t mt-2 gap-2 flex-wrap">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Rows per page:</span>
+                  <Select value={String(rowsPerPage)} onValueChange={v => { setRowsPerPage(Number(v)); setCurrentPage(1); }}>
+                    <SelectTrigger className="h-7 w-16 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[10, 20, 50].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-muted-foreground">Page {currentPage} of {Math.max(1, Math.ceil(filteredLog.length / rowsPerPage))}</span>
+                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredLog.length / rowsPerPage), p + 1))} disabled={currentPage >= Math.ceil(filteredLog.length / rowsPerPage)}>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

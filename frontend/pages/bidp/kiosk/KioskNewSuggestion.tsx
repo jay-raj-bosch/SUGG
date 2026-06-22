@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { suggestionTypes } from "@/lib/mockData";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSuggestions } from "@/contexts/SuggestionContext";
+import { useDeptMappings } from "@/contexts/DeptMappingContext";
 import { toast } from "sonner";
 import { Send, Save, RotateCcw, Upload, X, Paperclip, Info } from "lucide-react";
 import { schemaMap } from "@/lib/bidp/suggestionSchemas";
@@ -68,10 +69,12 @@ const KioskNewSuggestion = () => {
     setAttachmentItems(prev => prev.filter((_, i) => i !== index));
   };
 
+  const { mapDept } = useDeptMappings();
   const derivedRange = useMemo(() => {
-    const parts = (user?.department || "").split("/");
-    return parts.length > 1 ? parts[1] : "";
-  }, [user?.department]);
+    const dept = user?.department || "";
+    const mapped = mapDept(dept);
+    return mapped === "—" ? "" : mapped;
+  }, [user?.department, mapDept]);
 
   const handleTypeChange = (t: string) => {
     setSuggestionType(t);

@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { statusColors, Suggestion, suggestionTypes, categories, ranges } from "@/lib/mockData";
+import { statusColors, Suggestion, suggestionTypes } from "@/lib/mockData";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useCategories } from "@/contexts/CategoryContext";
+import { useDeptMappings } from "@/contexts/DeptMappingContext";
 import { toast } from "sonner";
 import { Save, Send, Trash2, CalendarDays, User, Users, FileText, Award, Clock, Info, Percent, ChevronRight, ChevronLeft, Paperclip, Download, ZoomIn, Image, ArrowRightLeft } from "lucide-react";
 import { type AttachmentItem, formatFileSize, isImageMime } from "@/lib/attachmentUtils";
@@ -32,6 +33,7 @@ interface Props {
 const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete }: Props) => {
   const { updateSuggestion } = useSuggestions();
   const { categories } = useCategories();
+  const { uniqueRanges } = useDeptMappings();
   const [editData, setEditData] = useState<Partial<Suggestion>>({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [lightboxImages, setLightboxImages] = useState<AttachmentItem[]>([]);
@@ -379,7 +381,7 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
                 <Label className="text-xs font-medium text-muted-foreground">Date</Label>
                 <Input type="date" value={String(val("date") || "")} onChange={(e) => setField("date", e.target.value)} className="text-sm" />
               </div>
-              <SelectField label="Range" field="range" options={ranges} />
+              <SelectField label="Range" field="range" options={uniqueRanges} />
             </div>
             <Separator />
             <div className="grid grid-cols-2 gap-4">

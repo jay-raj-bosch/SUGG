@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Plus, Search } from "lucide-react";
 import { useNotifications } from "@/contexts/NotificationContext";
 import * as apiService from "@/lib/apiService";
+import { useDeptMappings } from "@/contexts/DeptMappingContext";
 
 interface AuthorityRow {
   id: string;
@@ -26,6 +27,7 @@ interface AuthorityRow {
 
 const AssignAuthority = () => {
   const { t } = useLanguage();
+  const { uniqueRanges } = useDeptMappings();
   const { addNotification } = useNotifications();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("All");
@@ -215,14 +217,9 @@ const AssignAuthority = () => {
                 <Select value={suggestionRange} onValueChange={setSuggestionRange}>
                   <SelectTrigger><SelectValue placeholder="Select range" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="TEF">TEF</SelectItem>
-                    <SelectItem value="QAL">QAL</SelectItem>
-                    <SelectItem value="MNT">MNT</SelectItem>
-                    <SelectItem value="PRD">PRD</SelectItem>
-                    <SelectItem value="SAF">SAF</SelectItem>
-                    <SelectItem value="HRD">HRD</SelectItem>
-                    <SelectItem value="LOG">LOG</SelectItem>
-                    <SelectItem value="ENG">ENG</SelectItem>
+                    {uniqueRanges.map(r => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
                     <SelectItem value="All">All Ranges</SelectItem>
                   </SelectContent>
                 </Select>

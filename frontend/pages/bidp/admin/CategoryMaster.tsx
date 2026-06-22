@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import { Plus, Search } from "lucide-react";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { useCategories } from "@/contexts/CategoryContext";
-import { categories } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
 
@@ -43,7 +42,8 @@ const CategoryMaster = () => {
     c.desc.toLowerCase().includes(search.toLowerCase())
   );
 
-  const categoryOptions = categories.map(c => ({ value: c, label: c }));
+  // Autocomplete suggestions from existing categories in the database
+  const categoryOptions = catList.map(c => ({ value: c.name, label: c.name }));
 
   const handleAdd = async () => {
     if (!name.trim()) { toast.error("Category name is required"); return; }

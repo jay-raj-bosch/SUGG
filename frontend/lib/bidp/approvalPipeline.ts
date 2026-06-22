@@ -333,14 +333,23 @@ export function buildSendBackUpdate(
 export function calculateDaysPending(suggestion: Suggestion): number {
   // Not applicable for terminal states
   if (!suggestion.status || suggestion.status === "Draft" || suggestion.status === "Rejected" ||
-      suggestion.status === "Approved & Closed" || suggestion.status === "Closed") {
+      suggestion.status === "Approved & Closed" || suggestion.status === "Closed" || suggestion.status === "Implemented") {
     return 0;
   }
 
-  const referenceDate = suggestion.pendingSince || suggestion.date;
-  if (!referenceDate) return suggestion.daysPending ?? 0;
+  // Find the most recent approval action date — this is when the counter resets
+  // Walk backwards through the approval chain: BPS DH > BPS Admin > Manager > FLM > Submitted
+  const lastActionDate =
+    suggestion.approvedByBpsDhOn  ||
+    suggestion.approvedByBpsAdminOn ||
+    suggestion.approvedByManagerOn ||
+    suggestion.evaluatedOn ||
+    suggestion.pendingSince ||
+    suggestion.date;
 
-  const start = new Date(referenceDate);
+  if (!lastActionDate) return suggestion.daysPending ?? 0;
+
+  const start = new Date(lastActionDate);
   const today = new Date();
   // Reset time component for accurate day calculation
   start.setHours(0, 0, 0, 0);

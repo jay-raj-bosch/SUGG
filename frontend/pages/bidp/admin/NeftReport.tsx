@@ -4,17 +4,24 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
-import { statusColors, ranges } from "@/lib/mockData";
+import { suggestionTypes } from "@/lib/mockData";
 import type { Suggestion } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
-import { downloadCSV, downloadXLSX, downloadTablePDF } from "@/lib/pdfUtils";
+import { downloadXLSX, downloadTablePDF } from "@/lib/pdfUtils";
+import { useDeptMappings } from "@/contexts/DeptMappingContext";
 
 const reportTypes = ["NEFT Report", "Manpower Report", "Employee Involvement", "Non-Participant Report"];
+
+/** Build short abbreviation from suggestion type name, e.g. "Cash The Flash" → "CTF" */
+const toShortName = (type: string) =>
+  type
+    .split(/\s+/)
+    .map(w => w[0]?.toUpperCase() || "")
+    .join("");
 
 const NeftReport = () => {
   const { t } = useLanguage();
@@ -27,6 +34,7 @@ const NeftReport = () => {
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [allSuggestions, setAllSuggestions] = useState<Suggestion[]>([]);
   const [allEmployees, setAllEmployees] = useState<apiService.Employee[]>([]);
+  const { uniqueRanges, mapDept } = useDeptMappings();
 
   // Load data from backend on mount
   useEffect(() => {
@@ -38,15 +46,19 @@ const NeftReport = () => {
   const isNonParticipant      = reportType === "Non-Participant Report";
   const isEmployeeInvolvement = reportType === "Employee Involvement";
   const isNeft                = reportType === "NEFT Report";
-  const isRangeReport         = isManpower;
+
+  // ── Manpower: filtered from allEmployees ──────────────────────────────────
+  const manpowerRows = useMemo(() => {
+    if (!isManpower) return [];
+    return allEmployees.filter(e => {
+      if (range !== "all" && mapDept(e.department) !== range) return false;
+      return true;
+    });
+  }, [isManpower, allEmployees, range, mapDept]);
 
   // ── Filtered suggestions for all report types ────────────────────────────
   const filteredData = useMemo(() => {
     return allSuggestions.filter(s => {
-      if (isRangeReport) {
-        if (range !== "all" && s.range !== range) return false;
-        return true;
-      }
       if (fromDate && s.date < fromDate) return false;
       if (toDate && s.date > toDate) return false;
 
@@ -59,16 +71,16 @@ const NeftReport = () => {
       }
 
       if (reportType === "Employee Involvement") {
-        if (range !== "all" && s.range !== range) return false;
+        if (range !== "all" && mapDept(s.department) !== range) return false;
         return true;
       }
       if (isNonParticipant) {
-        if (range !== "all" && s.range !== range) return false;
+        if (range !== "all" && mapDept(s.department) !== range) return false;
         return true;
       }
       return true;
     });
-  }, [allSuggestions, isRangeReport, range, fromDate, toDate, reportType, isNonParticipant, isNeft]);
+  }, [allSuggestions, range, fromDate, toDate, reportType, isNonParticipant, isNeft, mapDept]);
 
   // ── NEFT aggregated rows: group by employee, sum amounts ─────────────────
   interface NeftRow {
@@ -109,40 +121,30 @@ const NeftReport = () => {
 
   const neftGrandTotal = useMemo(() => neftRows.reduce((sum, r) => sum + r.totalAmount, 0), [neftRows]);
 
-  const getFilteredData = () => filteredData;
-
   const getReportData = () => {
     if (isManpower) {
-      const headers = ["Sno", "Employee Name", "Employee Number", "Range", "Department", "Category"];
-      const rows = filteredData.map((s, i) => [
+      const headers = ["Sno", "Employee Name", "Employee Number", "Department"];
+      const rows = manpowerRows.map((e, i) => [
         String(i + 1),
-        s.employeeName || "",
-        s.employeeNo || "",
-        s.range || "",
-        s.department || "",
-        s.category,
+        e.name || "",
+        e.employee_no || "",
+        e.department || "",
       ]);
       return { headers, rows };
     }
     if (isEmployeeInvolvement) {
-      const empMap = new Map<string, { empNo: string; empName: string; category: string; dept: string; CTF: number; SFC: number; SSS: number; MIC: number; DCIP: number }>();
-      filteredData.forEach(s => {
-        const key = s.employeeNo || s.id;
-        if (!empMap.has(key)) empMap.set(key, { empNo: s.employeeNo || "", empName: s.employeeName || "", category: s.category, dept: s.department || "", CTF: 0, SFC: 0, SSS: 0, MIC: 0, DCIP: 0 });
-        const r = empMap.get(key)!;
-        if (s.type === "Cash The Flash") r.CTF++;
-        else if (s.type === "Shop Floor CIP") r.SFC++;
-        else if (s.type === "Simple Suggestion Scheme") r.SSS++;
-        else if (s.type === "My Idea Card") r.MIC++;
-        else if (s.type === "Daily CIP") r.DCIP++;
+      const empRows = invRows;
+      const typeShortNames = suggestionTypes.map(toShortName);
+      const headers = ["SNo", "Employee No", "Employee Name", "Department", ...typeShortNames, "Total"];
+      const rows = empRows.map((r, i) => {
+        const typeCounts = suggestionTypes.map(t => String(r.typeCounts[t] || 0));
+        const total = suggestionTypes.reduce((sum, t) => sum + (r.typeCounts[t] || 0), 0);
+        return [
+          String(i + 1), r.empNo, r.empName, r.dept,
+          ...typeCounts,
+          String(total),
+        ];
       });
-      const empRows = Array.from(empMap.values());
-      const headers = ["SNo", "Employee No", "Employee Name", "Employee Category", "Employee Department", "CTF", "SFC", "SSS", "MIC", "DCIP", "Total"];
-      const rows = empRows.map((r, i) => [
-        String(i + 1), r.empNo, r.empName, r.category, r.dept,
-        String(r.CTF), String(r.SFC), String(r.SSS), String(r.MIC), String(r.DCIP),
-        String(r.CTF + r.SFC + r.SSS + r.MIC + r.DCIP),
-      ]);
       return { headers, rows };
     }
     if (isNonParticipant) {
@@ -168,10 +170,16 @@ const NeftReport = () => {
     if (!reportType) { toast.error("Please select a report type"); return; }
     setShowResults(true);
     setCurrentPage(1);
-    if (isNeft) {
+    if (isManpower) {
+      toast.success(`Generated ${manpowerRows.length} employee(s)`);
+    } else if (isNeft) {
       toast.success(`Generated ${neftRows.length} employee(s) from ${filteredData.length} suggestion(s)`);
+    } else if (isEmployeeInvolvement) {
+      toast.success(`Generated ${invRows.length} involved employee(s) from ${filteredData.length} suggestion(s)`);
+    } else if (isNonParticipant) {
+      toast.success(`Generated ${npRows.length} non-participant(s)`);
     } else {
-      toast.success(`Generated ${getFilteredData().length} record(s)`);
+      toast.success(`Generated ${filteredData.length} record(s)`);
     }
   };
 
@@ -182,7 +190,7 @@ const NeftReport = () => {
       "Report Type": reportType,
       ...(fromDate ? { "From Date": formatDate(fromDate) } : {}),
       ...(toDate ? { "To Date": formatDate(toDate) } : {}),
-      ...(range !== "all" && (isRangeReport || isNonParticipant || isEmployeeInvolvement) ? { "Range": range } : {}),
+      ...(range !== "all" && (isManpower || isNonParticipant || isEmployeeInvolvement) ? { "Range": range } : {}),
       ...(isNeft ? { "Total Employees": String(neftRows.length), "Grand Total": `₹${neftGrandTotal.toLocaleString()}` } : {}),
     };
     downloadXLSX(
@@ -206,34 +214,92 @@ const NeftReport = () => {
     <span>{en} <span className="text-[9px] opacity-70">/ {t(en)}</span></span>
   );
 
+  // ── Build employee lookup from allEmployees for resolving emp details ──────
+  const empLookup = useMemo(() => {
+    const m = new Map<string, apiService.Employee>();
+    for (const e of allEmployees) m.set(e.employee_no, e);
+    return m;
+  }, [allEmployees]);
+
+  // ── Employee Involvement: proper counting ─────────────────────────────────
+  // Rules:
+  //   1. On-behalf suggestions → count the mainSuggestor, NOT the registering employee
+  //   2. Self suggestions → count the registering employee
+  //   3. Team members → each team member is also counted as involved
   const getInvolvementRows = () => {
-    const empMap = new Map<string, { empNo: string; empName: string; category: string; dept: string; CTF: number; SFC: number; SSS: number; MIC: number; DCIP: number }>();
+    type InvRow = { empNo: string; empName: string; dept: string; typeCounts: Record<string, number> };
+    const empMap = new Map<string, InvRow>();
+
+    const ensureEmp = (empNo: string): InvRow => {
+      if (!empMap.has(empNo)) {
+        const emp = empLookup.get(empNo);
+        empMap.set(empNo, {
+          empNo,
+          empName: emp?.name || empNo,
+          dept: emp?.department || "—",
+          typeCounts: {},
+        });
+      }
+      return empMap.get(empNo)!;
+    };
+
     filteredData.forEach(s => {
-      const key = s.employeeNo || s.id;
-      if (!empMap.has(key)) empMap.set(key, { empNo: s.employeeNo || "—", empName: s.employeeName || "—", category: s.category, dept: s.department || "—", CTF: 0, SFC: 0, SSS: 0, MIC: 0, DCIP: 0 });
-      const r = empMap.get(key)!;
-      if (s.type === "Cash The Flash") r.CTF++;
-      else if (s.type === "Shop Floor CIP") r.SFC++;
-      else if (s.type === "Simple Suggestion Scheme") r.SSS++;
-      else if (s.type === "My Idea Card") r.MIC++;
-      else if (s.type === "Daily CIP") r.DCIP++;
+      const fd: Record<string, any> = s.formData || {};
+      if (!s.type) return;
+
+      // Determine the primary involved person
+      const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;
+      const primaryEmpNo = isOnBehalf ? fd.mainSuggestor : (s.employeeNo || "");
+
+      if (primaryEmpNo) {
+        const row = ensureEmp(primaryEmpNo);
+        if (isOnBehalf) {
+          const emp = empLookup.get(primaryEmpNo);
+          if (emp) {
+            row.empName = emp.name;
+            row.dept = emp.department;
+          }
+        } else {
+          if (s.employeeName) row.empName = s.employeeName;
+          if (s.department) row.dept = s.department;
+        }
+        row.typeCounts[s.type] = (row.typeCounts[s.type] || 0) + 1;
+      }
+
+      // Also count each team member as involved
+      const teamMembers: string[] = fd.teamMembers || [];
+      for (const memberId of teamMembers) {
+        if (!memberId || memberId === primaryEmpNo) continue;
+        const row = ensureEmp(memberId);
+        row.typeCounts[s.type] = (row.typeCounts[s.type] || 0) + 1;
+      }
     });
-    return Array.from(empMap.values());
+
+    return Array.from(empMap.values()).sort((a, b) => a.empName.localeCompare(b.empName));
   };
-  const invRows        = isEmployeeInvolvement ? getInvolvementRows() : [];
+  const invRows = isEmployeeInvolvement || isNonParticipant ? getInvolvementRows() : [];
+
+  // ── Non-Participant: employees NOT in the involvement set ──────────────────
+  // When a range filter is active, only consider employees from that range
+  const rangeFilteredEmployees = useMemo(() => {
+    if (range === "all") return allEmployees;
+    return allEmployees.filter(e => mapDept(e.department) === range);
+  }, [allEmployees, range, mapDept]);
 
   const getNonParticipantRows = () => {
-    const participantNos = new Set(filteredData.map(s => s.employeeNo).filter(Boolean));
-    return allEmployees.map(e => ({ employeeNo: e.employee_no, name: e.name, department: e.department, category: "M&SS" })).filter(e => !participantNos.has(e.employeeNo));
+    const participantNos = new Set(invRows.map(r => r.empNo));
+    return rangeFilteredEmployees
+      .filter(e => !participantNos.has(e.employee_no))
+      .map(e => ({ employeeNo: e.employee_no, name: e.name, department: e.department, category: "M&SS" }));
   };
   const npRows = isNonParticipant ? getNonParticipantRows() : [];
-  const totalManpower  = allEmployees.length;
+  const totalManpower  = rangeFilteredEmployees.length;
   const involved       = invRows.length;
   const notInvolved    = Math.max(0, totalManpower - involved);
   const involvementPct = totalManpower > 0 ? ((involved / totalManpower) * 100).toFixed(1) : "0.0";
   const period         = `${fromDate || "—"} - ${toDate || "—"}`;
 
-  const activeRowCount = isNeft ? neftRows.length : isEmployeeInvolvement ? invRows.length : isNonParticipant ? npRows.length : filteredData.length;
+  const activeRowCount = isManpower ? manpowerRows.length : isNeft ? neftRows.length : isEmployeeInvolvement ? invRows.length : isNonParticipant ? npRows.length : filteredData.length;
   const totalPages     = Math.max(1, Math.ceil(activeRowCount / rowsPerPage));
   const pageStart      = (currentPage - 1) * rowsPerPage;
   const pageEnd        = currentPage * rowsPerPage;
@@ -289,20 +355,20 @@ const NeftReport = () => {
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">From Date <span className="text-[9px] opacity-70">/ {t("From Date")}</span></Label>
-              <Input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setShowResults(false); }} disabled={isRangeReport} className={`${isRangeReport ? "opacity-30 cursor-not-allowed" : ""} ${!isRangeReport && fromDate ? "filter-active" : ""}`} />
+              <Input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setShowResults(false); }} disabled={isManpower} className={`${isManpower ? "opacity-30 cursor-not-allowed" : ""} ${!isManpower && fromDate ? "filter-active" : ""}`} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">To Date <span className="text-[9px] opacity-70">/ {t("To Date")}</span></Label>
-              <Input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setShowResults(false); }} disabled={isRangeReport} className={`${isRangeReport ? "opacity-30 cursor-not-allowed" : ""} ${!isRangeReport && toDate ? "filter-active" : ""}`} />
+              <Input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setShowResults(false); }} disabled={isManpower} className={`${isManpower ? "opacity-30 cursor-not-allowed" : ""} ${!isManpower && toDate ? "filter-active" : ""}`} />
             </div>
-            {(isRangeReport || isNonParticipant || isEmployeeInvolvement) && (
+            {(isManpower || isNonParticipant || isEmployeeInvolvement) && (
               <div className="space-y-1.5">
                 <Label className="text-xs">Range <span className="text-[9px] opacity-70">/ {t("Range")}</span></Label>
                 <Select value={range} onValueChange={v => { setRange(v); setShowResults(false); }}>
                   <SelectTrigger className={range !== "all" ? "filter-active" : ""}><SelectValue placeholder="All Ranges" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Ranges</SelectItem>
-                    {ranges.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                    {uniqueRanges.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -333,7 +399,7 @@ const NeftReport = () => {
             <span className="text-xs text-muted-foreground">
               Report: {reportType} | Total Records: {activeRowCount}
               {activeRowCount > 0 && ` — showing ${pageStart + 1}–${Math.min(pageEnd, activeRowCount)}`}
-              {isRangeReport
+              {isManpower
                 ? ` | Range: ${range === "all" ? "All Ranges" : range}`
                 : <>
                     {fromDate && ` | From: ${fromDate}`}
@@ -358,25 +424,19 @@ const NeftReport = () => {
                         <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap sticky left-0 z-30 bg-muted/90 border-r shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)]">Sno</th>
                         <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Employee Name</th>
                         <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Employee Number</th>
-                        <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Range</th>
                         <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Department</th>
-                        <th className="pb-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Category</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredData.length === 0 ? (
-                        <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No records match the criteria</td></tr>
+                      {manpowerRows.length === 0 ? (
+                        <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">No employees found</td></tr>
                       ) : (
-                        filteredData.slice(pageStart, pageEnd).map((s, i) => (
-                          <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                        manpowerRows.slice(pageStart, pageEnd).map((e, i) => (
+                          <tr key={e.employee_no} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                             <td className="py-2 px-2 text-xs text-muted-foreground sticky left-0 z-10 bg-background border-r shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">{pageStart + i + 1}</td>
-                            <td className="py-2 px-2 text-xs font-medium">{s.employeeName || "—"}</td>
-                            <td className="py-2 px-2 text-xs font-mono">{s.employeeNo || "—"}</td>
-                            <td className="py-2 px-2 text-xs font-medium">{s.range || "—"}</td>
-                            <td className="py-2 px-2 text-xs">{s.department || "—"}</td>
-                            <td className="py-2 px-2 text-xs">
-                              <span className="inline-block bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium">{s.category}</span>
-                            </td>
+                            <td className="py-2 px-2 text-xs font-medium">{e.name || "—"}</td>
+                            <td className="py-2 px-2 text-xs font-mono">{e.employee_no || "—"}</td>
+                            <td className="py-2 px-2 text-xs">{e.department || "—"}</td>
                           </tr>
                         ))
                       )}
@@ -405,7 +465,7 @@ const NeftReport = () => {
                       </thead>
                       <tbody>
                         <tr className="bg-muted/30">
-                          <td className="py-2 px-3 font-medium">BidP Plant</td>
+                          <td className="py-2 px-3 font-medium">{range === "all" ? "All Ranges" : range}</td>
                           <td className="py-2 px-3">{period}</td>
                           <td className="py-2 px-3 text-right font-medium">{totalManpower}</td>
                           <td className="py-2 px-3 text-right text-primary font-semibold">{involved}</td>
@@ -427,36 +487,28 @@ const NeftReport = () => {
                           <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap sticky left-0 z-30 bg-muted/90 border-r shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)]">SNo</th>
                           <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Employee No</th>
                           <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Employee Name</th>
-                          <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Employee Category</th>
-                          <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Employee Department</th>
-                          <th className="pb-2 px-2 font-medium text-muted-foreground text-center">CTF</th>
-                          <th className="pb-2 px-2 font-medium text-muted-foreground text-center">SFC</th>
-                          <th className="pb-2 px-2 font-medium text-muted-foreground text-center">SSS</th>
-                          <th className="pb-2 px-2 font-medium text-muted-foreground text-center">MIC</th>
-                          <th className="pb-2 px-2 font-medium text-muted-foreground text-center">DCIP</th>
+                          <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Department</th>
+                          {suggestionTypes.map(t => (
+                            <th key={t} className="pb-2 px-2 font-medium text-muted-foreground text-center" title={t}>{toShortName(t)}</th>
+                          ))}
                           <th className="pb-2 px-2 font-medium text-foreground text-center font-bold">Total</th>
                         </tr>
                       </thead>
                       <tbody>
                         {invRows.length === 0 ? (
-                          <tr><td colSpan={11} className="py-8 text-center text-muted-foreground">No records match the criteria</td></tr>
+                          <tr><td colSpan={4 + suggestionTypes.length + 1} className="py-8 text-center text-muted-foreground">No records match the criteria</td></tr>
                         ) : (
                           invRows.slice(pageStart, pageEnd).map((r, i) => {
-                            const total = r.CTF + r.SFC + r.SSS + r.MIC + r.DCIP;
+                            const total = suggestionTypes.reduce((sum, t) => sum + (r.typeCounts[t] || 0), 0);
                             return (
                               <tr key={r.empNo + i} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                                 <td className="py-2 px-2 text-muted-foreground sticky left-0 z-10 bg-background border-r shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">{pageStart + i + 1}</td>
                                 <td className="py-2 px-2 font-mono">{r.empNo}</td>
                                 <td className="py-2 px-2 whitespace-nowrap font-medium">{r.empName}</td>
-                                <td className="py-2 px-2">
-                                  <span className="inline-block bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium">{r.category}</span>
-                                </td>
                                 <td className="py-2 px-2">{r.dept}</td>
-                                <td className="py-2 px-2 text-center">{r.CTF}</td>
-                                <td className="py-2 px-2 text-center">{r.SFC}</td>
-                                <td className="py-2 px-2 text-center">{r.SSS}</td>
-                                <td className="py-2 px-2 text-center">{r.MIC}</td>
-                                <td className="py-2 px-2 text-center">{r.DCIP}</td>
+                                {suggestionTypes.map(t => (
+                                  <td key={t} className="py-2 px-2 text-center">{r.typeCounts[t] || 0}</td>
+                                ))}
                                 <td className="py-2 px-2 text-center font-bold">{total}</td>
                               </tr>
                             );

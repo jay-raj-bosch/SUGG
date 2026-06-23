@@ -41,7 +41,7 @@ const EmployeeHome = () => {
   const { title, data } = filterDataMap[activeFilter];
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="flex flex-col h-full w-full max-w-6xl space-y-6">
       <div>
         <h2 className="text-xl font-bold text-foreground">
           Welcome, {user?.name || "User"}

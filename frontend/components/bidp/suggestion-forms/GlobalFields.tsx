@@ -338,68 +338,23 @@ const GlobalFields = ({
           )}
           {errors.teamMembers && <p className="text-xs text-destructive">{errors.teamMembers}</p>}
 
-          {/* Share Distribution */}
+          {/* Share Distribution — auto equal split */}
           {selectedMembers.length > 0 && setTeamMemberShares && (
-            <div className="rounded-xl border bg-gradient-to-br from-secondary/5 via-background to-muted/20 p-4 space-y-3.5 shadow-sm">
+            <div className="rounded-xl border bg-gradient-to-br from-secondary/5 via-background to-muted/20 p-4 space-y-3 shadow-sm">
               {/* Header */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-full bg-secondary/15 flex items-center justify-center">
-                    <Percent className="h-3.5 w-3.5 text-secondary" />
-                  </div>
-                  <div>
-                    <Label className="text-xs font-semibold leading-none">
-                      Share Distribution <span className="text-destructive">*</span>
-                    </Label>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">/ ಪಾಲು ಹಂಚಿಕೆ</p>
-                  </div>
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded-full bg-secondary/15 flex items-center justify-center">
+                  <Percent className="h-3.5 w-3.5 text-secondary" />
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={splitEqually}
-                    className="text-[10px] px-2.5 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 active:scale-95 transition-all font-semibold border border-primary/20"
-                  >
-                    ⚖ Split equally
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTeamMemberShares && setTeamMemberShares(Object.fromEntries(selectedMembers.map(id => [id, "0"])))}
-                    className="text-[10px] px-2.5 py-1 rounded-full bg-muted text-muted-foreground hover:bg-destructive/10 hover:text-destructive active:scale-95 transition-all font-semibold border border-border/60"
-                    title="Reset all shares to 0"
-                  >
-                    ↺ Reset
-                  </button>
+                <div>
+                  <Label className="text-xs font-semibold leading-none">
+                    Share Distribution
+                  </Label>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Equal split across all {selectedMembers.length} member{selectedMembers.length > 1 ? "s" : ""}</p>
                 </div>
-              </div>
-
-              {/* Progress bar */}
-              <div className="space-y-1.5">
-                <div className="h-2 rounded-full bg-muted overflow-hidden shadow-inner">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ease-out ${
-                      totalShare === 100 ? "bg-emerald-500" : totalShare > 100 ? "bg-destructive" : "bg-amber-400"
-                    }`}
-                    style={{ width: `${Math.min(totalShare, 100)}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground">0%</span>
-                  <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full ${
-                    totalShare === 100
-                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                      : totalShare > 100
-                      ? "bg-red-100 text-destructive dark:bg-red-900/30"
-                      : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                  }`}>
-                    {totalShare === 100
-                      ? "✓ 100% allocated"
-                      : totalShare > 100
-                      ? `Over by ${totalShare - 100}%`
-                      : `${100 - totalShare}% remaining`}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">100%</span>
-                </div>
+                <span className="ml-auto text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                  ✓ 100% allocated
+                </span>
               </div>
 
               {/* Member rows */}
@@ -411,10 +366,10 @@ const GlobalFields = ({
                   const initials = namePart.split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
                   const avatarColors = ["bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500","bg-rose-500","bg-cyan-500","bg-pink-500","bg-indigo-500"];
                   const color = avatarColors[idx % avatarColors.length];
-                  const shareVal = (teamMemberShares || {})[id] || "";
-                  const shareNum = Number(shareVal) || 0;
+                  const share = Math.floor(100 / selectedMembers.length);
+                  const shareVal = idx === 0 ? share + (100 - share * selectedMembers.length) : share;
                   return (
-                    <div key={id} className="flex items-center gap-3 bg-background/80 rounded-lg px-3 py-2.5 border border-border/40 hover:border-border/80 hover:shadow-sm transition-all">
+                    <div key={id} className="flex items-center gap-3 bg-background/80 rounded-lg px-3 py-2.5 border border-border/40">
                       <div className={`h-8 w-8 rounded-full ${color} flex items-center justify-center shrink-0 shadow-sm`}>
                         <span className="text-white text-[11px] font-bold">{initials}</span>
                       </div>
@@ -424,29 +379,17 @@ const GlobalFields = ({
                         <div className="h-1 rounded-full bg-muted overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all duration-300 ${color} opacity-60`}
-                            style={{ width: `${Math.min(shareNum, 100)}%` }}
+                            style={{ width: `${shareVal}%` }}
                           />
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={shareVal}
-                          onChange={e => handleShareChange(id, e.target.value)}
-                          placeholder="0"
-                          className={`h-8 w-16 text-sm text-right font-semibold tabular-nums ${
-                            errors.teamMemberShares ? "border-destructive" : ""
-                          }`}
-                        />
-                        <span className="text-sm font-bold text-muted-foreground w-4">%</span>
+                      <div className="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/50 dark:border-emerald-800/30">
+                        <span className="text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{shareVal}%</span>
                       </div>
                     </div>
                   );
                 })}
               </div>
-              {errors.teamMemberShares && <p className="text-xs text-destructive">{errors.teamMemberShares}</p>}
             </div>
           )}
         </div>

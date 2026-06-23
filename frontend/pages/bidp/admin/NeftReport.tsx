@@ -82,42 +82,108 @@ const NeftReport = () => {
     });
   }, [allSuggestions, range, fromDate, toDate, reportType, isNonParticipant, isNeft, mapDept]);
 
-  // ── NEFT aggregated rows: group by employee, sum amounts ─────────────────
+  // ── Build employee lookup from allEmployees for resolving emp details ──────
+  const empLookup = useMemo(() => {
+    const m = new Map<string, apiService.Employee>();
+    for (const e of allEmployees) m.set(e.employee_no, e);
+    return m;
+  }, [allEmployees]);
+
+  // ── NEFT aggregated rows: distribute awards per employee ──────────────────
+  // Rules:
+  //   1. Self + no group → full award to the employee
+  //   2. Self + group → distribute among team members based on share %
+  //   3. On-behalf + no group → full award to mainSuggestor (NOT registering employee)
+  //   4. On-behalf + group → distribute among team members (registering employee excluded)
+  //   5. Share % is auto-equal-split stored in formData.teamMemberShares
   interface NeftRow {
     empNo: string;
     empName: string;
     department: string;
-    latestDate: string;      // most recent award date
+    latestDate: string;
     totalAmount: number;
-    suggestionCount: number; // how many suggestions contributed
+    suggestionCount: number;
+    details: Array<{ suggNo: string; type: string; fullAmount: number; share: number; sharePercent: number }>;
   }
 
   const neftRows = useMemo((): NeftRow[] => {
     if (!isNeft) return [];
     const empMap = new Map<string, NeftRow>();
-    filteredData.forEach(s => {
-      const key = s.employeeNo || s.id;
-      if (!empMap.has(key)) {
-        empMap.set(key, {
-          empNo: s.employeeNo || "—",
-          empName: s.employeeName || "—",
-          department: s.department || "—",
-          latestDate: s.date || "",
+
+    const ensureRow = (empNo: string, empName: string, dept: string): NeftRow => {
+      if (!empMap.has(empNo)) {
+        // Try to find employee details from allEmployees lookup
+        const emp = empLookup.get(empNo);
+        empMap.set(empNo, {
+          empNo,
+          empName: emp?.name || empName || empNo,
+          department: emp?.department || dept || "—",
+          latestDate: "",
           totalAmount: 0,
           suggestionCount: 0,
+          details: [],
         });
       }
-      const row = empMap.get(key)!;
-      row.totalAmount += s.awardAmount || 0;
-      row.suggestionCount += 1;
-      // Track latest date
-      if (s.date && s.date > row.latestDate) {
-        row.latestDate = s.date;
+      return empMap.get(empNo)!;
+    };
+
+    filteredData.forEach(s => {
+      const award = s.awardAmount || 0;
+      if (award <= 0) return;
+
+      const fd: Record<string, any> = s.formData || {};
+      const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;
+      const isGroup = fd.groupSuggestion === "yes";
+      const teamMembers: string[] = fd.teamMembers || [];
+      const teamMemberShares: Record<string, string> = fd.teamMemberShares || {};
+      const suggNo = s.suggestionNo || s.id;
+      const sType = s.type || "—";
+
+      if (isGroup && teamMembers.length > 0) {
+        // ── Group suggestion: distribute among team members ──
+        // Compute shares — if teamMemberShares exist use them, else equal split
+        const hasShares = Object.keys(teamMemberShares).length > 0;
+        const memberCount = teamMembers.length;
+
+        teamMembers.forEach((memberId, idx) => {
+          let sharePercent: number;
+          if (hasShares && teamMemberShares[memberId]) {
+            sharePercent = Number(teamMemberShares[memberId]) || 0;
+          } else {
+            // Equal split fallback
+            const base = Math.floor(100 / memberCount);
+            sharePercent = idx === 0 ? base + (100 - base * memberCount) : base;
+          }
+
+          const memberAmount = Math.round((award * sharePercent) / 100);
+          if (memberAmount <= 0) return;
+
+          const row = ensureRow(memberId, memberId, "—");
+          row.totalAmount += memberAmount;
+          row.suggestionCount += 1;
+          row.details.push({ suggNo, type: sType, fullAmount: award, share: memberAmount, sharePercent });
+          if (s.date && s.date > row.latestDate) row.latestDate = s.date;
+        });
+      } else if (isOnBehalf) {
+        // ── On-behalf, NOT group: full award goes to mainSuggestor ──
+        const recipientId = fd.mainSuggestor;
+        const row = ensureRow(recipientId, recipientId, "—");
+        row.totalAmount += award;
+        row.suggestionCount += 1;
+        row.details.push({ suggNo, type: sType, fullAmount: award, share: award, sharePercent: 100 });
+        if (s.date && s.date > row.latestDate) row.latestDate = s.date;
+      } else {
+        // ── Self, NOT group: full award goes to the employee ──
+        const row = ensureRow(s.employeeNo || s.id, s.employeeName || "—", s.department || "—");
+        row.totalAmount += award;
+        row.suggestionCount += 1;
+        row.details.push({ suggNo, type: sType, fullAmount: award, share: award, sharePercent: 100 });
+        if (s.date && s.date > row.latestDate) row.latestDate = s.date;
       }
     });
-    // Sort by employee name
+
     return Array.from(empMap.values()).sort((a, b) => a.empName.localeCompare(b.empName));
-  }, [isNeft, filteredData]);
+  }, [isNeft, filteredData, empLookup]);
 
   const neftGrandTotal = useMemo(() => neftRows.reduce((sum, r) => sum + r.totalAmount, 0), [neftRows]);
 
@@ -153,14 +219,15 @@ const NeftReport = () => {
       return { headers, rows };
     }
 
-    // ── NEFT Report: aggregated by employee ──
-    const headers = ["SNo", "Emp No", "Employee Name", "Department", "Date", "Total Amount (₹)"];
+    // ── NEFT Report: aggregated by employee with distribution details ──
+    const headers = ["SNo", "Emp No", "Employee Name", "Department", "Date", "Suggestions", "Total Amount (₹)"];
     const rows = neftRows.map((r, i) => [
       String(i + 1),
       r.empNo,
       r.empName,
       r.department,
       formatDate(r.latestDate),
+      r.details.map(d => d.suggNo).join(", "),
       `₹${r.totalAmount.toLocaleString()}`,
     ]);
     return { headers, rows };
@@ -214,12 +281,7 @@ const NeftReport = () => {
     <span>{en} <span className="text-[9px] opacity-70">/ {t(en)}</span></span>
   );
 
-  // ── Build employee lookup from allEmployees for resolving emp details ──────
-  const empLookup = useMemo(() => {
-    const m = new Map<string, apiService.Employee>();
-    for (const e of allEmployees) m.set(e.employee_no, e);
-    return m;
-  }, [allEmployees]);
+
 
   // ── Employee Involvement: proper counting ─────────────────────────────────
   // Rules:
@@ -558,7 +620,7 @@ const NeftReport = () => {
               </CardContent>
             </Card>
           ) : (
-            /* ── NEFT Report — aggregated per employee ── */
+            /* ── NEFT Report — aggregated per employee with distribution ── */
             <Card className="card-shadow">
               <CardContent className="pt-4">
                 <div className="overflow-auto max-h-[520px] rounded-md border">
@@ -570,12 +632,13 @@ const NeftReport = () => {
                         <th className="pb-2 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Employee Name" /></th>
                         <th className="pb-2 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Department" /></th>
                         <th className="pb-2 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Date" /></th>
+                        <th className="pb-2 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap"><TH en="Suggestion(s)" /></th>
                         <th className="pb-2 px-3 text-xs font-medium text-muted-foreground whitespace-nowrap text-right"><TH en="Amount" /> (₹)</th>
                       </tr>
                     </thead>
                     <tbody>
                       {neftRows.length === 0 ? (
-                        <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No approved & closed suggestions found for this period</td></tr>
+                        <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">No approved & closed suggestions found for this period</td></tr>
                       ) : (
                         <>
                           {neftRows.slice(pageStart, pageEnd).map((r, i) => (
@@ -585,10 +648,19 @@ const NeftReport = () => {
                               <td className="py-2.5 px-3 text-xs font-semibold">{r.empName}</td>
                               <td className="py-2.5 px-3 text-xs">{r.department}</td>
                               <td className="py-2.5 px-3 text-xs">{formatDate(r.latestDate)}</td>
+                              <td className="py-2.5 px-3 text-xs">
+                                <div className="space-y-0.5">
+                                  {r.details.map((d, di) => (
+                                    <div key={di} className="flex items-center gap-1.5">
+                                      <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">{d.suggNo}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
                               <td className="py-2.5 px-3 text-xs text-right font-bold text-emerald-700 dark:text-emerald-400">
                                 ₹{r.totalAmount.toLocaleString()}
                                 {r.suggestionCount > 1 && (
-                                  <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">({r.suggestionCount} suggestions)</span>
+                                  <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">({r.suggestionCount} sugg.)</span>
                                 )}
                               </td>
                             </tr>

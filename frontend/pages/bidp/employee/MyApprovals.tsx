@@ -14,7 +14,7 @@ import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { CheckSquare, Clock, User, Users, FileText, IndianRupee, XCircle, ChevronRight, ChevronLeft, Eye, Send, Lightbulb, Zap, Star, TrendingUp, Layers, Undo2, AlertTriangle, MessageSquare, RotateCcw, ArrowRightLeft, Paperclip, Download, ZoomIn, Image as ImageIcon, Award, Info, Calculator, Upload, X, CheckCircle2, ShieldCheck } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { statusColors, Suggestion } from "@/lib/mockData";
+import { statusColors, Suggestion, mockEmployees } from "@/lib/mockData";
 import { type AttachmentItem, formatFileSize, isImageMime, filesToAttachmentItems } from "@/lib/attachmentUtils";
 import * as apiService from "@/lib/apiService";
 import { toast } from "sonner";
@@ -50,6 +50,7 @@ const MyApprovals = () => {
   const sendBackFileInputRef = useRef<HTMLInputElement>(null);
   const [awardAmount, setAwardAmount] = useState("");
   const [activeTypeFilter, setActiveTypeFilter] = useState<string>("all");
+  const [sentBackFilter, setSentBackFilter] = useState<string>("all");
 
   // Lightbox state for attachment images inside the review dialog
   const [lightboxImages, setLightboxImages] = useState<AttachmentItem[]>([]);
@@ -195,23 +196,43 @@ const MyApprovals = () => {
     return sssApprovers.filter(a => a.role === nextApprovalLevel);
   }, [sssApprovers, nextApprovalLevel]);
 
-  // Filter suggestions this user needs to act on
   const myApprovals = useMemo(() => {
     if (!user?.employeeNo || user.bidpRole === "employee" || !currentLevel) return [];
     const validStatuses = getStatusesForLevel(currentLevel);
     return suggestions.filter(s => {
       // FLM: must be assigned to this FLM specifically
       if (currentLevel === "FLM") {
-        return s.assignedFlm === user.employeeNo && validStatuses.includes(s.status);
+        if (s.assignedFlm === user.employeeNo && validStatuses.includes(s.status)) return true;
+        // Also include sent-back suggestions targeted to FLM for this FLM
+        if (s.status === "Sent Back" && s.assignedFlm === user.employeeNo && s.sendBackHistory?.length) {
+          const lastSb = s.sendBackHistory[s.sendBackHistory.length - 1];
+          if (lastSb.to === "FLM") return true;
+        }
+        return false;
       }
       // Manager/BPS Admin/BPS DH: see all plant suggestions at their approval level
-      return validStatuses.includes(s.status);
+      if (validStatuses.includes(s.status)) return true;
+      // Also include sent-back suggestions targeted to this level
+      if (s.status === "Sent Back" && s.sendBackHistory?.length) {
+        const lastSb = s.sendBackHistory[s.sendBackHistory.length - 1];
+        if (lastSb.to === currentLevel) return true;
+      }
+      return false;
     });
   }, [suggestions, user, currentLevel]);
 
+  // Helper: check if a suggestion was sent back to the current approver's level
+  const isSentBackToMe = (s: Suggestion) => {
+    if (s.status !== "Sent Back" || !s.sendBackHistory?.length) return false;
+    return s.sendBackHistory[s.sendBackHistory.length - 1].to === currentLevel;
+  };
+
+  const sentBackCount = myApprovals.filter(s => isSentBackToMe(s)).length;
+
   const pendingApprovals = myApprovals.filter(s =>
     s.status !== "Rejected" && s.status !== "Approved & Closed" && s.status !== "Closed" &&
-    (activeTypeFilter === "all" || s.type === activeTypeFilter)
+    (activeTypeFilter === "all" || s.type === activeTypeFilter) &&
+    (sentBackFilter === "all" || isSentBackToMe(s))
   );
   const processedApprovals = useMemo(() => {
     if (!user?.employeeNo || !currentLevel) return [];
@@ -565,6 +586,17 @@ const MyApprovals = () => {
   const fd = selected?.formData || {};
   const tf = fd.typeFields || {};
 
+  // Build a combined lookup (empNo → {name, dept}) from all options + mockEmployees
+  const allEmpOptions = [...teamMemberOptions, ...flmOptions];
+  const optByEmpNo: Record<string, { name: string; dept: string }> = {};
+  for (const o of allEmpOptions) {
+    if (o.value && !optByEmpNo[o.value]) optByEmpNo[o.value] = { name: o.name, dept: o.dept };
+  }
+  for (const e of mockEmployees) {
+    if (!optByEmpNo[e.employeeNo]) optByEmpNo[e.employeeNo] = { name: e.name, dept: e.department };
+  }
+  const avatarColors = ["bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500","bg-rose-500","bg-cyan-500","bg-pink-500","bg-indigo-500"];
+
   // ── Section helpers for the review dialog ──────────────────────────────────
   const SectionHead = ({ icon: Icon, title }: { icon: React.ElementType; title: string }) => (
     <div className="flex items-center gap-2 pt-1 pb-0.5">
@@ -890,6 +922,15 @@ const MyApprovals = () => {
                     })}
                   </SelectContent>
                 </Select>
+                <Select value={sentBackFilter} onValueChange={setSentBackFilter}>
+                  <SelectTrigger className={`w-44 h-8 text-xs ${sentBackFilter !== "all" ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" : ""}`}>
+                    <SelectValue placeholder="Sent Back" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs">All Status</SelectItem>
+                    <SelectItem value="sent-back" className="text-xs font-semibold text-amber-700 dark:text-amber-400">Sent Back ({sentBackCount})</SelectItem>
+                  </SelectContent>
+                </Select>
                 <span className="text-xs text-muted-foreground whitespace-nowrap">{pendingApprovals.length} record{pendingApprovals.length !== 1 ? "s" : ""}</span>
               </div>
             )}
@@ -989,7 +1030,7 @@ const MyApprovals = () => {
 
       {/* ── Review Dialog ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-5xl w-[98vw] max-h-[96vh] flex flex-col gap-0 p-0 overflow-hidden rounded-xl">
+        <DialogContent className="max-w-5xl w-[98vw] max-h-[96vh] flex flex-col gap-0 p-0 overflow-hidden rounded-xl [&>button:last-child]:hidden">
 
           {/* ── Header ── */}
           <div className="shrink-0 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground px-6 py-3.5 flex items-center justify-between">
@@ -1005,6 +1046,14 @@ const MyApprovals = () => {
                 <p className="text-[11px] opacity-75 mt-0.5 truncate">{selected.suggestionNo} · {selected.type} · {selected.subject}</p>
               )}
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0 rounded-full bg-white/15 text-white hover:text-white hover:bg-white/30 border border-white/20 transition-all"
+              onClick={() => setDialogOpen(false)}
+            >
+              <X className="h-5 w-5" />
+            </Button>
           </div>
 
           {/* ── Scrollable body ── */}
@@ -1033,29 +1082,8 @@ const MyApprovals = () => {
                   );
                 })()}
 
-                {/* Alerts */}
-                {selected.sendBackHistory && selected.sendBackHistory.length > 0 && (
-                  <div className="rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
-                        Sent back {selected.sendBackHistory.length} time{selected.sendBackHistory.length > 1 ? "s" : ""}
-                      </p>
-                    </div>
-                    {selected.sendBackHistory.map((sb, idx) => (
-                      <div key={idx} className="text-[11px] border-l-2 border-amber-300 pl-3 space-y-0.5 ml-1">
-                        <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
-                          <Undo2 className="h-2.5 w-2.5" />
-                          <span className="font-medium">{sb.from} → {sb.to}</span>
-                          <span className="opacity-60">({sb.date})</span>
-                        </div>
-                        <p className="text-amber-700 dark:text-amber-300">
-                          <span className="font-medium">{sb.fromName}:</span> {sb.reason}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+
+
 
                 {selected.reopenRemark && (
                   <div className="rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/30 p-3 space-y-1">
@@ -1099,39 +1127,23 @@ const MyApprovals = () => {
                   <div>
                     <SectionHead icon={User} title="Employee" />
                     <div className="rounded-lg border bg-muted/10 px-3 py-2 mt-1.5">
+                      <Row label="Employee Name" value={selected.employeeName || "—"} />
                       <Row label="Employee No" value={selected.employeeNo} />
-                      <Row label="Name" value={selected.employeeName} />
-                      <Row label="Department" value={selected.department} />
+                      <Row label="Department" value={selected.department || optByEmpNo[selected.employeeNo || ""]?.dept || "—"} />
                       {fd.suggestionFor && <Row label="Suggestion For" value={fd.suggestionFor === "behalf" ? "On Behalf" : "Self"} />}
                       {fd.groupSuggestion && <Row label="Group Suggestion" value={fd.groupSuggestion === "yes" ? "Yes" : "No"} />}
                     </div>
 
-                    {/* On Behalf Employee Details */}
-                    {fd.suggestionFor === "behalf" && fd.mainSuggestor && (() => {
-                      const ms = String(fd.mainSuggestor);
-                      const opt = teamMemberOptions.find(o => o.value === ms) || flmOptions.find(o => o.value === ms);
-                      return (
-                        <div className="mt-2">
-                          <SectionHead icon={User} title="On Behalf Of" />
-                          <div className="rounded-lg border bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 px-3 py-2 mt-1.5">
-                            <Row label="Employee No" value={ms} />
-                            <Row label="Name" value={opt?.name || ms} />
-                            <Row label="Department" value={opt?.dept || "—"} />
-                          </div>
-                        </div>
-                      );
-                    })()}
-
                     {/* Moderator Details */}
                     {tf.moderator && (() => {
                       const modId = String(tf.moderator);
-                      const modOpt = teamMemberOptions.find(o => o.value === modId) || flmOptions.find(o => o.value === modId);
+                      const modOpt = optByEmpNo[modId];
                       return (
                         <div className="mt-2">
                           <SectionHead icon={ShieldCheck} title="Moderator" />
                           <div className="rounded-lg border bg-muted/10 px-3 py-2 mt-1.5">
-                            <Row label="Employee No" value={modId} />
                             <Row label="Name" value={modOpt?.name || modId} />
+                            <Row label="Employee No" value={modId} />
                             <Row label="Department" value={modOpt?.dept || "—"} />
                           </div>
                         </div>
@@ -1140,45 +1152,79 @@ const MyApprovals = () => {
                   </div>
                 </div>
 
-                {/* Team Members */}
+                {/* On Behalf — Main Suggestor table */}
+                {fd.suggestionFor === "behalf" && fd.mainSuggestor && (() => {
+                  const ms = String(fd.mainSuggestor);
+                  const msInfo = optByEmpNo[ms];
+                  const msName = msInfo?.name || ms;
+                  const msInitials = msName.split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                  return (
+                    <>
+                      <SectionHead icon={User} title="Main Suggestor (On Behalf)" />
+                      <div className="rounded-lg border overflow-hidden">
+                        <div className="grid grid-cols-[1fr_100px_120px] gap-2 px-3 py-1.5 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <span>Name</span>
+                          <span>Employee No</span>
+                          <span>Department</span>
+                        </div>
+                        <div className="grid grid-cols-[1fr_100px_120px] gap-2 px-3 py-2.5 items-center">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="h-7 w-7 rounded-full bg-indigo-500 flex items-center justify-center shrink-0 shadow-sm">
+                              <span className="text-white text-[10px] font-bold">{msInitials}</span>
+                            </div>
+                            <span className="text-xs font-medium truncate">{msName}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground font-mono">{ms}</span>
+                          <span className="text-xs text-muted-foreground">{msInfo?.dept || "—"}</span>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+
+                {/* Team Members — table format */}
                 {(fd.teamMembers as string[] | undefined)?.length ? (
                   <>
-                    <SectionHead icon={Users} title="Team Members" />
-                    <div className="rounded-lg border bg-muted/10 px-3 py-2">
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1">
-                        {(fd.teamMembers as string[]).map((m, i) => {
-                          const share = (fd.teamMemberShares as Record<string, string> | undefined)?.[m];
-                          // m may be an employee number OR a "Name – EmpNo" string
-                          const di = m.indexOf("\u2013");
-                          let mName: string;
-                          let mNo: string;
-                          if (di !== -1) {
-                            // stored as "Name – EmpNo"
-                            mName = m.slice(0, di).trim();
-                            mNo   = m.slice(di + 1).trim();
-                          } else {
-                            // stored as employee number only — look up name from constants
-                            const opt = teamMemberOptions.find(o => o.value === m);
-                            if (opt) {
-                              mName = opt.name;
-                            } else {
-                              mName = "";
-                            }
-                            mNo = m;
-                          }
-                          const dept = teamMemberOptions.find(o => o.value === mNo)?.dept || "";
-                          return (
-                            <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-border/40 last:border-0 gap-2">
-                              <span className="leading-tight min-w-0 truncate">
-                                <span className="font-medium">{mName || mNo}</span>
-                                {mName && mNo && <span className="font-mono text-muted-foreground"> ({mNo})</span>}
-                                {dept && <span className="text-muted-foreground/70"> · {dept}</span>}
-                              </span>
-                              {share && <span className="text-muted-foreground shrink-0">{share}%</span>}
-                            </div>
-                          );
-                        })}
+                    <SectionHead icon={Users} title="Team Members & Share Distribution" />
+                    <div className="rounded-lg border overflow-hidden">
+                      <div className="grid grid-cols-[1fr_100px_100px_60px] gap-2 px-3 py-2 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span>Name</span>
+                        <span>Employee No</span>
+                        <span>Department</span>
+                        <span className="text-right">Share</span>
                       </div>
+                      {(fd.teamMembers as string[]).map((m: string, i: number) => {
+                        const share = (fd.teamMemberShares as Record<string, string> | undefined)?.[m];
+                        const di = m.indexOf("\u2013");
+                        let mName: string;
+                        let mNo: string;
+                        if (di !== -1) {
+                          mName = m.slice(0, di).trim();
+                          mNo   = m.slice(di + 1).trim();
+                        } else {
+                          const found = optByEmpNo[m];
+                          mName = found?.name || "";
+                          mNo = m;
+                        }
+                        const dept = optByEmpNo[mNo]?.dept || "—";
+                        const initials = (mName || mNo).split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                        const color = avatarColors[i % avatarColors.length];
+                        return (
+                          <div key={i} className="grid grid-cols-[1fr_100px_100px_60px] gap-2 px-3 py-2.5 border-b last:border-0 items-center hover:bg-muted/20">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className={`h-7 w-7 rounded-full ${color} flex items-center justify-center shrink-0 shadow-sm`}>
+                                <span className="text-white text-[10px] font-bold">{initials}</span>
+                              </div>
+                              <span className="text-xs font-medium truncate">{mName || mNo}</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground font-mono">{mNo || "—"}</span>
+                            <span className="text-xs text-muted-foreground">{dept}</span>
+                            <span className={`text-xs font-bold text-right ${share ? "text-primary" : "text-muted-foreground"}`}>
+                              {share ? `${share}%` : "—"}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </>
                 ) : null}
@@ -1579,8 +1625,8 @@ const MyApprovals = () => {
                               <span key={f.id} className="inline-flex items-center gap-1 text-[10px] bg-muted border px-2 py-1 rounded-md max-w-[160px]">
                                 <Paperclip className="h-2.5 w-2.5 shrink-0" />
                                 <span className="truncate">{f.name}</span>
-                                <button type="button" onClick={() => setSssAttachFiles(prev => prev.filter((_, j) => j !== i))} className="ml-0.5 text-muted-foreground hover:text-destructive shrink-0">
-                                  <X className="h-2.5 w-2.5" />
+                                <button type="button" onClick={() => setSssAttachFiles(prev => prev.filter((_, j) => j !== i))} className="ml-1 p-0.5 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0">
+                                  <X className="h-3.5 w-3.5" />
                                 </button>
                               </span>
                             ))}
@@ -1882,8 +1928,8 @@ const MyApprovals = () => {
                               <span key={f.id} className="inline-flex items-center gap-1 text-[10px] bg-muted border px-2 py-1 rounded-md max-w-[160px]">
                                 <Paperclip className="h-2.5 w-2.5 shrink-0" />
                                 <span className="truncate">{f.name}</span>
-                                <button type="button" onClick={() => setSfcAttachFiles(prev => prev.filter((_, j) => j !== i))} className="ml-0.5 text-muted-foreground hover:text-destructive shrink-0">
-                                  <X className="h-2.5 w-2.5" />
+                                <button type="button" onClick={() => setSfcAttachFiles(prev => prev.filter((_, j) => j !== i))} className="ml-1 p-0.5 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0">
+                                  <X className="h-3.5 w-3.5" />
                                 </button>
                               </span>
                             ))}

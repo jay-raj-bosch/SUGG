@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { statusColors, Suggestion, suggestionTypes } from "@/lib/mockData";
+import { statusColors, Suggestion, suggestionTypes, mockEmployees } from "@/lib/mockData";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useCategories } from "@/contexts/CategoryContext";
 import { useDeptMappings } from "@/contexts/DeptMappingContext";
@@ -158,19 +158,23 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
   const teamMembers: string[] = fd.teamMembers || [];
   const teamMemberShares: Record<string, string> = fd.teamMemberShares || {};
 
-  // Build a combined lookup (empNo → {name, dept}) from all options
+  // Build a combined lookup (empNo → {name, dept}) from all options + mockEmployees
   const allOptions = [...teamMemberOptions, ...moderatorOptions, ...flmOptions];
   const optByEmpNo: Record<string, { name: string; dept: string }> = {};
   for (const o of allOptions) {
     if (o.value && !optByEmpNo[o.value]) optByEmpNo[o.value] = { name: o.name, dept: o.dept };
   }
+  // Also include mockEmployees for broader coverage
+  for (const e of mockEmployees) {
+    if (!optByEmpNo[e.employeeNo]) optByEmpNo[e.employeeNo] = { name: e.name, dept: e.department };
+  }
   const resolveEmpDisplay = (empNoOrStr: string): string => {
     if (!empNoOrStr) return "\u2014";
     const found = optByEmpNo[empNoOrStr];
-    if (found) return `${found.name} (${empNoOrStr}) \u00b7 ${found.dept}`;
+    if (found) return `${found.name} (${empNoOrStr}) · ${found.dept}`;
     // maybe it’s already a name
     const byName = allOptions.find(o => o.name === empNoOrStr);
-    if (byName) return `${byName.name} (${byName.value}) \u00b7 ${byName.dept}`;
+    if (byName) return `${byName.name} (${byName.value}) · ${byName.dept}`;
     return empNoOrStr;
   };
 
@@ -184,7 +188,7 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
           <Row label="Subject" value={tf.subject || suggestion.subject} />
           <Row label="Category" value={tf.category || suggestion.category} />
           <Row label="Date of Implementation" value={fmtDate(tf.dateOfImplementation)} />
-          <Row label="FLM" value={tf.flm} />
+          <Row label="FLM" value={tf.flm ? resolveEmpDisplay(tf.flm) : undefined} />
           <div className="py-2 space-y-3 border-b border-border/40">
             <Block label="Details of Present Method" value={tf.presentMethod || suggestion.presentMethod} />
             <Block label="Details of Proposed Method" value={tf.proposedMethod || suggestion.proposedMethod} />
@@ -224,7 +228,7 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
           <Row label="Subject" value={tf.subject || suggestion.subject} />
           <Row label="Category" value={tf.category || suggestion.category} />
           <Row label="Date of Implementation" value={fmtDate(tf.dateOfImplementation)} />
-          <Row label="FLM" value={tf.flm} />
+          <Row label="FLM" value={tf.flm ? resolveEmpDisplay(tf.flm) : undefined} />
           <div className="py-2 space-y-3 border-b border-border/40">
             <Block label="Description – Idea / Problem" value={tf.descriptionProblem || suggestion.presentMethod} />
             <Block label="Description – Improvement Done" value={tf.descriptionImprovement || suggestion.proposedMethod} />
@@ -294,7 +298,7 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
           <Row label="Category" value={tf.category || suggestion.category} />
           <Row label="Suggestor Name" value={tf.suggestorName} />
           <Row label="Share %" value={tf.sharePercent ? `${tf.sharePercent}%` : undefined} />
-          <Row label="FLM" value={tf.flm} />
+          <Row label="FLM" value={tf.flm ? resolveEmpDisplay(tf.flm) : undefined} />
           <div className="py-2 space-y-3 border-b border-border/40">
             <Block label="Present / Before Method" value={tf.presentMethod || suggestion.presentMethod} />
             <Block label="Proposed / After Method" value={tf.proposedMethod || suggestion.proposedMethod} />
@@ -357,7 +361,7 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3 flex-wrap">
             {isEdit ? "Edit Suggestion" : "Suggestion Details"}
@@ -424,17 +428,43 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
             {/* ② Employee / Submission Info */}
             <SectionHead icon={User} title="Employee & Submission" />
             <div className="rounded-lg border bg-muted/10 px-3 py-2 space-y-0">
+              <Row label="Employee Name" value={suggestion.employeeName || "—"} />
               <Row label="Employee No" value={suggestion.employeeNo} />
-              <Row label="Employee Name" value={withEmpNo(suggestion.employeeName, suggestion.employeeNo)} />
-              <Row label="Department" value={suggestion.department || optByEmpNo[suggestion.employeeNo || ""]?.dept} />
+              <Row label="Department" value={suggestion.department || optByEmpNo[suggestion.employeeNo || ""]?.dept || "—"} />
               <Row label="Suggestion For"
                 value={fd.suggestionFor === "behalf" ? "On Behalf" : fd.suggestionFor === "self" ? "Self" : suggestion.suggestionFor as string | undefined} />
-              {fd.suggestionFor === "behalf" && fd.mainSuggestor && (
-                <Row label="Main Suggestor" value={resolveEmpDisplay(fd.mainSuggestor)} />
-              )}
               <Row label="Group Suggestion"
                 value={fd.groupSuggestion === "yes" ? "Yes" : fd.groupSuggestion === "no" ? "No" : undefined} />
             </div>
+
+            {/* On Behalf — Main Suggestor table */}
+            {fd.suggestionFor === "behalf" && fd.mainSuggestor && (() => {
+                const ms = optByEmpNo[fd.mainSuggestor];
+                const msName = ms?.name || fd.mainSuggestor;
+                const msInitials = msName.split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                return (
+                  <>
+                    <SectionHead icon={User} title="Main Suggestor (On Behalf)" />
+                    <div className="rounded-lg border overflow-hidden">
+                      <div className="grid grid-cols-[1fr_100px_120px] gap-2 px-3 py-1.5 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span>Name</span>
+                        <span>Employee No</span>
+                        <span>Department</span>
+                      </div>
+                      <div className="grid grid-cols-[1fr_100px_120px] gap-2 px-3 py-2.5 items-center">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="h-7 w-7 rounded-full bg-indigo-500 flex items-center justify-center shrink-0 shadow-sm">
+                            <span className="text-white text-[10px] font-bold">{msInitials}</span>
+                          </div>
+                          <span className="text-xs font-medium truncate">{msName}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground font-mono">{fd.mainSuggestor}</span>
+                        <span className="text-xs text-muted-foreground">{ms?.dept || "—"}</span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
             {/* ③ Team Members + Share Distribution */}
             {teamMembers.length > 0 && (
@@ -442,9 +472,10 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
                 <SectionHead icon={Users} title="Team Members & Share Distribution" />
                 <div className="rounded-lg border overflow-hidden">
                   {/* Header row */}
-                  <div className="grid grid-cols-[1fr_80px_60px] gap-2 px-3 py-2 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    <span>Member</span>
-                    <span className="text-right">Employee ID</span>
+                  <div className="grid grid-cols-[1fr_100px_100px_60px] gap-2 px-3 py-2 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <span>Name</span>
+                    <span>Employee No</span>
+                    <span>Department</span>
                     <span className="text-right">Share</span>
                   </div>
                   {teamMembers.map((id, idx) => {
@@ -456,31 +487,24 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
                       empNoPart = id.split("\u2013")[1]?.trim() || "";
                     } else {
                       // stored as plain emp no — look up name
-                      const opt = teamMemberOptions.find(o => o.value === id);
-                      if (opt) {
-                        namePart = opt.name;
-                      } else {
-                        namePart = "";
-                      }
+                      const found = optByEmpNo[id];
+                      namePart = found?.name || "";
                       empNoPart = id;
                     }
                     const initials = (namePart || empNoPart).split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
                     const color = avatarColors[idx % avatarColors.length];
                     const share = teamMemberShares[id];
-                    const dept = optByEmpNo[empNoPart]?.dept || (namePart ? allOptions.find(o => o.name === namePart)?.dept : undefined) || "";
+                    const dept = optByEmpNo[empNoPart]?.dept || "—";
                     return (
-                      <div key={id} className="grid grid-cols-[1fr_80px_60px] gap-2 px-3 py-2.5 border-b last:border-0 items-center hover:bg-muted/20">
+                      <div key={id} className="grid grid-cols-[1fr_100px_100px_60px] gap-2 px-3 py-2.5 border-b last:border-0 items-center hover:bg-muted/20">
                         <div className="flex items-center gap-2 min-w-0">
                           <div className={`h-7 w-7 rounded-full ${color} flex items-center justify-center shrink-0 shadow-sm`}>
                             <span className="text-white text-[10px] font-bold">{initials}</span>
                           </div>
-                          <span className="text-xs leading-tight min-w-0 truncate">
-                            <span className="font-medium">{namePart || empNoPart}</span>
-                            {namePart && empNoPart && <span className="font-mono text-muted-foreground"> ({empNoPart})</span>}
-                            {dept && <span className="text-muted-foreground/70"> · {dept}</span>}
-                          </span>
+                          <span className="text-xs font-medium truncate">{namePart || empNoPart}</span>
                         </div>
-                        <span className="text-xs text-muted-foreground text-right font-mono">{empNoPart || "\u2014"}</span>
+                        <span className="text-xs text-muted-foreground font-mono">{empNoPart || "—"}</span>
+                        <span className="text-xs text-muted-foreground">{dept}</span>
                         <span className={`text-xs font-bold text-right ${share ? "text-primary" : "text-muted-foreground"}`}>
                           {share ? `${share}%` : "—"}
                         </span>

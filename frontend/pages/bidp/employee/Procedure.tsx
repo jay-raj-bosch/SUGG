@@ -9,7 +9,7 @@ const Procedure = () => {
   );
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="flex flex-col h-full w-full max-w-5xl space-y-4">
       <h2 className="text-xl font-bold text-foreground">
         Suggestion Scheme Procedure
         <span className="text-sm font-normal text-muted-foreground ml-2">/ {t("Suggestion Scheme Procedure")}</span>

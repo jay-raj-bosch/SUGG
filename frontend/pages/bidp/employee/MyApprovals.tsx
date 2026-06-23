@@ -834,7 +834,7 @@ const MyApprovals = () => {
   };
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="w-full space-y-4">
       <h2 className="text-xl font-bold text-foreground">
         My Approvals
         <span className="text-sm font-normal text-muted-foreground"> / {t("My Approvals")}</span>
@@ -989,7 +989,7 @@ const MyApprovals = () => {
 
       {/* ── Review Dialog ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-4xl w-[94vw] max-h-[92vh] flex flex-col gap-0 p-0 overflow-hidden rounded-xl">
+        <DialogContent className="max-w-5xl w-[98vw] max-h-[96vh] flex flex-col gap-0 p-0 overflow-hidden rounded-xl">
 
           {/* ── Header ── */}
           <div className="shrink-0 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground px-6 py-3.5 flex items-center justify-between">
@@ -1010,7 +1010,7 @@ const MyApprovals = () => {
           {/* ── Scrollable body ── */}
           {selected && (
             <ScrollArea className="flex-1 overflow-y-auto">
-              <div className="px-6 py-5 space-y-5">
+              <div className="px-8 py-6 space-y-5">
 
                 {/* Pipeline — use the right amount per type so the path preview is accurate */}
                 {(() => {
@@ -1105,6 +1105,38 @@ const MyApprovals = () => {
                       {fd.suggestionFor && <Row label="Suggestion For" value={fd.suggestionFor === "behalf" ? "On Behalf" : "Self"} />}
                       {fd.groupSuggestion && <Row label="Group Suggestion" value={fd.groupSuggestion === "yes" ? "Yes" : "No"} />}
                     </div>
+
+                    {/* On Behalf Employee Details */}
+                    {fd.suggestionFor === "behalf" && fd.mainSuggestor && (() => {
+                      const ms = String(fd.mainSuggestor);
+                      const opt = teamMemberOptions.find(o => o.value === ms) || flmOptions.find(o => o.value === ms);
+                      return (
+                        <div className="mt-2">
+                          <SectionHead icon={User} title="On Behalf Of" />
+                          <div className="rounded-lg border bg-amber-50/50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800 px-3 py-2 mt-1.5">
+                            <Row label="Employee No" value={ms} />
+                            <Row label="Name" value={opt?.name || ms} />
+                            <Row label="Department" value={opt?.dept || "—"} />
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Moderator Details */}
+                    {tf.moderator && (() => {
+                      const modId = String(tf.moderator);
+                      const modOpt = teamMemberOptions.find(o => o.value === modId) || flmOptions.find(o => o.value === modId);
+                      return (
+                        <div className="mt-2">
+                          <SectionHead icon={ShieldCheck} title="Moderator" />
+                          <div className="rounded-lg border bg-muted/10 px-3 py-2 mt-1.5">
+                            <Row label="Employee No" value={modId} />
+                            <Row label="Name" value={modOpt?.name || modId} />
+                            <Row label="Department" value={modOpt?.dept || "—"} />
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 

@@ -226,8 +226,32 @@ const suggestions: Suggestion[] = [
 ];
 nextSuggestionId = suggestions.reduce((max, s) => Math.max(max, s.id), 0) + 1;
 
+// ── Default categories seeded for both plants ────────────────────────────────
+const DEFAULT_CATEGORIES = [
+  "Safety",
+  "Quality",
+  "Productivity",
+  "Cost Reduction",
+  "Environment",
+  "5S / Housekeeping",
+  "Ergonomics",
+  "Energy Saving",
+];
+
 const categories: Category[] = [];
-nextCategoryId = 10;
+let _catSeedId = 1;
+for (const plantCode of ["PLT-01", "PLT-02"]) {
+  for (const name of DEFAULT_CATEGORIES) {
+    categories.push({
+      id: _catSeedId++,
+      plant_code: plantCode,
+      name,
+      description: "",
+      is_active: true,
+    });
+  }
+}
+nextCategoryId = _catSeedId;
 
 const deptMappings: DeptMapping[] = [];
 nextDeptMappingId = 9;

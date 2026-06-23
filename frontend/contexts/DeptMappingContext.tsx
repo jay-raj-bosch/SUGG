@@ -39,6 +39,8 @@ interface DeptMappingContextType {
   entries: DeptMappingEntry[];
   /** dept → mapped lookup for quick resolution */
   deptMap: Record<string, string>;
+  /** Unique sorted list of all mapped department names (replaces hardcoded ranges) */
+  uniqueRanges: string[];
   /** Resolve a raw department name to its mapped short form */
   mapDept: (rawDept: string | undefined) => string;
   /** Full refresh from API */
@@ -87,6 +89,12 @@ export const DeptMappingProvider = ({ children }: { children: ReactNode }) => {
     return m;
   }, [entries]);
 
+  /** Unique sorted list of all mapped names — used as dynamic range options */
+  const uniqueRanges = useMemo(() => {
+    const unique = new Set(entries.map(e => e.mapped));
+    return Array.from(unique).sort();
+  }, [entries]);
+
   const mapDept = useCallback(
     (rawDept: string | undefined): string => {
       if (!rawDept) return "—";
@@ -109,8 +117,8 @@ export const DeptMappingProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const value = useMemo<DeptMappingContextType>(
-    () => ({ entries, deptMap, mapDept, refresh, addEntry, updateEntry, removeEntry }),
-    [entries, deptMap, mapDept, refresh, addEntry, updateEntry, removeEntry],
+    () => ({ entries, deptMap, uniqueRanges, mapDept, refresh, addEntry, updateEntry, removeEntry }),
+    [entries, deptMap, uniqueRanges, mapDept, refresh, addEntry, updateEntry, removeEntry],
   );
 
   return <DeptMappingContext.Provider value={value}>{children}</DeptMappingContext.Provider>;

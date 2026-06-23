@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Search } from "lucide-react";
@@ -15,9 +15,18 @@ interface SuggestionComboboxProps {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  /** Max items to render in the dropdown at once (default 50) */
+  maxVisible?: number;
 }
 
-const SuggestionCombobox = ({ options, value, onChange, placeholder = "Type or select...", className }: SuggestionComboboxProps) => {
+const SuggestionCombobox = ({
+  options,
+  value,
+  onChange,
+  placeholder = "Type or select...",
+  className,
+  maxVisible = 50,
+}: SuggestionComboboxProps) => {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -33,11 +42,21 @@ const SuggestionCombobox = ({ options, value, onChange, placeholder = "Type or s
     }
   }, [value, options]);
 
-  const filtered = options.filter(o =>
-    o.label.toLowerCase().includes(query.toLowerCase()) ||
-    o.value.toLowerCase().includes(query.toLowerCase()) ||
-    (o.sublabel && o.sublabel.toLowerCase().includes(query.toLowerCase()))
-  );
+  // Memoized filtering — avoids re-filtering on every render
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    if (!q) return options;
+    return options.filter(o =>
+      o.label.toLowerCase().includes(q) ||
+      o.value.toLowerCase().includes(q) ||
+      (o.sublabel && o.sublabel.toLowerCase().includes(q))
+    );
+  }, [options, query]);
+
+  // Cap visible results for DOM performance
+  const totalMatches = filtered.length;
+  const visibleItems = filtered.slice(0, maxVisible);
+  const hasMore = totalMatches > maxVisible;
 
   // Close on outside click
   useEffect(() => {
@@ -78,9 +97,16 @@ const SuggestionCombobox = ({ options, value, onChange, placeholder = "Type or s
           className="pl-8 pr-3"
         />
       </div>
-      {open && filtered.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
-          {filtered.map(opt => (
+      {open && visibleItems.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full max-h-64 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
+          {/* Match count header when there are many results */}
+          {totalMatches > 10 && (
+            <div className="sticky top-0 z-10 bg-muted/90 backdrop-blur-sm border-b px-3 py-1.5 text-[10px] text-muted-foreground font-medium flex justify-between">
+              <span>{totalMatches} match{totalMatches !== 1 ? "es" : ""}</span>
+              {hasMore && <span>Showing first {maxVisible} — type to narrow</span>}
+            </div>
+          )}
+          {visibleItems.map(opt => (
             <button
               key={opt.value}
               type="button"
@@ -94,6 +120,11 @@ const SuggestionCombobox = ({ options, value, onChange, placeholder = "Type or s
               {opt.sublabel && <span className="block text-[10px] text-muted-foreground">{opt.sublabel}</span>}
             </button>
           ))}
+          {hasMore && (
+            <div className="sticky bottom-0 bg-muted/90 backdrop-blur-sm border-t px-3 py-1.5 text-[10px] text-muted-foreground text-center">
+              {totalMatches - maxVisible} more — type to filter
+            </div>
+          )}
         </div>
       )}
       {open && query && filtered.length === 0 && (

@@ -1,5 +1,5 @@
 // ReopenSuggestion — fetches rejected suggestions from backend API
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -9,21 +9,21 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { statusColors } from "@/lib/mockData";
+import { statusColors, suggestionTypes } from "@/lib/mockData";
 import type { Suggestion } from "@/lib/mockData";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePlant } from "@/contexts/PlantContext";
+import * as apiService from "@/lib/apiService";
 import { toast } from "sonner";
-import { RotateCcw, AlertCircle, CheckCircle2, Search } from "lucide-react";
+import { RotateCcw, AlertCircle, CheckCircle2, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
 import { useNotifications } from "@/contexts/NotificationContext";
-import { flmOptions, moderatorOptions } from "@/lib/bidp/suggestionConstants";
 
-// Types that can be reopened (Daily CIP cannot be reopened)
-const REOPENABLE_TYPES = ["Simple Suggestion Scheme", "My Idea Card", "Cash The Flash", "Shop Floor CIP"];
-// Types that need FLM assignment
-const FLM_TYPES = ["Simple Suggestion Scheme", "My Idea Card", "Cash The Flash"];
+// Types that can be reopened — dynamically from suggestionTypes (Daily CIP excluded)
+const REOPENABLE_TYPES = suggestionTypes.filter(t => t !== "Daily CIP");
+// Types that need FLM assignment (all except Shop Floor CIP and Daily CIP)
+const FLM_TYPES = suggestionTypes.filter(t => t !== "Daily CIP" && t !== "Shop Floor CIP");
 // Types that need Moderator assignment
 const MODERATOR_TYPES = ["Shop Floor CIP"];
 
@@ -51,10 +51,16 @@ const ReopenSuggestion = () => {
   const [selectedModerator, setSelectedModerator] = useState("");
   const [remark, setRemark] = useState("");
   const [reopened, setReopened] = useState(false);
-  const [reopenLog, setReopenLog] = useState<ReopenRecord[]>([
-    { id: "1", suggestionNo: "SSS-2026-005", subject: "Noise Reduction in Unit 3", employeeName: "Anil Kumar", type: "Simple Suggestion Scheme", assignedTo: "Suresh M – FLM", remark: "Reconsidered after new evidence", date: "2026-02-20", auditId: "ROP-001122" },
-  ]);
+  const [reopenLog, setReopenLog] = useState<ReopenRecord[]>([]);
   const [searchLog, setSearchLog] = useState("");
+  const [authorities, setAuthorities] = useState<apiService.AuthorityAssignment[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+
+  // Load authority assignments from backend for FLM/Moderator dropdowns
+  useEffect(() => {
+    apiService.fetchAuthority().then(setAuthorities).catch(() => {});
+  }, []);
 
   // Only show rejected suggestions of reopenable types (excludes Daily CIP)
   const rejectedSuggestions = suggestions.filter(
@@ -81,9 +87,15 @@ const ReopenSuggestion = () => {
 
     const auditId = `ROP-${Date.now().toString().slice(-6)}`;
     const assignedTo = needsFLM
-      ? (flmOptions.find(f => f.value === selectedFlm)?.label || selectedFlm)
+      ? (() => {
+          const auth = authorities.find(a => a.employee_no === selectedFlm);
+          return auth ? `${auth.name} – FLM` : selectedFlm;
+        })()
       : needsModerator
-        ? (moderatorOptions.find(m => m.value === selectedModerator)?.label || selectedModerator)
+        ? (() => {
+            const auth = authorities.find(a => a.employee_no === selectedModerator);
+            return auth ? `${auth.name} – Moderator` : selectedModerator;
+          })()
         : "";
 
     // Update suggestion via context (updates local state + backend)
@@ -189,7 +201,9 @@ const ReopenSuggestion = () => {
                       <SelectValue placeholder="Select FLM to assign" />
                     </SelectTrigger>
                     <SelectContent>
-                      {flmOptions.map(f => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
+                      {authorities
+                        .filter(a => a.role === "FLM" || a.role === "Evaluator")
+                        .map(a => <SelectItem key={a.employee_no} value={a.employee_no}>{a.name} ({a.employee_no}) · {a.department}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -204,7 +218,9 @@ const ReopenSuggestion = () => {
                       <SelectValue placeholder="Select Moderator to assign" />
                     </SelectTrigger>
                     <SelectContent>
-                      {moderatorOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                      {authorities
+                        .filter(a => a.role === "Moderator")
+                        .map(a => <SelectItem key={a.employee_no} value={a.employee_no}>{a.name} ({a.employee_no}) · {a.department}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -245,48 +261,73 @@ const ReopenSuggestion = () => {
 
       {/* Reopen History */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-foreground">Reopen History</h3>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="text-sm font-semibold text-foreground">Reopen History <span className="text-xs font-normal text-muted-foreground">({filteredLog.length} record{filteredLog.length !== 1 ? "s" : ""})</span></h3>
           <div className="relative w-56">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-            <Input className="pl-8 h-8 text-xs" placeholder="Search..." value={searchLog} onChange={e => setSearchLog(e.target.value)} />
+            <Input className="pl-8 h-8 text-xs" placeholder="Search..." value={searchLog} onChange={e => { setSearchLog(e.target.value); setCurrentPage(1); }} />
           </div>
         </div>
         <Card className="card-shadow">
           <CardContent className="pt-3">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left">
-                  <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">Suggestion</th>
-                  <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">Type</th>
-                  <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">Employee</th>
-                  <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">Assigned To</th>
-                  <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">Remark</th>
-                  <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">Date</th>
-                  <th className="pb-2 px-2 text-xs font-medium text-muted-foreground">Audit ID</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLog.length === 0 ? (
-                  <tr><td colSpan={7} className="py-6 text-center text-muted-foreground text-xs">No records</td></tr>
-                ) : (
-                  filteredLog.map(r => (
-                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="py-2 px-2">
-                        <p className="font-mono text-xs">{r.suggestionNo}</p>
-                        <p className="text-[10px] text-muted-foreground">{r.subject.slice(0, 30)}</p>
-                      </td>
-                      <td className="py-2 px-2 text-xs text-muted-foreground">{r.type}</td>
-                      <td className="py-2 px-2 text-xs">{r.employeeName}</td>
-                      <td className="py-2 px-2 text-xs">{r.assignedTo}</td>
-                      <td className="py-2 px-2 text-xs text-muted-foreground max-w-[140px] truncate">{r.remark}</td>
-                      <td className="py-2 px-2 text-xs">{r.date}</td>
-                      <td className="py-2 px-2 font-mono text-[10px] text-muted-foreground">{r.auditId}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <div className="overflow-auto max-h-[420px] rounded-md border">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 z-20">
+                  <tr className="border-b text-left bg-muted/90">
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Suggestion</th>
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Type</th>
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Employee</th>
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Assigned To</th>
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Remark</th>
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Date</th>
+                    <th className="pb-2 pt-2 px-2 text-xs font-medium text-muted-foreground whitespace-nowrap">Audit ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLog.length === 0 ? (
+                    <tr><td colSpan={7} className="py-6 text-center text-muted-foreground text-xs">No records</td></tr>
+                  ) : (
+                    filteredLog.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage).map(r => (
+                      <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                        <td className="py-2 px-2">
+                          <p className="font-mono text-xs">{r.suggestionNo}</p>
+                          <p className="text-[10px] text-muted-foreground">{r.subject.slice(0, 30)}</p>
+                        </td>
+                        <td className="py-2 px-2 text-xs text-muted-foreground">{r.type}</td>
+                        <td className="py-2 px-2 text-xs">{r.employeeName}</td>
+                        <td className="py-2 px-2 text-xs">{r.assignedTo}</td>
+                        <td className="py-2 px-2 text-xs text-muted-foreground max-w-[140px] truncate">{r.remark}</td>
+                        <td className="py-2 px-2 text-xs whitespace-nowrap">{r.date}</td>
+                        <td className="py-2 px-2 font-mono text-[10px] text-muted-foreground">{r.auditId}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* Pagination controls */}
+            {filteredLog.length > 0 && (
+              <div className="flex items-center justify-between pt-3 border-t mt-2 gap-2 flex-wrap">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>Rows per page:</span>
+                  <Select value={String(rowsPerPage)} onValueChange={v => { setRowsPerPage(Number(v)); setCurrentPage(1); }}>
+                    <SelectTrigger className="h-7 w-16 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[10, 20, 50].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-muted-foreground">Page {currentPage} of {Math.max(1, Math.ceil(filteredLog.length / rowsPerPage))}</span>
+                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredLog.length / rowsPerPage), p + 1))} disabled={currentPage >= Math.ceil(filteredLog.length / rowsPerPage)}>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

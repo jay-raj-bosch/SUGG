@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { suggestionTypes, ranges, categories } from "@/lib/mockData";
+import { suggestionTypes } from "@/lib/mockData";
 import { schemaMap } from "@/lib/bidp/suggestionSchemas";
 import { flmOptions, moderatorOptions, kaizenThemes, workshopOptions } from "@/lib/bidp/suggestionConstants";
 import { useVoiceEngine, VOICE_LANGUAGES } from "@/hooks/useVoiceEngine";
@@ -16,6 +16,7 @@ import VoiceHighlight from "@/components/VoiceHighlight";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useDeptMappings } from "@/contexts/DeptMappingContext";
 import { toast } from "sonner";
 import { Save, Send, FileText, RotateCcw, Upload, X, Info, Paperclip, Mic, MicOff, CheckCircle2, Languages, Globe, ChevronDown } from "lucide-react";
 import { useNotifications } from "@/contexts/NotificationContext";
@@ -386,12 +387,13 @@ const NewSuggestion = () => {
 
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
 
-  // Derive range automatically from logged-in user's department (e.g. "BIDP1/TEF" → "TEF")
+  // Derive range automatically from logged-in user's department via DeptMapping
+  const { mapDept } = useDeptMappings();
   const derivedRange = useMemo(() => {
     const dept = user?.department || "";
-    const parts = dept.split("/");
-    return parts.length > 1 ? parts[parts.length - 1].trim() : dept.trim();
-  }, [user?.department]);
+    const mapped = mapDept(dept);
+    return mapped === "—" ? dept.trim() : mapped;
+  }, [user?.department, mapDept]);
 
   // Clean up pending submission store on mount/unmount
   useEffect(() => {

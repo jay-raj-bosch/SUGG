@@ -1,9 +1,8 @@
-﻿import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { categories } from "@/lib/mockData";
 import { moderatorOptions, kaizenThemes } from "@/lib/bidp/suggestionConstants";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCategories } from "@/contexts/CategoryContext";

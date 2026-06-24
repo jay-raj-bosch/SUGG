@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { mockEmployees } from "@/lib/mockData";
 import { teamMemberOptions } from "@/lib/bidp/suggestionConstants";
-import { X, Search, Plus, Percent } from "lucide-react";
+import { X, Search, Plus } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 interface GlobalFieldsProps {
@@ -338,60 +338,8 @@ const GlobalFields = ({
           )}
           {errors.teamMembers && <p className="text-xs text-destructive">{errors.teamMembers}</p>}
 
-          {/* Share Distribution — auto equal split */}
-          {selectedMembers.length > 0 && setTeamMemberShares && (
-            <div className="rounded-xl border bg-gradient-to-br from-secondary/5 via-background to-muted/20 p-4 space-y-3 shadow-sm">
-              {/* Header */}
-              <div className="flex items-center gap-2">
-                <div className="h-7 w-7 rounded-full bg-secondary/15 flex items-center justify-center">
-                  <Percent className="h-3.5 w-3.5 text-secondary" />
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold leading-none">
-                    Share Distribution
-                  </Label>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Equal split across all {selectedMembers.length} member{selectedMembers.length > 1 ? "s" : ""}</p>
-                </div>
-                <span className="ml-auto text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-                  ✓ 100% allocated
-                </span>
-              </div>
 
-              {/* Member rows */}
-              <div className="space-y-2">
-                {selectedMembers.map((id, idx) => {
-                  const member = allMemberOptions.find(m => m.value === id);
-                  const namePart = (member?.label || id).split("–")[0].trim();
-                  const idPart = (member?.label || "").split("–")[1]?.trim() || id;
-                  const initials = namePart.split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                  const avatarColors = ["bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500","bg-rose-500","bg-cyan-500","bg-pink-500","bg-indigo-500"];
-                  const color = avatarColors[idx % avatarColors.length];
-                  const share = Math.floor(100 / selectedMembers.length);
-                  const shareVal = idx === 0 ? share + (100 - share * selectedMembers.length) : share;
-                  return (
-                    <div key={id} className="flex items-center gap-3 bg-background/80 rounded-lg px-3 py-2.5 border border-border/40">
-                      <div className={`h-8 w-8 rounded-full ${color} flex items-center justify-center shrink-0 shadow-sm`}>
-                        <span className="text-white text-[11px] font-bold">{initials}</span>
-                      </div>
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <p className="text-xs font-medium truncate leading-none">{namePart}</p>
-                        <p className="text-[10px] text-muted-foreground leading-none">{idPart}</p>
-                        <div className="h-1 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${color} opacity-60`}
-                            style={{ width: `${shareVal}%` }}
-                          />
-                        </div>
-                      </div>
-                      <div className="shrink-0 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/50 dark:border-emerald-800/30">
-                        <span className="text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{shareVal}%</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {/* Share distribution is calculated automatically after FLM evaluation */}
         </div>
       )}
 

@@ -332,6 +332,8 @@ function toFrontendSuggestion(s: Suggestion): Record<string, any> {
     date: s.date,
     pendingWith: s.pending_with,
     daysPending: s.days_pending,
+    plantCode: s.plant_code,
+    suggestionFor: s.suggestion_for,
     employeeNo: s.employee_no,
     employeeName: s.employee_name,
     department: s.department,

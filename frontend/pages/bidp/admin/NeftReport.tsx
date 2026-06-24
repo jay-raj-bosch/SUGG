@@ -8,11 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
-import { suggestionTypes } from "@/lib/mockData";
+import { suggestionTypes, mockEmployees } from "@/lib/mockData";
 import type { Suggestion } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
 import { downloadXLSX, downloadTablePDF } from "@/lib/pdfUtils";
 import { useDeptMappings } from "@/contexts/DeptMappingContext";
+import { teamMemberOptions, flmOptions, moderatorOptions } from "@/lib/bidp/suggestionConstants";
 
 const reportTypes = ["NEFT Report", "Manpower Report", "Employee Involvement", "Non-Participant Report"];
 
@@ -91,11 +92,10 @@ const NeftReport = () => {
 
   // ── NEFT aggregated rows: distribute awards per employee ──────────────────
   // Rules:
-  //   1. Self + no group → full award to the employee
-  //   2. Self + group → distribute among team members based on share %
+  //   1. Self + no group → full award to the registering employee
+  //   2. Self + group → equal split among registering employee + team members
   //   3. On-behalf + no group → full award to mainSuggestor (NOT registering employee)
-  //   4. On-behalf + group → distribute among team members (registering employee excluded)
-  //   5. Share % is auto-equal-split stored in formData.teamMemberShares
+  //   4. On-behalf + group → equal split among mainSuggestor + team members (registering employee excluded)
   interface NeftRow {
     empNo: string;
     empName: string;
@@ -110,14 +110,23 @@ const NeftReport = () => {
     if (!isNeft) return [];
     const empMap = new Map<string, NeftRow>();
 
-    const ensureRow = (empNo: string, empName: string, dept: string): NeftRow => {
+    const resolveEmpName = (empNo: string, fallbackName?: string, fallbackDept?: string) => {
+      const emp = empLookup.get(empNo);
+      if (emp?.name && emp.name !== empNo) return { name: emp.name, dept: emp.department || "—" };
+      const fromMock = mockEmployees.find(e => e.employeeNo === empNo);
+      if (fromMock) return { name: fromMock.name, dept: fromMock.department || "—" };
+      const fromConst = [...teamMemberOptions, ...flmOptions, ...moderatorOptions].find(o => o.value === empNo);
+      if (fromConst) return { name: fromConst.name, dept: fromConst.dept || "—" };
+      return { name: fallbackName || empNo, dept: fallbackDept || "—" };
+    };
+
+    const ensureRow = (empNo: string, fallbackName?: string, fallbackDept?: string): NeftRow => {
       if (!empMap.has(empNo)) {
-        // Try to find employee details from allEmployees lookup
-        const emp = empLookup.get(empNo);
+        const resolved = resolveEmpName(empNo, fallbackName, fallbackDept);
         empMap.set(empNo, {
           empNo,
-          empName: emp?.name || empName || empNo,
-          department: emp?.department || dept || "—",
+          empName: resolved.name,
+          department: resolved.dept,
           latestDate: "",
           totalAmount: 0,
           suggestionCount: 0,
@@ -135,46 +144,47 @@ const NeftReport = () => {
       const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;
       const isGroup = fd.groupSuggestion === "yes";
       const teamMembers: string[] = fd.teamMembers || [];
-      const teamMemberShares: Record<string, string> = fd.teamMemberShares || {};
       const suggNo = s.suggestionNo || s.id;
       const sType = s.type || "—";
 
-      if (isGroup && teamMembers.length > 0) {
-        // ── Group suggestion: distribute among team members ──
-        // Compute shares — if teamMemberShares exist use them, else equal split
-        const hasShares = Object.keys(teamMemberShares).length > 0;
-        const memberCount = teamMembers.length;
+      // Determine the primary person (who gets the award / is included in the split)
+      // On-behalf: mainSuggestor is the primary person, registering employee is excluded
+      // Self: registering employee is the primary person
+      const primaryEmpNo = isOnBehalf ? fd.mainSuggestor : (s.employeeNo || "");
+      const primaryName = isOnBehalf ? undefined : (s.employeeName || undefined);
+      const primaryDept = isOnBehalf ? undefined : (s.department || undefined);
 
-        teamMembers.forEach((memberId, idx) => {
-          let sharePercent: number;
-          if (hasShares && teamMemberShares[memberId]) {
-            sharePercent = Number(teamMemberShares[memberId]) || 0;
-          } else {
-            // Equal split fallback
-            const base = Math.floor(100 / memberCount);
-            sharePercent = idx === 0 ? base + (100 - base * memberCount) : base;
-          }
+      if (isGroup && teamMembers.length > 0) {
+        // ── Group suggestion: equal split among primary person + team members ──
+        // Build unique recipients list: primary + team members (deduplicated)
+        const recipientSet = new Set<string>();
+        if (primaryEmpNo) recipientSet.add(primaryEmpNo);
+        for (const m of teamMembers) {
+          if (m) recipientSet.add(m);
+        }
+        const recipients = Array.from(recipientSet);
+        const count = recipients.length;
+        if (count === 0) return;
+
+        // Always do equal split among all recipients.
+        // Custom teamMemberShares from the form are unreliable because
+        // they may not include the primary person (mainSuggestor / registering employee).
+        recipients.forEach((recipientId, idx) => {
+          const base = Math.floor(100 / count);
+          const sharePercent = idx === 0 ? base + (100 - base * count) : base;
 
           const memberAmount = Math.round((award * sharePercent) / 100);
           if (memberAmount <= 0) return;
 
-          const row = ensureRow(memberId, memberId, "—");
+          const row = ensureRow(recipientId, recipientId === primaryEmpNo ? primaryName : undefined, recipientId === primaryEmpNo ? primaryDept : undefined);
           row.totalAmount += memberAmount;
           row.suggestionCount += 1;
           row.details.push({ suggNo, type: sType, fullAmount: award, share: memberAmount, sharePercent });
           if (s.date && s.date > row.latestDate) row.latestDate = s.date;
         });
-      } else if (isOnBehalf) {
-        // ── On-behalf, NOT group: full award goes to mainSuggestor ──
-        const recipientId = fd.mainSuggestor;
-        const row = ensureRow(recipientId, recipientId, "—");
-        row.totalAmount += award;
-        row.suggestionCount += 1;
-        row.details.push({ suggNo, type: sType, fullAmount: award, share: award, sharePercent: 100 });
-        if (s.date && s.date > row.latestDate) row.latestDate = s.date;
-      } else {
-        // ── Self, NOT group: full award goes to the employee ──
-        const row = ensureRow(s.employeeNo || s.id, s.employeeName || "—", s.department || "—");
+      } else if (primaryEmpNo) {
+        // ── No group: full award goes to the primary person ──
+        const row = ensureRow(primaryEmpNo, primaryName, primaryDept);
         row.totalAmount += award;
         row.suggestionCount += 1;
         row.details.push({ suggNo, type: sType, fullAmount: award, share: award, sharePercent: 100 });
@@ -292,13 +302,38 @@ const NeftReport = () => {
     type InvRow = { empNo: string; empName: string; dept: string; typeCounts: Record<string, number> };
     const empMap = new Map<string, InvRow>();
 
+    // Build a secondary name lookup from suggestion data (employeeNo → employeeName)
+    const nameFromSuggestions = new Map<string, { name: string; dept: string }>();
+    for (const s of filteredData) {
+      if (s.employeeNo && s.employeeName) {
+        nameFromSuggestions.set(s.employeeNo, { name: s.employeeName, dept: s.department || "—" });
+      }
+    }
+
+    const resolveEmployee = (empNo: string): { name: string; dept: string } => {
+      // 1. Try backend employee list
+      const emp = empLookup.get(empNo);
+      if (emp?.name && emp.name !== empNo) return { name: emp.name, dept: emp.department || "—" };
+      // 2. Try suggestion data
+      const fromSugg = nameFromSuggestions.get(empNo);
+      if (fromSugg) return fromSugg;
+      // 3. Try frontend mock employees (covers JaP / PLT-02 employees)
+      const fromMock = mockEmployees.find(e => e.employeeNo === empNo);
+      if (fromMock) return { name: fromMock.name, dept: fromMock.department || "—" };
+      // 4. Try frontend constants (teamMemberOptions, flmOptions, moderatorOptions)
+      const fromConstants = [...teamMemberOptions, ...flmOptions, ...moderatorOptions].find(o => o.value === empNo);
+      if (fromConstants) return { name: fromConstants.name, dept: fromConstants.dept || "—" };
+      // 5. Fallback
+      return { name: empNo, dept: "—" };
+    };
+
     const ensureEmp = (empNo: string): InvRow => {
       if (!empMap.has(empNo)) {
-        const emp = empLookup.get(empNo);
+        const resolved = resolveEmployee(empNo);
         empMap.set(empNo, {
           empNo,
-          empName: emp?.name || empNo,
-          dept: emp?.department || "—",
+          empName: resolved.name,
+          dept: resolved.dept,
           typeCounts: {},
         });
       }
@@ -315,14 +350,9 @@ const NeftReport = () => {
 
       if (primaryEmpNo) {
         const row = ensureEmp(primaryEmpNo);
-        if (isOnBehalf) {
-          const emp = empLookup.get(primaryEmpNo);
-          if (emp) {
-            row.empName = emp.name;
-            row.dept = emp.department;
-          }
-        } else {
-          if (s.employeeName) row.empName = s.employeeName;
+        // Update name/dept if we have better info from the suggestion itself
+        if (!isOnBehalf && s.employeeName && s.employeeName !== primaryEmpNo) {
+          row.empName = s.employeeName;
           if (s.department) row.dept = s.department;
         }
         row.typeCounts[s.type] = (row.typeCounts[s.type] || 0) + 1;
@@ -356,9 +386,13 @@ const NeftReport = () => {
   };
   const npRows = isNonParticipant ? getNonParticipantRows() : [];
   const totalManpower  = rangeFilteredEmployees.length;
-  const involved       = invRows.length;
+  // Only count employees that actually exist in the manpower roster
+  // (prevents involvement % from exceeding 100% when team members
+  // from other ranges or non-roster employees appear in suggestions)
+  const rosterEmpNos = useMemo(() => new Set(rangeFilteredEmployees.map(e => e.employee_no)), [rangeFilteredEmployees]);
+  const involved       = invRows.filter(r => rosterEmpNos.has(r.empNo)).length;
   const notInvolved    = Math.max(0, totalManpower - involved);
-  const involvementPct = totalManpower > 0 ? ((involved / totalManpower) * 100).toFixed(1) : "0.0";
+  const involvementPct = totalManpower > 0 ? Math.min(100, (involved / totalManpower) * 100).toFixed(1) : "0.0";
   const period         = `${fromDate || "—"} - ${toDate || "—"}`;
 
   const activeRowCount = isManpower ? manpowerRows.length : isNeft ? neftRows.length : isEmployeeInvolvement ? invRows.length : isNonParticipant ? npRows.length : filteredData.length;

@@ -325,6 +325,7 @@ function toFrontendSuggestion(s: Suggestion): Record<string, any> {
   return {
     id: String(s.id),
     suggestionNo: s.suggestion_no,
+    plantCode: s.plant_code,
     subject: s.subject,
     type: s.type,
     category: s.category,

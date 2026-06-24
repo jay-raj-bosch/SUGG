@@ -99,6 +99,7 @@ export function useVoiceEngine(
 
   const recRef       = useRef<any>(null);
   const sessionRef   = useRef(0);
+  const interimRef   = useRef("");
   const cbRef        = useRef(onFinalResult);
   const onStopRef    = useRef(onListeningStopped);
   const langRef      = useRef(voiceLang);
@@ -196,7 +197,10 @@ export function useVoiceEngine(
         }
       }
 
-      if (interim) setInterimText(interim);
+      if (interim) {
+        setInterimText(interim);
+        interimRef.current = interim;
+      }
 
       if (bestFinal) {
         // Discard very low-confidence results (garbled / background noise)
@@ -208,15 +212,7 @@ export function useVoiceEngine(
 
         gotResultRef.current = true;
         setInterimText("");
-
-        // ── Stop the mic IMMEDIATELY before async translation ──────────────
-        // This prevents extra speech during the translation API call
-        // from being captured and leaking into the next field fill.
-        sessionRef.current++;
-        try { recRef.current?.stop(); } catch {}
-        recRef.current = null;
-        setIsListening(false);
-        // ─────────────────────────────────────────────────────────────────
+        interimRef.current = "";
 
         const trimmed = bestFinal.trim();
         const lang = langRef.current;
@@ -241,6 +237,7 @@ export function useVoiceEngine(
 
     recRef.current = rec;
     setInterimText("");
+    interimRef.current = "";
     setOriginalText(null);
     setStatus(null);
     gotResultRef.current = false;
@@ -254,10 +251,16 @@ export function useVoiceEngine(
   const stopListening = useCallback(() => {
     sessionRef.current++;
     gotResultRef.current = true; // intentional stop — don't fire onListeningStopped
+    // If there's uncommitted interim text, commit it as the final result
+    const pending = interimRef.current.trim();
     if (recRef.current) { try { recRef.current.stop(); } catch {} recRef.current = null; }
     setIsListening(false);
     setIsTranslating(false);
     setInterimText("");
+    interimRef.current = "";
+    if (pending) {
+      cbRef.current(pending);
+    }
   }, []);
 
   return {

@@ -62,14 +62,15 @@ const daysSinceToday = (from: string): number => {
 
 /**
  * Build timeline from the suggestion state + approval pipeline.
- * Before FLM evaluates (no awardAmount), only show up to FLM.
- * After FLM sets amount, show full pipeline based on amount.
+ * Shows a chronological story:
+ *   Created → Submitted → pipeline steps → [Sent Back → re-entry] → Close
  */
 const getTimeline = (s: Suggestion): TimelineEvent[] => {
   const events: TimelineEvent[] = [];
   const ic = "h-4 w-4";
   const isDCIP = s.type === "Daily CIP";
   const isRejected = s.status === "Rejected";
+  const isSentBack = s.status === "Sent Back";
 
   // ── Step 1: Created ──
   events.push({
@@ -124,9 +125,14 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
   const bpsAdminDone = !!s.approvedByBpsAdmin;
   const bpsDhDone = !!s.approvedByBpsDh;
 
+  // Send-back info
+  const latestSendBack = s.sendBackHistory?.length ? s.sendBackHistory[s.sendBackHistory.length - 1] : null;
+  const sentBackTarget = isSentBack && latestSendBack ? latestSendBack.to : null;
+  // Which level performed the send-back
+  const sentBackFrom = isSentBack && latestSendBack ? latestSendBack.from : null;
+
   // ── FLM Evaluation (always shown) ──
-  const flmIsActive = s.status === "Submitted" && !flmDone && !isRejected;
-  // Parse pendingWith "Role - Name" to show emp no when active
+  const flmIsActive = !isSentBack && !isRejected && s.status === "Submitted" && !flmDone;
   const pendingWithDetail = (() => {
     if (!s.pendingWith) return "Pending FLM review";
     const dash = s.pendingWith.indexOf(" - ");
@@ -138,7 +144,7 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
     label: "FLM Evaluation",
     date: s.evaluatedOn || "—",
     detail: flmDone
-      ? `Evaluated by ${withEmpNo(s.evaluatedByName, s.evaluatedBy)}` + (hasAmount ? ` \u2014 \u20b9${amount}` : "")
+      ? `Evaluated by ${withEmpNo(s.evaluatedByName, s.evaluatedBy)}` + (hasAmount ? ` — ₹${amount}` : "")
       : flmIsActive
         ? pendingWithDetail
         : "Pending FLM review",
@@ -147,8 +153,8 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
     daysTaken: flmDone && s.evaluatedOn ? daysBetween(s.date, s.evaluatedOn) : flmIsActive ? daysSinceToday(s.date) : undefined,
   });
 
-  // If FLM hasn't evaluated yet AND not rejected, stop here — don't show further pipeline
-  if (!flmDone && !isRejected) {
+  // If FLM hasn't evaluated yet AND not rejected AND not sent back, stop here
+  if (!flmDone && !isRejected && !isSentBack) {
     events.push({
       label: "Next steps",
       date: "—",
@@ -161,6 +167,17 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
 
   // ── Rejected at any stage ──
   if (isRejected) {
+    if (s.sendBackHistory?.length) {
+      for (const sb of s.sendBackHistory) {
+        events.push({
+          label: `Sent Back`,
+          date: sb.date,
+          detail: `By ${withEmpNo(sb.fromName || sb.from, EMP_LOOKUP[sb.fromName || sb.from || ""])} → ${sb.to}${sb.reason ? ": " + sb.reason : ""}`,
+          icon: <Undo2 className={ic} />,
+          state: "sentBack",
+        });
+      }
+    }
     events.push({
       label: "Rejected",
       date: s.rejectedOn || "—",
@@ -168,32 +185,20 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
       icon: <XCircle className={ic} />,
       state: "rejected",
     });
-    // Show send-back history even on rejected suggestions
-    if (s.sendBackHistory?.length) {
-      for (const sb of s.sendBackHistory) {
-        events.push({
-          label: `Sent Back by ${withEmpNo(sb.from, EMP_LOOKUP[sb.from || ""])}`,
-          date: sb.date,
-          detail: `Returned to ${sb.to} for revision`,
-          icon: <Undo2 className={ic} />,
-          state: "sentBack",
-        });
-      }
-    }
     return events;
   }
 
   // ── After FLM: show full pipeline based on amount ──
   const pipeline = getPipeline(s.type, amount);
-  // Skip FLM step (already shown above), show remaining steps
   const remainingSteps = pipeline.slice(1); // remove FLM entry
 
-  for (const step of remainingSteps) {
+  // Helper: add a pipeline step event
+  const addPipelineStep = (step: { level: string }) => {
     if (step.level === "Manager") {
-      const isActive = s.status === "Pending Manager" && !managerDone;
+      const isActive = !isSentBack && s.status === "Pending Manager" && !managerDone;
       events.push({
         label: "Manager Approval",
-        date: s.approvedByManagerOn || "\u2014",
+        date: s.approvedByManagerOn || "—",
         detail: managerDone
           ? `Approved by ${withEmpNo(s.approvedByManagerName, EMP_LOOKUP[s.approvedByManagerName || ""])}`
           : isActive ? "Pending manager approval" : "Awaiting",
@@ -202,11 +207,11 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
         daysTaken: managerDone && s.approvedByManagerOn && s.evaluatedOn ? daysBetween(s.evaluatedOn, s.approvedByManagerOn) : isActive && s.evaluatedOn ? daysSinceToday(s.evaluatedOn) : undefined,
       });
     } else if (step.level === "BPS Admin") {
-      const isActive = s.status === "Pending BPS Admin" && !bpsAdminDone;
+      const isActive = !isSentBack && s.status === "Pending BPS Admin" && !bpsAdminDone;
       const prevDate = s.approvedByManagerOn || s.evaluatedOn;
       events.push({
         label: "BPS Admin",
-        date: s.approvedByBpsAdminOn || "\u2014",
+        date: s.approvedByBpsAdminOn || "—",
         detail: bpsAdminDone
           ? `Approved by ${withEmpNo(s.approvedByBpsAdminName, EMP_LOOKUP[s.approvedByBpsAdminName || ""])}`
           : isActive ? "Pending BPS Admin approval" : "Awaiting",
@@ -215,17 +220,105 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
         daysTaken: bpsAdminDone && s.approvedByBpsAdminOn && prevDate ? daysBetween(prevDate, s.approvedByBpsAdminOn) : isActive && prevDate ? daysSinceToday(prevDate) : undefined,
       });
     } else if (step.level === "BPS DH") {
-      const isActive = s.status === "Pending BPS DH" && !bpsDhDone;
+      const isActive = !isSentBack && s.status === "Pending BPS DH" && !bpsDhDone;
       const prevDateDh = s.approvedByBpsAdminOn || s.approvedByManagerOn || s.evaluatedOn;
       events.push({
         label: "BPS DH",
-        date: s.approvedByBpsDhOn || "\u2014",
+        date: s.approvedByBpsDhOn || "—",
         detail: bpsDhDone
           ? `Approved by ${withEmpNo(s.approvedByBpsDhName, EMP_LOOKUP[s.approvedByBpsDhName || ""])}`
           : isActive ? "Pending BPS DH approval" : "Awaiting",
         icon: <UserCheck className={ic} />,
         state: bpsDhDone ? "completed" : isActive ? "active" : "pending",
         daysTaken: bpsDhDone && s.approvedByBpsDhOn && prevDateDh ? daysBetween(prevDateDh, s.approvedByBpsDhOn) : isActive && prevDateDh ? daysSinceToday(prevDateDh) : undefined,
+      });
+    }
+  };
+
+  if (isSentBack && latestSendBack) {
+    // ── SENT BACK flow ──
+    // 1. Show pipeline steps that were completed before the send-back
+    //    (steps up to the level that sent it back — those are "completed")
+    const levelOrder = ["FLM", "Manager", "BPS Admin", "BPS DH"];
+    const sentFromIdx = levelOrder.indexOf(sentBackFrom || "");
+
+    for (const step of remainingSteps) {
+      const stepIdx = levelOrder.indexOf(step.level);
+      // Show steps that were completed before the send-back level
+      if (stepIdx < sentFromIdx) {
+        addPipelineStep(step);
+      }
+    }
+
+    // 2. Show the Sent Back event(s) — all send-back history chronologically
+    for (const sb of s.sendBackHistory || []) {
+      events.push({
+        label: `Sent Back by ${sb.from}`,
+        date: sb.date,
+        detail: `${withEmpNo(sb.fromName || sb.from, EMP_LOOKUP[sb.fromName || sb.from || ""])} → ${sb.to}${sb.reason ? ": " + sb.reason : ""}`,
+        icon: <Undo2 className={ic} />,
+        state: "sentBack",
+        daysTaken: sb.date ? daysBetween(s.date, sb.date) : undefined,
+      });
+    }
+
+    // 3. Show the re-entry point — "Awaiting Revision" at the target level
+    const targetLabel = sentBackTarget === "Employee"
+      ? `Revision required by ${withEmpNo(s.employeeName, s.employeeNo)}`
+      : `Awaiting revision at ${sentBackTarget} level`;
+    events.push({
+      label: sentBackTarget === "Employee" ? "Employee Revision" : `${sentBackTarget} Revision`,
+      date: latestSendBack.date,
+      detail: targetLabel,
+      icon: <AlertCircle className={ic} />,
+      state: "active",
+      daysTaken: latestSendBack.date ? daysSinceToday(latestSendBack.date) : undefined,
+    });
+
+    // 4. Show remaining pipeline steps as pending (what happens after revision)
+    const targetIdx = sentBackTarget === "Employee" ? -1 : levelOrder.indexOf(sentBackTarget || "");
+    for (const step of remainingSteps) {
+      const stepIdx = levelOrder.indexOf(step.level);
+      // Show steps from the target level onward as pending
+      if (stepIdx >= targetIdx && stepIdx >= sentFromIdx) {
+        events.push({
+          label: step.level === "Manager" ? "Manager Approval" : step.level,
+          date: "—",
+          detail: "Pending (after revision)",
+          icon: <UserCheck className={ic} />,
+          state: "pending",
+        });
+      }
+    }
+
+    // 5. Show Close as pending
+    events.push({
+      label: "Closed",
+      date: "—",
+      detail: "Awaiting closure",
+      icon: <CheckCircle2 className={ic} />,
+      state: "pending",
+    });
+
+    return events;
+  }
+
+  // ── Normal flow (not sent back) — show all pipeline steps ──
+  for (const step of remainingSteps) {
+    addPipelineStep(step);
+  }
+
+  // Show any historical send-back events inline for context
+  if (s.sendBackHistory?.length) {
+    // These are past send-backs that were already resolved (suggestion moved forward again)
+    for (const sb of s.sendBackHistory) {
+      events.push({
+        label: `Previously Sent Back`,
+        date: sb.date,
+        detail: `By ${withEmpNo(sb.fromName || sb.from, EMP_LOOKUP[sb.fromName || sb.from || ""])} → ${sb.to}${sb.reason ? ": " + sb.reason : ""}`,
+        icon: <Undo2 className={ic} />,
+        state: "sentBack",
+        daysTaken: sb.date ? daysBetween(s.date, sb.date) : undefined,
       });
     }
   }
@@ -249,19 +342,6 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
       icon: <Award className={ic} />,
       state: "completed",
     });
-  }
-
-  // ── Send-back history (shown at the end for context) ──
-  if (s.sendBackHistory?.length) {
-    for (const sb of s.sendBackHistory) {
-      events.push({
-        label: `Sent Back by ${withEmpNo(sb.from, EMP_LOOKUP[sb.from || ""])}`,
-        date: sb.date,
-        detail: `Returned to ${sb.to} for revision`,
-        icon: <Undo2 className={ic} />,
-        state: "sentBack",
-      });
-    }
   }
 
   return events;
@@ -303,14 +383,19 @@ const SuggestionTimelineDialog = ({ suggestion, open, onOpenChange }: Props) => 
   // Mini pipeline summary bar
   const amount = suggestion.awardAmount ?? 0;
   const isDCIP = suggestion.type === "Daily CIP";
+  const isSentBack = suggestion.status === "Sent Back";
   const pipelineSummary = isDCIP
     ? ["Emp", "Close"]
     : amount > 0
       ? (() => {
           const steps = getPipeline(suggestion.type, amount);
-          return ["Emp", ...steps.map(s => s.level), "Close"];
+          const labels = ["Emp", ...steps.map(s => s.level), "Close"];
+          if (isSentBack) labels.push("↩ Sent Back");
+          return labels;
         })()
-      : ["Emp", "FLM", "..."];
+      : isSentBack
+        ? ["Emp", "FLM", "↩ Sent Back"]
+        : ["Emp", "FLM", "..."];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -339,6 +424,7 @@ const SuggestionTimelineDialog = ({ suggestion, open, onOpenChange }: Props) => 
             <div key={i} className="flex items-center gap-0.5">
               <span className={`text-[9px] px-1.5 py-0.5 rounded ${
                 step === "..." ? "bg-muted text-muted-foreground italic" :
+                step.includes("Sent Back") ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-medium" :
                 i === 0 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" :
                 "bg-muted text-muted-foreground"
               }`}>{step}</span>

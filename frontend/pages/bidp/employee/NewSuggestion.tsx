@@ -8,17 +8,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { suggestionTypes } from "@/lib/mockData";
+import { suggestionTypes, categories } from "@/lib/mockData";
 import { schemaMap } from "@/lib/bidp/suggestionSchemas";
 import { flmOptions, moderatorOptions, kaizenThemes, workshopOptions } from "@/lib/bidp/suggestionConstants";
-import { useVoiceEngine, VOICE_LANGUAGES } from "@/hooks/useVoiceEngine";
+import { useVoiceEngine } from "@/hooks/useVoiceEngine";
 import VoiceHighlight from "@/components/VoiceHighlight";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useDeptMappings } from "@/contexts/DeptMappingContext";
 import { toast } from "sonner";
-import { Save, Send, FileText, RotateCcw, Upload, X, Info, Paperclip, Mic, MicOff, CheckCircle2, Languages, Globe, ChevronDown } from "lucide-react";
+import { Save, Send, FileText, RotateCcw, Upload, X, Info, Paperclip, Mic, MicOff, CheckCircle2 } from "lucide-react";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { ZodError } from "zod";
 
@@ -246,22 +246,10 @@ const NewSuggestion = () => {
 
   // ── Per-field voice controller ─────────────────────────────────────────
   const [voiceEnabled, setVoiceEnabled] = useState(false);
-  const [voiceLang, setVoiceLang] = useState("en-IN");
-  const [showLangPicker, setShowLangPicker] = useState(false);
   const [listeningField, setListeningField] = useState<string | null>(null);
   const listeningFieldRef = useRef<string | null>(null);
   const suggestionTypeRef = useRef(suggestionType);
-  const langPickerRef = useRef<HTMLDivElement>(null);
   useEffect(() => { suggestionTypeRef.current = suggestionType; }, [suggestionType]);
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (langPickerRef.current && !langPickerRef.current.contains(e.target as Node)) setShowLangPicker(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-  const currentLangOption = VOICE_LANGUAGES.find(l => l.code === voiceLang) || VOICE_LANGUAGES[0];
-  const isNonEnglish = !voiceLang.startsWith("en");
 
   const handleVoiceResult = useCallback((text: string) => {
     const field = listeningFieldRef.current
@@ -269,17 +257,26 @@ const NewSuggestion = () => {
       : null;
     if (!field) return;
 
+    // Helper: stop listening after a single-value field is filled
+    const stopAfterFill = () => {
+      voiceEngine.stopListening();
+      setListeningField(null);
+      listeningFieldRef.current = null;
+    };
+
     if (field.key === "suggestionFor") {
       const val = text.toLowerCase().includes("behalf") ? "behalf" : "self";
       setSuggestionFor(val);
       voiceEngine.setStatus({ text: `✓ Set to "${val === "behalf" ? "On Behalf" : "Self"}"`, ok: true });
+      stopAfterFill();
     } else if (field.key === "groupSuggestion") {
       const val = text.toLowerCase().includes("yes") ? "yes" : "no";
       setGroupSuggestion(val);
       voiceEngine.setStatus({ text: `✓ Group Suggestion: "${val}"`, ok: true });
+      stopAfterFill();
     } else if (field.key === "otherInfo") {
       setOtherInfo(prev => prev ? prev + " " + text : text);
-      voiceEngine.setStatus({ text: "✓ Other info added", ok: true });
+      voiceEngine.setStatus({ text: "✓ Keep speaking… (tap stop when done)", ok: true });
     } else if (field.type === "date") {
       const parsed = tryParseDate(text);
       if (parsed) {
@@ -291,16 +288,19 @@ const NewSuggestion = () => {
       } else {
         voiceEngine.setStatus({ text: `⚠ Couldn't understand "${text}" — try "20th March 2026" or tap to type`, ok: false });
       }
+      stopAfterFill();
     } else if (field.key === "category") {
       const lc = text.toLowerCase();
       const match = categories.find(c => c.toLowerCase().includes(lc) || lc.includes(c.toLowerCase()));
       if (match) { setTypeFields(prev => ({ ...prev, category: match })); voiceEngine.setStatus({ text: `✓ Category: "${match}"`, ok: true }); }
       else voiceEngine.setStatus({ text: `⚠ No category matched "${text}"`, ok: false });
+      stopAfterFill();
     } else if (field.key === "flm") {
       const lc = text.toLowerCase();
       const match = flmOptions.find(f => f.label.toLowerCase().includes(lc) || lc.includes(f.label.split(" ")[0].toLowerCase()));
       if (match) { setTypeFields(prev => ({ ...prev, flm: match.value })); voiceEngine.setStatus({ text: `✓ FLM: "${match.label}"`, ok: true }); }
       else voiceEngine.setStatus({ text: `⚠ No FLM matched "${text}" — say a name like 'Suresh'`, ok: false });
+      stopAfterFill();
     } else if (field.key === "moderator") {
       const lc = text.toLowerCase();
       const match = moderatorOptions.find(m => m.label.toLowerCase().includes(lc) || lc.includes(m.label.split(" ")[0].toLowerCase()));
@@ -308,16 +308,19 @@ const NewSuggestion = () => {
         setTypeFields(prev => ({ ...prev, moderator: match.value, moderators: match.value }));
         voiceEngine.setStatus({ text: `✓ Moderator: "${match.label}"`, ok: true });
       } else voiceEngine.setStatus({ text: `⚠ No moderator matched "${text}" — say a name like 'Karthik'`, ok: false });
+      stopAfterFill();
     } else if (field.key === "kaizenTheme") {
       const lc = text.toLowerCase();
       const match = kaizenThemes.find(k => k.toLowerCase().includes(lc) || lc.includes(k.toLowerCase().split(" ")[0]));
       if (match) { setTypeFields(prev => ({ ...prev, kaizenTheme: match })); voiceEngine.setStatus({ text: `✓ Theme: "${match}"`, ok: true }); }
       else voiceEngine.setStatus({ text: `⚠ No theme matched "${text}" — say e.g. 'Quality Improvement'`, ok: false });
+      stopAfterFill();
     } else if (field.key === "workshop") {
       const lc = text.toLowerCase();
       const match = workshopOptions.find(w => w.toLowerCase().includes(lc) || lc.includes(w.toLowerCase()));
       if (match) { setTypeFields(prev => ({ ...prev, workshop: match })); voiceEngine.setStatus({ text: `✓ Workshop: "${match}"`, ok: true }); }
       else voiceEngine.setStatus({ text: `⚠ No workshop matched "${text}" — say e.g. 'Workshop A'`, ok: false });
+      stopAfterFill();
     } else if (field.type === "number") {
       const words: Record<string, number> = {
         zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9,
@@ -332,13 +335,12 @@ const NewSuggestion = () => {
         setTypeFields(prev => ({ ...prev, [field.key]: val }));
         voiceEngine.setStatus({ text: `✓ ${field.label}: ${val}`, ok: true });
       } else voiceEngine.setStatus({ text: `⚠ Couldn't parse a number from "${text}"`, ok: false });
+      stopAfterFill();
     } else {
+      // Text/textarea fields — APPEND and keep listening for continuous dictation
       setTypeFields(prev => ({ ...prev, [field.key]: prev[field.key] ? prev[field.key] + " " + text : text }));
-      voiceEngine.setStatus({ text: "✓ Filled!", ok: true });
+      voiceEngine.setStatus({ text: "✓ Keep speaking… (tap stop when done)", ok: true });
     }
-    voiceEngine.stopListening();
-    setListeningField(null);
-    listeningFieldRef.current = null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -348,7 +350,7 @@ const NewSuggestion = () => {
     listeningFieldRef.current = null;
   }, []);
 
-  const voiceEngine = useVoiceEngine(handleVoiceResult, { voiceLang, autoTranslate: true }, handleListeningStopped);
+  const voiceEngine = useVoiceEngine(handleVoiceResult, { voiceLang: "en-IN" }, handleListeningStopped);
 
   const startVoiceForField = (key: string) => {
     if (!voiceEnabled) return;
@@ -375,7 +377,7 @@ const NewSuggestion = () => {
   };
 
   const voiceMode = voiceEnabled && !!VOICE_FIELDS_MAP[suggestionType];
-  const activeVoiceField = (voiceEngine.isListening || voiceEngine.isTranslating) ? listeningField : null;
+  const activeVoiceField = voiceEngine.isListening ? listeningField : null;
   const onActivateVoice = startVoiceForField;
   const [teamMembers, setTeamMembers] = useState<string[]>(saved.teamMembers || []);
   const [teamMemberShares, setTeamMemberShares] = useState<Record<string, string>>(saved.teamMemberShares || {});
@@ -468,13 +470,7 @@ const NewSuggestion = () => {
       }
     }
 
-    // Validate team member share total when group suggestion is active
-    if (groupSuggestion === "yes" && teamMembers.length > 0) {
-      const totalShare = teamMembers.reduce((sum, id) => sum + (Number(teamMemberShares[id]) || 0), 0);
-      if (totalShare !== 100) {
-        return { teamMemberShares: `Total share must equal 100% — currently ${totalShare}% (${totalShare > 100 ? `over by ${totalShare - 100}%` : `${100 - totalShare}% remaining`})` };
-      }
-    }
+    // Share is auto-computed (equal split) — no manual validation needed
 
     return null;
   };
@@ -709,8 +705,8 @@ const NewSuggestion = () => {
       activeVoiceField, voiceMode, onActivateVoice,
       voiceInterimField: voiceEngine.isListening ? listeningField : null,
       voiceInterimText: voiceEngine.interimText,
-      voiceIsTranslating: voiceEngine.isTranslating,
-      voiceTranslatingLang: isNonEnglish ? currentLangOption.label : undefined,
+      voiceIsTranslating: false,
+      voiceTranslatingLang: undefined,
     };
 
     switch (suggestionType) {
@@ -732,7 +728,7 @@ const NewSuggestion = () => {
   const hasData = !!(suggestionType || Object.values(typeFields).some(v => v));
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="flex flex-col h-full w-full max-w-5xl space-y-4">
       <h2 className="text-xl font-bold text-foreground">
         {editingId ? "Edit Draft" : "New Suggestion"}
         <span className="text-sm font-normal text-muted-foreground"> / {t(editingId ? "Edit Draft" : "New Suggestion")}</span>
@@ -771,134 +767,49 @@ const NewSuggestion = () => {
           {/* Show remaining fields only after type is selected */}
           {suggestionType && (
             <>
-              {/* ── Voice input — enable toggle + language selector + per-field speak buttons ── */}
+              {/* ── Voice input — enable toggle + per-field speak buttons ── */}
               {!!VOICE_FIELDS_MAP[suggestionType] && voiceEngine.supported && (
                 voiceEnabled ? (
                   <div className="space-y-2">
-                    {/* ── Language selector bar ── */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className="relative" ref={langPickerRef}>
-                        <button
-                          type="button"
-                          onClick={() => setShowLangPicker(v => !v)}
-                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition-all shadow-sm ${
-                            isNonEnglish
-                              ? "border-violet-400/40 bg-violet-500/[0.06] text-violet-700 dark:text-violet-300 hover:bg-violet-500/10"
-                              : "border-border/50 bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                          }`}
-                        >
-                          <Globe className="h-3.5 w-3.5" />
-                          <span>{currentLangOption.flag} {currentLangOption.label}</span>
-                          <ChevronDown className="h-3 w-3 opacity-50" />
-                        </button>
-                        {showLangPicker && (
-                          <div className="absolute top-full left-0 mt-1 w-56 bg-popover border border-border rounded-xl shadow-xl z-50 py-1 animate-in fade-in-0 zoom-in-95">
-                            <div className="px-2.5 py-1.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">Voice Language</div>
-                            {VOICE_LANGUAGES.map(lang => (
-                              <button
-                                key={lang.code}
-                                type="button"
-                                onClick={() => { setVoiceLang(lang.code); setShowLangPicker(false); }}
-                                className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-[11px] transition-colors ${
-                                  voiceLang === lang.code
-                                    ? "bg-primary/10 text-primary font-semibold"
-                                    : "hover:bg-muted/60 text-foreground"
-                                }`}
-                              >
-                                <span className="text-base">{lang.flag}</span>
-                                <div className="flex-1 text-left">
-                                  <span className="font-medium">{lang.label}</span>
-                                  {lang.nativeName !== lang.label && (
-                                    <span className="ml-1.5 text-muted-foreground/60">{lang.nativeName}</span>
-                                  )}
-                                </div>
-                                {voiceLang === lang.code && (
-                                  <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                                )}
-                              </button>
-                            ))}
-                            {isNonEnglish && (
-                              <div className="px-2.5 py-1.5 mt-1 border-t border-border/50">
-                                <p className="text-[10px] text-violet-500 dark:text-violet-400 flex items-center gap-1">
-                                  <Languages className="h-3 w-3" />
-                                  Auto-translates to English
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      {isNonEnglish && (
-                        <span className="flex items-center gap-1 text-[10px] font-medium text-violet-600 dark:text-violet-400 bg-violet-500/[0.08] border border-violet-400/20 px-2 py-1 rounded-lg">
-                          <Languages className="h-3 w-3" />
-                          Speak in {currentLangOption.nativeName} — auto-translates to English
-                        </span>
-                      )}
-                    </div>
-
                     {/* ── Main status bar ── */}
                     <div className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-xs transition-all duration-300 ${
-                      voiceEngine.isTranslating
-                        ? "border-violet-400/40 bg-violet-500/[0.05] shadow-sm shadow-violet-500/5"
-                        : voiceEngine.isListening
-                          ? "border-rose-400/35 bg-rose-500/[0.04] shadow-sm shadow-rose-500/5"
-                          : voiceEngine.status?.ok
-                            ? "border-emerald-400/30 bg-emerald-500/[0.04]"
-                            : voiceEngine.status
-                              ? "border-amber-400/30 bg-amber-500/[0.04]"
-                              : "border-primary/15 bg-primary/[0.03]"
+                      voiceEngine.isListening
+                        ? "border-rose-400/35 bg-rose-500/[0.04] shadow-sm shadow-rose-500/5"
+                        : voiceEngine.status?.ok
+                          ? "border-emerald-400/30 bg-emerald-500/[0.04]"
+                          : voiceEngine.status
+                            ? "border-amber-400/30 bg-amber-500/[0.04]"
+                            : "border-primary/15 bg-primary/[0.03]"
                     }`}>
                       {/* Animated icon */}
                       <div className={`relative h-7 w-7 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 ${
-                        voiceEngine.isTranslating ? "bg-violet-500 shadow-sm shadow-violet-500/30"
-                          : voiceEngine.isListening ? "bg-rose-500 shadow-sm shadow-rose-500/30"
+                        voiceEngine.isListening ? "bg-rose-500 shadow-sm shadow-rose-500/30"
                           : voiceEngine.status?.ok ? "bg-emerald-500/15" : "bg-primary/10"
                       }`}>
-                        {(voiceEngine.isListening || voiceEngine.isTranslating) && (
-                          <span className={`absolute inset-0 rounded-full animate-ping pointer-events-none ${
-                            voiceEngine.isTranslating ? "bg-violet-400/30" : "bg-rose-400/30"
-                          }`} />
+                        {voiceEngine.isListening && (
+                          <span className="absolute inset-0 rounded-full animate-ping pointer-events-none bg-rose-400/30" />
                         )}
-                        {voiceEngine.isTranslating
-                          ? <Languages className="h-3.5 w-3.5 text-white relative z-10 animate-pulse" />
-                          : voiceEngine.isListening
-                            ? <Mic className="h-3.5 w-3.5 text-white relative z-10" />
-                            : voiceEngine.status?.ok
-                              ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                              : <Mic className="h-3.5 w-3.5 text-primary" />
+                        {voiceEngine.isListening
+                          ? <Mic className="h-3.5 w-3.5 text-white relative z-10" />
+                          : voiceEngine.status?.ok
+                            ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                            : <Mic className="h-3.5 w-3.5 text-primary" />
                         }
                       </div>
                       {/* Status text */}
                       <div className="flex-1 min-w-0">
-                        {voiceEngine.isTranslating ? (
-                          <p className="font-semibold text-violet-600 dark:text-violet-400 truncate">
-                            Translating from {currentLangOption.label} to English…
-                            {voiceEngine.originalText && (
-                              <span className="block text-[10px] font-normal text-muted-foreground/70 mt-0.5 italic truncate">
-                                "{voiceEngine.originalText}"
-                              </span>
-                            )}
-                          </p>
-                        ) : voiceEngine.isListening ? (
+                        {voiceEngine.isListening ? (
                           <p className="font-semibold text-foreground truncate">
                             Listening&nbsp;&mdash;&nbsp;
                             <span className="text-rose-500 font-bold">{ALL_VOICE_FIELD_LOOKUP[listeningField ?? ""]?.label ?? listeningField}</span>
                             <span className="font-normal text-muted-foreground/60 ml-1">
-                              {voiceEngine.interimText ? "↓ typing in field…" : isNonEnglish ? `speak in ${currentLangOption.nativeName}…` : "speak now…"}
+                              {voiceEngine.interimText ? "↓ typing in field…" : "speak now…"}
                             </span>
                           </p>
                         ) : voiceEngine.status ? (
-                          <div>
-                            <p className={`font-medium ${voiceEngine.status.ok ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
-                              {voiceEngine.status.text}
-                            </p>
-                            {voiceEngine.status.ok && voiceEngine.originalText && isNonEnglish && (
-                              <p className="text-[10px] text-violet-500 dark:text-violet-400 mt-0.5 flex items-center gap-1">
-                                <Languages className="h-2.5 w-2.5" />
-                                Translated from: "{voiceEngine.originalText}"
-                              </p>
-                            )}
-                          </div>
+                          <p className={`font-medium ${voiceEngine.status.ok ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
+                            {voiceEngine.status.text}
+                          </p>
                         ) : (
                           <p className="text-muted-foreground/70">
                             Tap&nbsp;
@@ -906,23 +817,14 @@ const NewSuggestion = () => {
                               <Mic className="h-2.5 w-2.5" /> speak
                             </span>
                             &nbsp;on any field below to fill it by voice
-                            {isNonEnglish && (
-                              <span className="ml-1 text-violet-500 dark:text-violet-400">
-                                ({currentLangOption.label} → English)
-                              </span>
-                            )}
                           </p>
                         )}
                       </div>
                       {/* Stop / exit */}
-                      {voiceEngine.isListening || voiceEngine.isTranslating ? (
+                      {voiceEngine.isListening ? (
                         <button type="button"
                           onClick={() => { voiceEngine.stopListening(); setListeningField(null); listeningFieldRef.current = null; }}
-                          className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg border transition-colors ${
-                            voiceEngine.isTranslating
-                              ? "bg-violet-500/10 border-violet-400/25 text-violet-500 hover:bg-violet-500/20"
-                              : "bg-rose-500/10 border-rose-400/25 text-rose-500 hover:bg-rose-500/20"
-                          }`}>
+                          className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg border bg-rose-500/10 border-rose-400/25 text-rose-500 hover:bg-rose-500/20 transition-colors">
                           <MicOff className="h-3 w-3" />
                           <span className="text-[10px] font-medium">stop</span>
                         </button>
@@ -944,7 +846,7 @@ const NewSuggestion = () => {
                       <Mic className="h-3 w-3" />
                     </div>
                     Voice input
-                    <span className="text-[10px] text-muted-foreground/40 font-normal">— speak in any language, auto-translates to English</span>
+                    <span className="text-[10px] text-muted-foreground/40 font-normal">— speech to text</span>
                   </button>
                 )
               )}
@@ -965,7 +867,20 @@ const NewSuggestion = () => {
                 mainSuggestor={mainSuggestor}
                 setMainSuggestor={(v) => { setMainSuggestor(v); setErrors(prev => { const n = {...prev}; delete n.mainSuggestor; return n; }); }}
                 teamMembers={teamMembers}
-                setTeamMembers={(v) => { setTeamMembers(v); setErrors(prev => { const n = {...prev}; delete n.teamMembers; return n; }); }}
+                setTeamMembers={(v) => {
+                  setTeamMembers(v);
+                  setErrors(prev => { const n = {...prev}; delete n.teamMembers; return n; });
+                  // Auto-compute equal shares
+                  if (v.length > 0) {
+                    const share = Math.floor(100 / v.length);
+                    const remainder = 100 - share * v.length;
+                    const shares: Record<string, string> = {};
+                    v.forEach((id, i) => { shares[id] = String(i === 0 ? share + remainder : share); });
+                    setTeamMemberShares(shares);
+                  } else {
+                    setTeamMemberShares({});
+                  }
+                }}
                 teamMemberShares={teamMemberShares}
                 setTeamMemberShares={(v) => { setTeamMemberShares(v); setErrors(prev => { const n = {...prev}; delete n.teamMemberShares; return n; }); }}
               />
@@ -1033,8 +948,8 @@ const NewSuggestion = () => {
                           <span key={f.id} className="inline-flex items-center gap-1 text-xs bg-muted border px-2 py-1 rounded-md">
                             <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
                             <span className="max-w-[140px] truncate">{f.name}</span>
-                            <button type="button" onClick={() => removeFile(i)} className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors">
-                              <X className="h-3 w-3" />
+                            <button type="button" onClick={() => removeFile(i)} className="ml-1 p-0.5 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0">
+                              <X className="h-3.5 w-3.5" />
                             </button>
                           </span>
                         ))}

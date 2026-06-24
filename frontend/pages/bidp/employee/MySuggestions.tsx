@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { usePlant } from "@/contexts/PlantContext";
 
@@ -13,7 +13,8 @@ import { statusColors, Suggestion } from "@/lib/mockData";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Eye, Edit, Clock, Trash2, ChevronLeft, ChevronRight, Timer } from "lucide-react";
+import { Eye, Edit, Clock, Trash2, ChevronLeft, ChevronRight, Timer, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import SuggestionDetailDialog from "@/components/bidp/SuggestionDetailDialog";
 import SuggestionTimelineDialog from "@/components/bidp/SuggestionTimelineDialog";
@@ -37,6 +38,10 @@ const MySuggestions = () => {
   const [deleteTarget, setDeleteTarget] = useState<Suggestion | null>(null);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [pendingFilter, setPendingFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPageSubs, setCurrentPageSubs] = useState(1);
   const [currentPageDrafts, setCurrentPageDrafts] = useState(1);
@@ -71,23 +76,48 @@ const MySuggestions = () => {
 
   const applyFilters = (list: Suggestion[]) => {
     let r = list;
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      r = r.filter(s => s.suggestionNo?.toLowerCase().includes(q));
+    }
     if (typeFilter !== "all") r = r.filter(s => s.type === typeFilter);
     if (statusFilter !== "all") r = r.filter(s => s.status === statusFilter);
+    if (pendingFilter !== "all") {
+      r = r.filter(s => {
+        const pw = formatPendingWith(s);
+        return pw.role.toLowerCase().includes(pendingFilter.toLowerCase());
+      });
+    }
+    if (dateFrom) r = r.filter(s => s.date >= dateFrom);
+    if (dateTo) r = r.filter(s => s.date <= dateTo);
     return r;
   };
 
   const subs   = applyFilters(allSubs);
   const drafts = applyFilters(allDrafts);
-  const anyFilter = typeFilter !== "all" || statusFilter !== "all";
+  const anyFilter = typeFilter !== "all" || statusFilter !== "all" || pendingFilter !== "all" || searchQuery.trim() !== "" || dateFrom !== "" || dateTo !== "";
+
+  // Collect unique pending-with roles dynamically from data
+  const pendingRoles = useMemo(() => {
+    const roles = new Set<string>();
+    allSubs.forEach(s => {
+      const pw = formatPendingWith(s);
+      if (pw.role && pw.role !== "—") roles.add(pw.role);
+    });
+    return Array.from(roles).sort();
+  }, [allSubs]);
 
   // Reset to page 1 whenever filters change
-  useEffect(() => { setCurrentPageSubs(1); setCurrentPageDrafts(1); }, [typeFilter, statusFilter]);
+  useEffect(() => { setCurrentPageSubs(1); setCurrentPageDrafts(1); }, [typeFilter, statusFilter, pendingFilter, searchQuery, dateFrom, dateTo]);
 
   const openView = (s: Suggestion) => { setSelectedSuggestion(s); setDialogOpen(true); };
 
   const openEdit = (s: Suggestion) => {
-    // Allow editing for Draft and Sent Back suggestions
-    if (s.status !== "Draft" && s.status !== "Sent Back") {
+    // Allow editing for Draft and Sent Back (only if sent back TO employee)
+    const sentBackToEmployee = s.status === "Sent Back" && s.sendBackHistory?.length
+      ? s.sendBackHistory[s.sendBackHistory.length - 1].to === "Employee"
+      : false;
+    if (s.status !== "Draft" && !sentBackToEmployee) {
       return;
     }
     // Build the full form state from stored formData, or fall back to basic fields
@@ -126,6 +156,14 @@ const MySuggestions = () => {
   const TH = ({ en }: { en: string }) => (
     <span>{en} <span className="text-[9px] opacity-70">/ {t(en)}</span></span>
   );
+
+  /** Clean status for display — strip role names since they're in the Pending With column */
+  const displayStatus = (status: string): string => {
+    if (status === "Pending Manager" || status === "Pending BPS Admin" || status === "Pending BPS DH" || status === "Pending FLM") {
+      return "Under Review";
+    }
+    return status;
+  };
 
   const renderTable = (
     data: Suggestion[],
@@ -183,11 +221,12 @@ const MySuggestions = () => {
                     <p className="text-xs font-mono text-muted-foreground">{s.suggestionNo}</p>
                     <p className="text-sm font-medium leading-snug mt-0.5">{s.subject}</p>
                   </div>
-                  <Badge variant="outline" className={`text-[10px] shrink-0 ${statusColors[s.status]}`}>{s.status}</Badge>
+                  <Badge variant="outline" className={`text-[10px] shrink-0 ${statusColors[s.status]}`}>{displayStatus(s.status)}</Badge>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground/70">{pw.role}</span>
-                  {pw.name && <><span>–</span><span>{pw.name}</span></>}
+                  <span className="font-semibold text-primary/70">{pw.role}</span>
+                  {pw.name && <><span>–</span><span className="font-medium text-foreground/70">{pw.name}</span></>}
+                  {pw.empNo && <span className="font-mono text-[10px]">({pw.empNo})</span>}
                   <span>·</span>
                   <span>{s.date}</span>
                 </div>
@@ -199,7 +238,7 @@ const MySuggestions = () => {
                       <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-destructive hover:text-destructive" onClick={() => confirmDelete(s)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </>
                   )}
-                  {!showDraftActions && s.status === "Sent Back" && (
+                  {!showDraftActions && s.status === "Sent Back" && s.sendBackHistory?.length && s.sendBackHistory[s.sendBackHistory.length - 1].to === "Employee" && (
                     <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-amber-600" onClick={() => openEdit(s)}><Edit className="h-3.5 w-3.5" /> Edit & Resubmit</Button>
                   )}
                   <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => openTimeline(s)}><Clock className="h-3.5 w-3.5" /> Timeline</Button>
@@ -244,10 +283,13 @@ const MySuggestions = () => {
                         ) : pw.name ? (
                           <span className="flex flex-col leading-tight">
                             <span className="font-medium text-foreground/80">{pw.name}</span>
-                            <span className="text-[10px] text-muted-foreground font-mono">{pw.empNo || pw.role}</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              <span className="font-semibold text-primary/70">{pw.role}</span>
+                              {pw.empNo && <span className="font-mono"> · {pw.empNo}</span>}
+                            </span>
                           </span>
                         ) : (
-                          <span className="text-muted-foreground">{pw.role}</span>
+                          <span className="text-muted-foreground font-medium">{pw.role}</span>
                         )}
                       </td>
                       <td className="py-2.5 px-2 whitespace-nowrap">{s.date}</td>
@@ -263,7 +305,7 @@ const MySuggestions = () => {
                         ) : "—"}
                       </td>
                       <td className="py-2.5 px-2">
-                        <Badge variant="outline" className={`text-[10px] ${statusColors[s.status]}`}>{s.status}</Badge>
+                        <Badge variant="outline" className={`text-[10px] ${statusColors[s.status]}`}>{displayStatus(s.status)}</Badge>
                       </td>
                       <td className="py-2.5 px-2 text-right">
                         <div className="flex gap-1 justify-end">
@@ -274,8 +316,8 @@ const MySuggestions = () => {
                               <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => confirmDelete(s)} title="Delete"><Trash2 className="h-3.5 w-3.5" /></Button>
                             </>
                           )}
-                          {/* Edit button for sent-back suggestions in the submitted tab */}
-                          {!showDraftActions && s.status === "Sent Back" && (
+                          {/* Edit button for sent-back suggestions ONLY if sent back to Employee */}
+                          {!showDraftActions && s.status === "Sent Back" && s.sendBackHistory?.length && s.sendBackHistory[s.sendBackHistory.length - 1].to === "Employee" && (
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-100/50" onClick={() => openEdit(s)} title="Edit & Resubmit">
                               <Edit className="h-3.5 w-3.5" />
                             </Button>
@@ -304,37 +346,129 @@ const MySuggestions = () => {
         <h2 className="text-xl font-bold text-foreground">
           My Suggestions <span className="text-sm font-normal text-muted-foreground">/ {t("My Suggestions")}</span>
         </h2>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground">Filter by type:</span>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className={`h-8 w-48 text-xs ${typeFilter !== "all" ? "filter-active" : ""}`}>
-              <SelectValue placeholder="All Types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="Simple Suggestion Scheme">Simple Suggestion Scheme</SelectItem>
-              <SelectItem value="Shop Floor CIP">Shop Floor CIP</SelectItem>
-              <SelectItem value="My Idea Card">My Idea Card</SelectItem>
-              <SelectItem value="Daily CIP">Daily CIP</SelectItem>
-              <SelectItem value="Cash The Flash">Cash The Flash</SelectItem>
-            </SelectContent>
-          </Select>
-          <span className="text-xs text-muted-foreground">Status:</span>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className={`h-8 w-40 text-xs ${statusFilter !== "all" ? "filter-active" : ""}`}>
-              <SelectValue placeholder="All Statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="Draft">Draft</SelectItem>
-              <SelectItem value="Submitted">Submitted</SelectItem>
-              <SelectItem value="Under Evaluation">Under Evaluation</SelectItem>
-              <SelectItem value="Approved &amp; Closed">Approved &amp; Closed</SelectItem>
-              <SelectItem value="Sent Back">Sent Back</SelectItem>
-              <SelectItem value="Rejected">Rejected</SelectItem>
-              <SelectItem value="Implemented">Implemented</SelectItem>
-            </SelectContent>
-          </Select>
+      </div>
+
+      {/* Filter bar */}
+      <div className="rounded-xl border bg-muted/20 px-4 py-3 space-y-2.5">
+        {/* Row 1: Search + Dropdowns — all stretch to fill */}
+        <div className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-3">
+          {/* Search by suggestion no */}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Search</span>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Suggestion No…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className={`h-8 w-full text-xs pl-8 pr-7 bg-background ${searchQuery ? "border-primary/50 ring-1 ring-primary/20" : ""}`}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Type filter */}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Type</span>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className={`h-8 w-full text-xs bg-background ${typeFilter !== "all" ? "border-primary/50 ring-1 ring-primary/20" : ""}`}>
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="Simple Suggestion Scheme">Simple Suggestion</SelectItem>
+                <SelectItem value="Shop Floor CIP">Shop Floor CIP</SelectItem>
+                <SelectItem value="My Idea Card">My Idea Card</SelectItem>
+                <SelectItem value="Daily CIP">Daily CIP</SelectItem>
+                <SelectItem value="Cash The Flash">Cash The Flash</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Status filter */}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Status</span>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className={`h-8 w-full text-xs bg-background ${statusFilter !== "all" ? "border-primary/50 ring-1 ring-primary/20" : ""}`}>
+                <SelectValue placeholder="All Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="Draft">Draft</SelectItem>
+                <SelectItem value="Submitted">Submitted</SelectItem>
+                <SelectItem value="Under Evaluation">Under Evaluation</SelectItem>
+                <SelectItem value="Approved &amp; Closed">Approved &amp; Closed</SelectItem>
+                <SelectItem value="Sent Back">Sent Back</SelectItem>
+                <SelectItem value="Rejected">Rejected</SelectItem>
+                <SelectItem value="Implemented">Implemented</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Pending With filter */}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Pending With</span>
+            <Select value={pendingFilter} onValueChange={setPendingFilter}>
+              <SelectTrigger className={`h-8 w-full text-xs bg-background ${pendingFilter !== "all" ? "border-amber-400 ring-1 ring-amber-400/20" : ""}`}>
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                {pendingRoles.map(role => (
+                  <SelectItem key={role} value={role}>{role}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Row 2: Date range + results + clear */}
+        <div className="flex items-end gap-3">
+          <div className="flex items-end gap-2">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">From Date</span>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                className={`h-8 w-40 text-xs bg-background ${dateFrom ? "border-primary/50 ring-1 ring-primary/20" : ""}`}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground mb-1.5">→</span>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">To Date</span>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={e => setDateTo(e.target.value)}
+                className={`h-8 w-40 text-xs bg-background ${dateTo ? "border-primary/50 ring-1 ring-primary/20" : ""}`}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 ml-auto">
+            <span className="text-xs text-muted-foreground">
+              {subs.length + drafts.length} result{subs.length + drafts.length !== 1 ? "s" : ""}
+              {anyFilter ? ` / ${allSubs.length + allDrafts.length} total` : ""}
+            </span>
+            {anyFilter && (
+              <button
+                type="button"
+                onClick={() => { setSearchQuery(""); setTypeFilter("all"); setStatusFilter("all"); setPendingFilter("all"); setDateFrom(""); setDateTo(""); }}
+                className="flex items-center gap-1.5 text-xs text-destructive/80 hover:text-destructive px-3 py-1.5 rounded-lg border border-destructive/20 hover:bg-destructive/5 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" /> Clear all
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

@@ -5,21 +5,28 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Paperclip, FileX2, FileText, Image as ImageIcon, X, ArrowRightLeft, CheckCircle2, XCircle, Undo2, RotateCcw, Send, Clock, User, ShieldCheck, Users, Calendar, Tag, Building2, Hash, ChevronRight, Award } from "lucide-react";
-import { Suggestion, AuditEntry, statusColors } from "@/lib/mockData";
+import { Suggestion, AuditEntry, statusColors, mockEmployees } from "@/lib/mockData";
 import type { AttachmentItem } from "@/lib/attachmentUtils";
 import { teamMemberOptions, moderatorOptions, flmOptions } from "@/lib/bidp/suggestionConstants";
 import { calculateDaysPending } from "@/lib/bidp/approvalPipeline";
 
 /** Resolve an employee ID to a display name from all known option lists */
 const allEmployeeOptions = [...teamMemberOptions, ...moderatorOptions, ...flmOptions];
+const optByEmpNo: Record<string, { name: string; dept: string }> = {};
+for (const o of allEmployeeOptions) {
+  if (o.value && !optByEmpNo[o.value]) optByEmpNo[o.value] = { name: o.name, dept: o.dept };
+}
+for (const e of mockEmployees) {
+  if (!optByEmpNo[e.employeeNo]) optByEmpNo[e.employeeNo] = { name: e.name, dept: e.department };
+}
 const resolveEmpName = (id?: string | null): string => {
   if (!id) return "—";
-  const match = allEmployeeOptions.find(o => o.value === id);
+  const match = optByEmpNo[id];
   return match ? `${match.name} (${id})` : id;
 };
 const resolveEmpDetails = (id?: string | null) => {
   if (!id) return { name: "—", empNo: "—", dept: "—" };
-  const match = allEmployeeOptions.find(o => o.value === id);
+  const match = optByEmpNo[id];
   return { name: match?.name || id, empNo: id, dept: match?.dept || "—" };
 };
 
@@ -511,11 +518,11 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                   )}
                 </div>
 
-                {/* Data rows — stacked with horizontal divider lines */}
+                {/* Data card */}
                 <div className="rounded-md border bg-muted/5 text-xs divide-y divide-border">
-                  {/* Row 1: Name + Emp No */}
+                  {/* Row 1: Name + Emp No together */}
                   <div className="flex items-center gap-4 px-3 py-2">
-                    <span className="text-muted-foreground font-medium w-16 shrink-0">Name</span>
+                    <span className="text-muted-foreground font-medium shrink-0">Name</span>
                     <span className="font-semibold text-foreground">{entry.performedByName || "\u2014"}</span>
                     {entry.performedBy && (
                       <>
@@ -525,65 +532,53 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                       </>
                     )}
                   </div>
-                  {/* Row 2: Status (if any) */}
-                  {(entry.fromStatus || entry.toStatus) && (
-                    <div className="flex items-center gap-4 px-3 py-2">
-                      <span className="text-muted-foreground font-medium w-16 shrink-0">Status</span>
-                      <span className="text-foreground">
-                        {entry.fromStatus && <span className="text-muted-foreground">{entry.fromStatus} </span>}
-                        {entry.fromStatus && entry.toStatus && <span className="text-muted-foreground/50">{"\u2192"} </span>}
-                        {entry.toStatus && <span className="font-semibold">{entry.toStatus}</span>}
-                      </span>
+                  {/* Row 2: Award + Fwd To — side by side box (only if either exists) */}
+                  {(entry.awardAmount != null && entry.awardAmount > 0 || entry.forwardedTo) && (
+                    <div className="flex items-center gap-0 divide-x divide-border">
+                      {entry.awardAmount != null && entry.awardAmount > 0 && (
+                        <div className="flex items-center gap-2 px-3 py-2 flex-1">
+                          <span className="text-muted-foreground font-medium shrink-0">Award</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">{"\u20b9"}{entry.awardAmount.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {entry.forwardedTo && (
+                        <div className="flex items-center gap-2 px-3 py-2 flex-1">
+                          <span className="text-muted-foreground font-medium shrink-0">Fwd To</span>
+                          <span className="font-semibold text-blue-600 dark:text-blue-400">{entry.forwardedTo}</span>
+                        </div>
+                      )}
                     </div>
                   )}
-                  {/* Row 3: Remarks */}
-                  <div className="flex items-start gap-4 px-3 py-2">
-                    <span className="text-muted-foreground font-medium w-16 shrink-0">Remarks</span>
-                    <span className={entry.comments ? "text-foreground" : "text-muted-foreground/50 italic"}>{entry.comments || "No remarks"}</span>
+                  {/* Row 3: Remarks — full width */}
+                  <div className="px-3 py-2">
+                    <span className="text-muted-foreground font-medium mr-2">Remarks</span>
+                    <span className={entry.comments ? "text-foreground leading-relaxed" : "text-muted-foreground/50 italic"}>{entry.comments || "No remarks"}</span>
                   </div>
-                  {/* Row 4: Forwarded To (if any) */}
-                  {entry.forwardedTo && (
-                    <div className="flex items-center gap-4 px-3 py-2">
-                      <span className="text-muted-foreground font-medium w-16 shrink-0">Fwd To</span>
-                      <span className="font-semibold text-blue-600 dark:text-blue-400">{entry.forwardedTo}</span>
-                    </div>
-                  )}
-                  {/* Row 5: Award (if any) */}
-                  {entry.awardAmount != null && entry.awardAmount > 0 && (
-                    <div className="flex items-center gap-4 px-3 py-2">
-                      <span className="text-muted-foreground font-medium w-16 shrink-0">Award</span>
-                      <span className="font-bold text-emerald-600 dark:text-emerald-400">{"\u20b9"}{entry.awardAmount.toLocaleString()}</span>
-                    </div>
-                  )}
-                  {/* Row 6: Attachments (if any) */}
+                  {/* Row 4: Attachments (if any) */}
                   {entry.attachments && entry.attachments.length > 0 && (
-                    <div className="flex items-center gap-4 px-3 py-2 flex-wrap">
-                      <span className="text-muted-foreground font-medium w-16 shrink-0">Files</span>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {entry.attachments.map((att, aIdx) => {
-                          const isImg = /^image\//i.test(att.type);
-                          const hasUrl = Boolean(att.url);
-                          return hasUrl ? (
-                            <a key={aIdx} href={att.url} download={att.name} target="_blank" rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-primary hover:underline"
-                              onClick={e => { if (att.url?.startsWith('blob:') && !isImg) { e.preventDefault(); const a = document.createElement('a'); a.href = att.url!; a.download = att.name; a.click(); } }}
-                            >
-                              {isImg ? <ImageIcon className="h-3 w-3" /> : <Paperclip className="h-3 w-3" />}
-                              {att.name}
-                            </a>
-                          ) : (
-                            <span key={aIdx} className="inline-flex items-center gap-1 text-muted-foreground">
-                              {isImg ? <ImageIcon className="h-3 w-3" /> : <Paperclip className="h-3 w-3" />}
-                              {att.name}
-                            </span>
-                          );
-                        })}
-                      </div>
+                    <div className="flex items-center gap-2 px-3 py-2 flex-wrap">
+                      <span className="text-muted-foreground font-medium shrink-0">Files</span>
+                      {entry.attachments.map((att, aIdx) => {
+                        const isImg = /^image\//i.test(att.type);
+                        const hasUrl = Boolean(att.url);
+                        return hasUrl ? (
+                          <a key={aIdx} href={att.url} download={att.name} target="_blank" rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-primary hover:underline"
+                            onClick={e => { if (att.url?.startsWith('blob:') && !isImg) { e.preventDefault(); const a = document.createElement('a'); a.href = att.url!; a.download = att.name; a.click(); } }}
+                          >
+                            {isImg ? <ImageIcon className="h-3 w-3" /> : <Paperclip className="h-3 w-3" />}
+                            {att.name}
+                          </a>
+                        ) : (
+                          <span key={aIdx} className="inline-flex items-center gap-1 text-muted-foreground">
+                            {isImg ? <ImageIcon className="h-3 w-3" /> : <Paperclip className="h-3 w-3" />}
+                            {att.name}
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
-
-
 
                 {/* Evaluation sheet (SSS / SFC) */}
                 {hasEvalSheet && (() => {
@@ -630,7 +625,7 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                                   <tr key={i} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/10"}`}>
                                     <td className="px-3 py-1.5 text-center text-muted-foreground">{i + 1}</td>
                                     <td className="px-3 py-1.5 font-medium">{row.label}</td>
-                                    <td className="px-3 py-1.5 text-center font-bold text-primary">{pts != null ? pts : "—"}</td>
+                                    <td className="px-3 py-1.5 text-center font-bold text-primary">{pts != null ? pts : "\u2014"}</td>
                                   </tr>
                                 );
                               })}
@@ -642,8 +637,8 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                           </table>
                         </div>
                         <div className="flex items-center gap-6 text-sm">
-                          <span className="text-muted-foreground">Weightage: <span className="font-semibold text-foreground">{weightage || "—"}</span></span>
-                          <span className="text-muted-foreground">Amount: <span className="font-bold text-primary">{calculatedAmount != null ? `₹${Number(calculatedAmount).toLocaleString()}` : "—"}</span></span>
+                          <span className="text-muted-foreground">Weightage: <span className="font-semibold text-foreground">{weightage || "\u2014"}</span></span>
+                          <span className="text-muted-foreground">Amount: <span className="font-bold text-primary">{calculatedAmount != null ? `\u20b9${Number(calculatedAmount).toLocaleString()}` : "\u2014"}</span></span>
                         </div>
                       </div>
                     );
@@ -668,9 +663,9 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                     const gembaTotal = meta.gembaTotal ?? null;
                     const kaizenPoints = meta.kaizenPoints ?? null;
                     const finalPoints = meta.finalPoints ?? null;
-                    const monthLabel = meta.selectedMonth != null ? SFC_MONTHS[meta.selectedMonth] : "—";
+                    const monthLabel = meta.selectedMonth != null ? SFC_MONTHS[meta.selectedMonth] : "\u2014";
                     const monthPts = meta.selectedMonth != null ? SFC_MONTH_POINTS[meta.selectedMonth] : null;
-                    const weightageLabel = meta.selectedWeightage != null ? SFC_WEIGHTAGE_OPTIONS[meta.selectedWeightage]?.label : "—";
+                    const weightageLabel = meta.selectedWeightage != null ? SFC_WEIGHTAGE_OPTIONS[meta.selectedWeightage]?.label : "\u2014";
 
                     return (
                       <div className="mt-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10 p-4 space-y-3">
@@ -680,7 +675,7 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                         <div className="flex items-center gap-6 text-sm flex-wrap">
                           <span className="text-muted-foreground">Month: <span className="font-semibold text-foreground">{monthLabel}{monthPts != null ? ` (${monthPts} pts)` : ""}</span></span>
                           <span className="text-muted-foreground">Weightage: <span className="font-semibold text-foreground">{weightageLabel}</span></span>
-                          <span className="text-muted-foreground">Kaizen Pts: <span className="font-bold text-blue-700 dark:text-blue-400">{kaizenPoints ?? "—"}</span></span>
+                          <span className="text-muted-foreground">Kaizen Pts: <span className="font-bold text-blue-700 dark:text-blue-400">{kaizenPoints ?? "\u2014"}</span></span>
                         </div>
                         <div className="rounded-lg border border-blue-200 dark:border-blue-800 overflow-hidden">
                           <table className="w-full text-xs">
@@ -698,20 +693,20 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                                   <td className="px-3 py-1.5 text-center text-muted-foreground">{i + 1}</td>
                                   <td className="px-3 py-1.5 font-medium">{row.label}</td>
                                   <td className="px-3 py-1.5 text-center text-muted-foreground">{row.max}</td>
-                                  <td className="px-3 py-1.5 text-center font-bold text-blue-700 dark:text-blue-400">{gembaSelections[i] ?? "—"}</td>
+                                  <td className="px-3 py-1.5 text-center font-bold text-blue-700 dark:text-blue-400">{gembaSelections[i] ?? "\u2014"}</td>
                                 </tr>
                               ))}
                               <tr className="bg-blue-100/40 dark:bg-blue-900/20 font-bold">
                                 <td colSpan={2} className="px-3 py-2 text-right">Gemba Total</td>
                                 <td className="px-3 py-2 text-center text-muted-foreground">100</td>
-                                <td className="px-3 py-2 text-center text-blue-700 dark:text-blue-400">{gembaTotal ?? "—"}</td>
+                                <td className="px-3 py-2 text-center text-blue-700 dark:text-blue-400">{gembaTotal ?? "\u2014"}</td>
                               </tr>
                             </tbody>
                           </table>
                         </div>
                         <div className="flex items-center justify-between text-sm rounded-lg border border-blue-200 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-900/20 px-4 py-2">
                           <span className="font-semibold text-blue-800 dark:text-blue-300">Final Points (Kaizen + Gemba)</span>
-                          <span className="text-lg font-bold text-blue-700 dark:text-blue-400">{finalPoints ?? "—"}</span>
+                          <span className="text-lg font-bold text-blue-700 dark:text-blue-400">{finalPoints ?? "\u2014"}</span>
                         </div>
                       </div>
                     );
@@ -745,28 +740,68 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
         })}
 
         {/* Pending step — shown when suggestion is still in-progress */}
-        {isPending && pendingWith && (
-          <div className="relative flex gap-3">
-            <div className="flex flex-col items-center shrink-0 w-7">
-              <div className="h-7 w-7 rounded-full border-2 border-dashed border-slate-400 dark:border-slate-600 flex items-center justify-center text-[11px] font-bold text-slate-400 dark:text-slate-500 shrink-0 animate-pulse">
-                {trail.length + 1}
+        {isPending && pendingWith && (() => {
+          // Resolve who it's pending with dynamically
+          const pendingEmpNo = suggestion.pendingWith
+            ? (() => {
+                const dash = suggestion.pendingWith.indexOf(" - ");
+                if (dash !== -1) {
+                  const name = suggestion.pendingWith.slice(dash + 3).trim();
+                  const found = allEmployeeOptions.find(o => o.name === name);
+                  return { name, empNo: found?.value || "", dept: found?.dept || "" };
+                }
+                // Try to find by assignedFlm or other fields
+                if (pendingWith === "FLM" && suggestion.assignedFlm) {
+                  const info = optByEmpNo[suggestion.assignedFlm];
+                  return { name: info?.name || suggestion.assignedFlm, empNo: suggestion.assignedFlm, dept: info?.dept || "" };
+                }
+                return { name: "", empNo: "", dept: "" };
+              })()
+            : { name: "", empNo: "", dept: "" };
+
+          return (
+            <div className="relative flex gap-3">
+              <div className="flex flex-col items-center shrink-0 w-7">
+                <div className="h-7 w-7 rounded-full border-2 border-dashed border-amber-400 dark:border-amber-600 flex items-center justify-center text-[11px] font-bold text-amber-500 dark:text-amber-400 shrink-0 animate-pulse">
+                  {trail.length + 1}
+                </div>
+              </div>
+              <div className="flex-1 min-w-0 pb-1">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-700">
+                    Pending
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    Waiting for <span className="font-semibold text-foreground">{pendingWith}</span> approval
+                  </span>
+                  <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium ml-auto shrink-0">
+                    {daysPending} day{daysPending !== 1 ? "s" : ""} pending
+                  </span>
+                </div>
+                <div className="rounded-md border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/30 dark:bg-amber-950/10 text-xs">
+                  <div className="grid grid-cols-2 gap-x-4 px-3 py-2 border-b border-dashed border-amber-200 dark:border-amber-800">
+                    <div className="flex items-center gap-2 py-0.5">
+                      <span className="text-muted-foreground font-medium shrink-0">Name</span>
+                      <span className={`font-semibold truncate ${pendingEmpNo.name ? "text-foreground" : "text-muted-foreground/30"}`}>
+                        {pendingEmpNo.name || "\u2014"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 py-0.5">
+                      <span className="text-muted-foreground font-medium shrink-0">Emp No</span>
+                      <span className={`font-mono ${pendingEmpNo.empNo ? "text-foreground" : "text-muted-foreground/30"}`}>
+                        {pendingEmpNo.empNo || "\u2014"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="px-3 py-2">
+                    <span className="text-muted-foreground/40 font-medium mr-2">Remarks</span>
+                    <span className="text-muted-foreground/30 italic">Awaiting review...</span>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="flex-1 min-w-0 pb-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-700">
-                  Pending
-                </span>
-                <span className="text-sm font-medium text-muted-foreground">
-                  Waiting for <span className="font-semibold text-foreground">{pendingWith}</span> approval
-                </span>
-                <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium ml-auto">
-                  {daysPending} day{daysPending !== 1 ? "s" : ""} pending
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     );
   };
@@ -780,39 +815,20 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
         <div className="shrink-0 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground px-8 py-5 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <Hash className="h-5 w-5 opacity-70 shrink-0" />
-              <span className="text-base font-bold">Request #{serialNo}</span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/20 font-medium">{suggestion.suggestionNo}</span>
+              <FileText className="h-5 w-5 opacity-70 shrink-0" />
+              <span className="text-base font-bold">{suggestion.suggestionNo}</span>
               <Badge variant="outline" className={`text-[11px] border-white/40 bg-white/10 text-white ${statusColors[suggestion.status] || ""}`}>
                 {suggestion.status}
               </Badge>
             </div>
-            <p className="text-xs opacity-75 mt-1.5 flex items-center gap-2.5 flex-wrap">
-              <Tag className="h-3.5 w-3.5" />
-              <span>{suggestion.type}</span>
-              {suggestion.date && (
-                <>
-                  <span className="opacity-50">·</span>
-                  <Calendar className="h-3.5 w-3.5" />
-                  <span>{formatDate(suggestion.date)}</span>
-                </>
-              )}
-              {suggestion.awardAmount ? (
-                <>
-                  <span className="opacity-50">·</span>
-                  <Award className="h-3.5 w-3.5" />
-                  <span>₹{suggestion.awardAmount.toLocaleString()}</span>
-                </>
-              ) : null}
-            </p>
           </div>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 shrink-0 rounded-full text-white/70 hover:text-white hover:bg-white/20"
+            className="h-9 w-9 shrink-0 rounded-full bg-white/15 text-white hover:text-white hover:bg-white/30 border border-white/20 transition-all"
             onClick={() => onOpenChange(false)}
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </Button>
         </div>
 
@@ -820,115 +836,147 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
         <ScrollArea className="flex-1 overflow-y-auto">
           <div className="px-8 py-6 space-y-6">
 
-            {/* ── Suggestion Info ── */}
-            <div className="space-y-3">
-              <SectionHead icon={FileText} title="Suggestion Info" />
-              <div className="rounded-lg border bg-muted/10 p-5">
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-4">
-                  <InfoItem icon={Hash} label="Suggestion No" value={suggestion.suggestionNo} />
-                  <InfoItem icon={Calendar} label="Date" value={formatDate(suggestion.date)} />
-                  <InfoItem icon={Tag} label="Type" value={suggestion.type} />
-                  <InfoItem icon={Tag} label="Category" value={suggestion.category} />
-                  <InfoItem icon={Building2} label="Range / Area" value={
-                    suggestion.range
-                    || suggestion.formData?.range as string
-                    || (() => {
-                      const dept = suggestion.department || "";
-                      const parts = dept.split("/");
-                      return parts.length > 1 ? parts[parts.length - 1].trim() : dept.trim();
-                    })()
-                    || "—"
-                  } />
-                  <InfoItem icon={Clock} label="Days Pending" value={String(calculateDaysPending(suggestion))} />
+            {/* ── Identification & Employee — side by side ── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <SectionHead icon={FileText} title="Identification" />
+                <div className="rounded-lg border bg-muted/10 px-4 py-2 mt-1.5 space-y-0">
+                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                    <span className="text-xs text-muted-foreground w-40 shrink-0">Suggestion No</span>
+                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.suggestionNo}</span>
+                  </div>
+                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                    <span className="text-xs text-muted-foreground w-40 shrink-0">Date</span>
+                    <span className="text-xs text-foreground font-medium flex-1">{formatDate(suggestion.date)}</span>
+                  </div>
+                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                    <span className="text-xs text-muted-foreground w-40 shrink-0">Type</span>
+                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.type}</span>
+                  </div>
+                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                    <span className="text-xs text-muted-foreground w-40 shrink-0">Category</span>
+                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.category}</span>
+                  </div>
+                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                    <span className="text-xs text-muted-foreground w-40 shrink-0">Range</span>
+                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.range || "—"}</span>
+                  </div>
+                  <div className="flex gap-3 py-1.5 items-start">
+                    <span className="text-xs text-muted-foreground w-40 shrink-0">Days Pending</span>
+                    <span className="text-xs text-foreground font-medium flex-1">{String(calculateDaysPending(suggestion))}</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <SectionHead icon={User} title="Employee" />
+                <div className="rounded-lg border bg-muted/10 px-4 py-2 mt-1.5 space-y-0">
+                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                    <span className="text-xs text-muted-foreground w-40 shrink-0">Employee Name</span>
+                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.employeeName || "—"}</span>
+                  </div>
+                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                    <span className="text-xs text-muted-foreground w-40 shrink-0">Employee No</span>
+                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.employeeNo}</span>
+                  </div>
+                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                    <span className="text-xs text-muted-foreground w-40 shrink-0">Department</span>
+                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.department || optByEmpNo[suggestion.employeeNo || ""]?.dept || "—"}</span>
+                  </div>
+                  {suggestion.formData?.suggestionFor && (
+                    <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                      <span className="text-xs text-muted-foreground w-40 shrink-0">Suggestion For</span>
+                      <span className="text-xs text-foreground font-medium flex-1">{suggestion.formData.suggestionFor === "behalf" ? "On Behalf" : "Self"}</span>
+                    </div>
+                  )}
+                  <div className="flex gap-3 py-1.5 items-start">
+                    <span className="text-xs text-muted-foreground w-40 shrink-0">Group Suggestion</span>
+                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.formData?.groupSuggestion === "yes" ? "Yes" : "No"}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* ── Employee ── */}
-            <div className="space-y-3">
-              <SectionHead icon={User} title="Employee" />
-              <div className="rounded-lg border bg-muted/10 p-5">
-                <div className="flex items-start gap-4">
-                  <div className="h-11 w-11 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                    <User className="h-5 w-5 text-primary" />
-                  </div>
-                  <div className="space-y-2 flex-1 min-w-0">
-                    <p className="text-base font-bold text-foreground">{suggestion.employeeName || "—"}</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2">
-                      <InfoItem label="Employee No" value={suggestion.employeeNo} />
-                      <InfoItem label="Department" value={suggestion.department} />
-                      {suggestion.formData?.suggestionFor && (
-                        <InfoItem label="Suggestion For" value={suggestion.formData.suggestionFor === "behalf" ? "On Behalf" : "Self"} />
-                      )}
-                      {suggestion.formData?.groupSuggestion === "yes" && (
-                        <InfoItem label="Group Suggestion" value="Yes" />
-                      )}
+            {/* On Behalf — Main Suggestor table */}
+            {suggestion.formData?.suggestionFor === "behalf" && suggestion.formData?.mainSuggestor && (() => {
+              const ms = String(suggestion.formData.mainSuggestor);
+              const msInfo = optByEmpNo[ms];
+              const msName = msInfo?.name || ms;
+              const msInitials = msName.split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+              return (
+                <>
+                  <SectionHead icon={User} title="Main Suggestor (On Behalf)" />
+                  <div className="rounded-lg border overflow-hidden">
+                    <div className="grid grid-cols-[1fr_100px_120px] gap-2 px-3 py-1.5 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <span>Name</span>
+                      <span>Employee No</span>
+                      <span>Department</span>
                     </div>
-                  </div>
-                </div>
-
-                {/* On Behalf person details */}
-                {suggestion.formData?.suggestionFor === "behalf" && suggestion.formData?.mainSuggestor && (() => {
-                  const details = resolveEmpDetails(suggestion.formData.mainSuggestor as string);
-                  return (
-                    <div className="pt-3 mt-3 border-t border-border/40">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5 mb-2">
-                        <User className="h-3 w-3" /> On Behalf Of
-                      </p>
-                      <div className="grid grid-cols-3 gap-4">
-                        <InfoItem label="Employee Name" value={details.name} />
-                        <InfoItem label="Emp No" value={details.empNo} />
-                        <InfoItem label="Department" value={details.dept} />
+                    <div className="grid grid-cols-[1fr_100px_120px] gap-2 px-3 py-2.5 items-center">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="h-7 w-7 rounded-full bg-indigo-500 flex items-center justify-center shrink-0 shadow-sm">
+                          <span className="text-white text-[10px] font-bold">{msInitials}</span>
+                        </div>
+                        <span className="text-xs font-medium truncate">{msName}</span>
                       </div>
+                      <span className="text-xs text-muted-foreground font-mono">{ms}</span>
+                      <span className="text-xs text-muted-foreground">{msInfo?.dept || "—"}</span>
                     </div>
-                  );
-                })()}
+                  </div>
+                </>
+              );
+            })()}
 
-                {/* Team members if any */}
-                {(suggestion.formData?.teamMembers as string[] | undefined)?.length ? (() => {
-                  const members = (suggestion.formData!.teamMembers as string[]).map((m) => {
-                    const di = m.indexOf("\u2013");
-                    if (di !== -1) {
-                      const mName = m.slice(0, di).trim();
-                      const mNo = m.slice(di + 1).trim();
-                      const details = resolveEmpDetails(mNo);
-                      return { name: mName || details.name, empNo: mNo, dept: details.dept };
-                    }
-                    const details = resolveEmpDetails(m);
-                    return { name: details.name, empNo: details.empNo, dept: details.dept };
-                  });
-                  return (
-                    <div className="pt-3 mt-3 border-t border-border/40">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5 mb-2">
-                        <Users className="h-3 w-3" /> Team Members ({members.length})
-                      </p>
-                      <div className="rounded-lg border overflow-hidden shadow-sm">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="bg-primary text-primary-foreground text-xs font-semibold">
-                              <th className="px-4 py-2.5 text-left w-10">SNo</th>
-                              <th className="px-4 py-2.5 text-left">Employee Name</th>
-                              <th className="px-4 py-2.5 text-left">Emp No</th>
-                              <th className="px-4 py-2.5 text-left">Department</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {members.map((member, i) => (
-                              <tr key={i} className={`border-b last:border-0 ${i % 2 === 0 ? "bg-background" : "bg-muted/15"}`}>
-                                <td className="px-4 py-2.5 text-muted-foreground font-medium">{i + 1}</td>
-                                <td className="px-4 py-2.5 font-semibold text-foreground">{member.name || "—"}</td>
-                                <td className="px-4 py-2.5 font-mono text-muted-foreground">{member.empNo || "—"}</td>
-                                <td className="px-4 py-2.5 text-muted-foreground">{member.dept || "—"}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+            {/* Team Members — table format */}
+            {(suggestion.formData?.teamMembers as string[] | undefined)?.length ? (() => {
+              const avatarColors = ["bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500","bg-rose-500","bg-cyan-500","bg-pink-500","bg-indigo-500"];
+              const teamMembers = suggestion.formData!.teamMembers as string[];
+              const teamMemberShares = (suggestion.formData!.teamMemberShares || {}) as Record<string, string>;
+              return (
+                <>
+                  <SectionHead icon={Users} title="Team Members & Share Distribution" />
+                  <div className="rounded-lg border overflow-hidden">
+                    <div className="grid grid-cols-[1fr_100px_100px_60px] gap-2 px-3 py-2 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <span>Name</span>
+                      <span>Employee No</span>
+                      <span>Department</span>
+                      <span className="text-right">Share</span>
                     </div>
-                  );
-                })() : null}
-              </div>
-            </div>
+                    {teamMembers.map((m: string, i: number) => {
+                      const share = teamMemberShares[m];
+                      const di = m.indexOf("\u2013");
+                      let mName: string;
+                      let mNo: string;
+                      if (di !== -1) {
+                        mName = m.slice(0, di).trim();
+                        mNo   = m.slice(di + 1).trim();
+                      } else {
+                        const found = optByEmpNo[m];
+                        mName = found?.name || "";
+                        mNo = m;
+                      }
+                      const dept = optByEmpNo[mNo]?.dept || "—";
+                      const initials = (mName || mNo).split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                      const color = avatarColors[i % avatarColors.length];
+                      return (
+                        <div key={i} className="grid grid-cols-[1fr_100px_100px_60px] gap-2 px-3 py-2.5 border-b last:border-0 items-center hover:bg-muted/20">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`h-7 w-7 rounded-full ${color} flex items-center justify-center shrink-0 shadow-sm`}>
+                              <span className="text-white text-[10px] font-bold">{initials}</span>
+                            </div>
+                            <span className="text-xs font-medium truncate">{mName || mNo}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground font-mono">{mNo || "—"}</span>
+                          <span className="text-xs text-muted-foreground">{dept}</span>
+                          <span className={`text-xs font-bold text-right ${share ? "text-primary" : "text-muted-foreground"}`}>
+                            {share ? `${share}%` : "—"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })() : null}
 
             {/* ── Transfer History ── */}
             {suggestion.transferHistory && suggestion.transferHistory.length > 0 && (
@@ -991,7 +1039,7 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                 <Award className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <div className="flex items-center gap-6 flex-wrap">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Award Amount</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Total Award</p>
                     <p className="text-lg font-bold text-emerald-800 dark:text-emerald-300">₹{suggestion.awardAmount.toLocaleString()}</p>
                   </div>
                   {suggestion.awardCategory && (
@@ -1027,6 +1075,93 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
             {/* ── Audit Trail ── */}
             <SectionHead icon={Clock} title="Approval Trail" />
             {renderAuditTrail()}
+
+            {/* ── Member-wise Amount Distribution (after approval trail, only when closed with award) ── */}
+            {suggestion.status === "Approved & Closed" && suggestion.awardAmount && suggestion.awardAmount > 0 && (() => {
+              const fd: Record<string, any> = suggestion.formData || {};
+              const award = suggestion.awardAmount || 0;
+              const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;
+              const isGroup = fd.groupSuggestion === "yes";
+              const teamMembers: string[] = fd.teamMembers || [];
+              const teamMemberShares: Record<string, string> = fd.teamMemberShares || {};
+
+              type DistEntry = { empNo: string; name: string; sharePercent: number; amount: number };
+              const dist: DistEntry[] = [];
+
+              if (isGroup && teamMembers.length > 0) {
+                const hasShares = Object.keys(teamMemberShares).length > 0;
+                const memberCount = teamMembers.length;
+                teamMembers.forEach((memberId, idx) => {
+                  let sharePct: number;
+                  if (hasShares && teamMemberShares[memberId]) {
+                    sharePct = Number(teamMemberShares[memberId]) || 0;
+                  } else {
+                    const base = Math.floor(100 / memberCount);
+                    sharePct = idx === 0 ? base + (100 - base * memberCount) : base;
+                  }
+                  const memberAmount = Math.round((award * sharePct) / 100);
+                  const details = resolveEmpDetails(memberId);
+                  dist.push({ empNo: memberId, name: details.name, sharePercent: sharePct, amount: memberAmount });
+                });
+              } else if (isOnBehalf) {
+                const details = resolveEmpDetails(fd.mainSuggestor);
+                dist.push({ empNo: fd.mainSuggestor, name: details.name, sharePercent: 100, amount: award });
+              } else {
+                dist.push({ empNo: suggestion.employeeNo || "—", name: suggestion.employeeName || "—", sharePercent: 100, amount: award });
+              }
+
+              if (dist.length === 0) return null;
+
+              return (
+                <>
+                  <Separator />
+                  <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-700 bg-gradient-to-br from-emerald-50/60 via-background to-teal-50/40 dark:from-emerald-950/20 dark:via-background dark:to-teal-950/15 p-5 space-y-4 shadow-sm">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                        <Award className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Amount Distribution</h3>
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                          Total ₹{award.toLocaleString()} distributed to {dist.length} recipient{dist.length > 1 ? "s" : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {dist.map((d, i) => {
+                        const avatarColors = ["bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500","bg-rose-500","bg-cyan-500","bg-pink-500","bg-indigo-500"];
+                        const color = avatarColors[i % avatarColors.length];
+                        const initials = d.name.split(" ").filter(Boolean).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                        return (
+                          <div key={d.empNo} className="flex items-center gap-3 bg-background rounded-lg px-4 py-3 border border-emerald-200/60 dark:border-emerald-800/40 shadow-sm">
+                            <div className={`h-9 w-9 rounded-full ${color} flex items-center justify-center shrink-0 shadow-sm`}>
+                              <span className="text-white text-[11px] font-bold">{initials}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold truncate">{d.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono">{d.empNo}</p>
+                            </div>
+                            {dist.length > 1 && (
+                              <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-2.5 py-1 rounded-full shrink-0">
+                                {d.sharePercent}%
+                              </span>
+                            )}
+                            <div className="shrink-0 px-4 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300/60 dark:border-emerald-700/40">
+                              <span className="text-base font-extrabold tabular-nums text-emerald-700 dark:text-emerald-400">₹{d.amount.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex justify-end">
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-200/60 dark:bg-emerald-800/40 px-4 py-1.5 rounded-full border border-emerald-300 dark:border-emerald-700">
+                        Grand Total: ₹{dist.reduce((s, d) => s + d.amount, 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
 
           </div>
         </ScrollArea>

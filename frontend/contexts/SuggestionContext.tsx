@@ -28,7 +28,7 @@ interface SuggestionContextType {
 const SuggestionContext = createContext<SuggestionContextType | undefined>(undefined);
 
 // Bump this version whenever mock data structure changes to force a fresh seed.
-const MOCK_DATA_VERSION = "v11";
+const MOCK_DATA_VERSION = "v12";
 
 // ── Stale-cache eviction ─────────────────────────────────────────────────────
 // Scans all bidp_db_ data keys; removes any whose version tag is missing or stale.

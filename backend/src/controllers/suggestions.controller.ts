@@ -39,7 +39,7 @@ export const createSuggestion = asyncHandler(async (req: Request, res: Response)
   const user = req.user!;
 
   // Validate typeCode against whitelist
-  const VALID_TYPE_CODES = ["SSS", "SFC", "MIC", "DCP", "CTF"];
+  const VALID_TYPE_CODES = ["SSS", "SFC", "MIC", "DCP", "CTF", "JAP"];
   if (!body.typeCode || !VALID_TYPE_CODES.includes(body.typeCode)) {
     res.status(400).json({ error: "Invalid or missing typeCode" });
     return;

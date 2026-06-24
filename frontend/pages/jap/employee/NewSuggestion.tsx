@@ -27,6 +27,9 @@ import type { AuthorityAssignment } from "@/lib/apiService";
 import { useVoiceEngine, VOICE_LANGUAGES } from "@/hooks/useVoiceEngine";
 import VoiceHighlight from "@/components/VoiceHighlight";
 import { toast } from "sonner";
+import DuplicateAlertDialog from "@/components/bidp/DuplicateAlertDialog";
+import { detectDuplicatesFull, type DuplicateMatch, type PendingMatch } from "@/lib/bidp/duplicateDetector";
+import { registerPending, unregisterPending, getActivePending, createPendingId, clearExpiredPending } from "@/lib/bidp/pendingSubmissionsStore";
 import {
   FilePlus, User, Building2, Wrench, Lightbulb, CheckCircle2,
   Hash, Tag, Users, RefreshCw, Mic, MicOff, Languages, X, Search, UserPlus, Save,
@@ -128,7 +131,7 @@ const ReadonlyField = ({
 const JaPNewSuggestion = () => {
   const { user } = useAuth();
   const { addNotification } = useNotifications();
-  const { suggestions, addSuggestion, updateSuggestion } = useSuggestions();
+  const { suggestions, addSuggestion, updateSuggestion, getSuggestionsSnapshot } = useSuggestions();
   const { plantPrefix } = usePlant();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -296,8 +299,25 @@ const JaPNewSuggestion = () => {
   // -- Validation & submission ————————————————————————————————————————————————
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatch[]>([]);
+  const [pendingMatchList, setPendingMatchList] = useState<PendingMatch[]>([]);
+  const [showDuplicateAlert, setShowDuplicateAlert] = useState(false);
+  const pendingSubmitRef = useRef(false);
+  const pendingIdRef = useRef<string | null>(null);
+
+  // Keep pending-submission registry clean for live conflict detection
+  useEffect(() => {
+    clearExpiredPending();
+    return () => {
+      if (pendingIdRef.current) {
+        unregisterPending(pendingIdRef.current);
+        pendingIdRef.current = null;
+      }
+    };
+  }, []);
 
   const validate = (): boolean => {
     const e: FormErrors = {};
@@ -379,7 +399,67 @@ const JaPNewSuggestion = () => {
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting || isScanning) return;
     if (!validate()) { toast.error("Please fill all required fields"); return; }
+
+    // Duplicate detection phase (same flow as BidP, scoped to JaP suggestions)
+    if (!pendingSubmitRef.current) {
+      if (!pendingIdRef.current) pendingIdRef.current = createPendingId();
+
+      const selectedTheme = JAP_THEMES.find(t => t.value === themeName);
+      const duplicateInput = {
+        subject: proposedMethod.slice(0, 120) || presentMethod.slice(0, 120) || "Untitled Suggestion",
+        presentMethod,
+        proposedMethod,
+        benefits,
+        category: selectedTheme ? selectedTheme.label : "General",
+        suggestionType: "Improvement Suggestion",
+      };
+
+      registerPending({
+        id: pendingIdRef.current,
+        employeeNo: user?.employeeNo,
+        employeeName: user?.name,
+        registeredAt: Date.now(),
+        subject: duplicateInput.subject,
+        presentMethod: duplicateInput.presentMethod,
+        proposedMethod: duplicateInput.proposedMethod,
+        benefits: duplicateInput.benefits,
+        category: duplicateInput.category,
+        suggestionType: duplicateInput.suggestionType,
+      });
+
+      setIsScanning(true);
+      // Brief pause so the scanning indicator is visible to the user.
+      await new Promise(r => setTimeout(r, 1200));
+
+      // Use the in-memory context snapshot — it is already scoped to the
+      // current plant (PLT-02) and includes all previously submitted JaP
+      // suggestions (seed data + user submissions persisted in sessionStorage).
+      // We do NOT call the backend API here: the auto-login JWT belongs to a
+      // PLT-01 user, so the API would return BidP data, not JaP data.
+      const snapshot = getSuggestionsSnapshot();
+      // Safety filter in case the snapshot ever contains cross-plant data.
+      const japSuggestions = snapshot.filter(
+        s => (s.plantCode ?? (s as any).plant_code) === "PLT-02"
+      );
+
+      const detection = detectDuplicatesFull(
+        duplicateInput,
+        japSuggestions,
+        getActivePending(pendingIdRef.current)
+      );
+      setIsScanning(false);
+
+      if (detection.hasConflict) {
+        setDuplicateMatches(detection.saved);
+        setPendingMatchList(detection.pending);
+        setShowDuplicateAlert(true);
+        return;
+      }
+    }
+
+    pendingSubmitRef.current = false;
     setIsSubmitting(true);
     try {
       const payload = buildPayload("Pending Feasibility Review", "Superior");
@@ -395,8 +475,17 @@ const JaPNewSuggestion = () => {
         description: `${suggNo} — submitted for planner review`,
       });
       addNotification(`JaP suggestion ${suggNo} submitted — pending planner review`, "success");
+
+      if (pendingIdRef.current) {
+        unregisterPending(pendingIdRef.current);
+        pendingIdRef.current = null;
+      }
     } catch {
       toast.error("Submission failed — please try again");
+      if (pendingIdRef.current) {
+        unregisterPending(pendingIdRef.current);
+        pendingIdRef.current = null;
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -1110,8 +1199,10 @@ const JaPNewSuggestion = () => {
 
       {/* Action buttons */}
       <div className="flex gap-2 pb-4">
-        <Button onClick={handleSubmit} disabled={isSubmitting || submitted} className="gap-1.5">
-          {isSubmitting
+        <Button onClick={handleSubmit} disabled={isSubmitting || isScanning || submitted} className="gap-1.5">
+          {isScanning
+            ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Checking duplicates…</>
+            : isSubmitting
             ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Submitting…</>
             : <><FilePlus className="h-3.5 w-3.5" /> Submit Suggestion / सुझाव जमा करें</>
           }
@@ -1119,15 +1210,38 @@ const JaPNewSuggestion = () => {
         <Button
           variant="outline"
           onClick={handleSaveDraft}
-          disabled={isSubmitting || submitted}
+          disabled={isSubmitting || isScanning || submitted}
           className="gap-1.5"
         >
           <Save className="h-3.5 w-3.5" /> Save Draft / ड्राफ्ट सहेजें
         </Button>
-        <Button variant="outline" onClick={handleReset} disabled={isSubmitting}>
+        <Button variant="outline" onClick={handleReset} disabled={isSubmitting || isScanning}>
           Reset / रीसेट
         </Button>
       </div>
+
+      <DuplicateAlertDialog
+        open={showDuplicateAlert}
+        matches={duplicateMatches}
+        pendingMatches={pendingMatchList}
+        onCancel={() => {
+          setShowDuplicateAlert(false);
+          setDuplicateMatches([]);
+          setPendingMatchList([]);
+          pendingSubmitRef.current = false;
+          if (pendingIdRef.current) {
+            unregisterPending(pendingIdRef.current);
+            pendingIdRef.current = null;
+          }
+        }}
+        onProceed={() => {
+          setShowDuplicateAlert(false);
+          setDuplicateMatches([]);
+          setPendingMatchList([]);
+          pendingSubmitRef.current = true;
+          handleSubmit();
+        }}
+      />
     </div>
   );
 };

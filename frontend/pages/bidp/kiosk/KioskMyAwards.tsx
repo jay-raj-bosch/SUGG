@@ -1,4 +1,4 @@
-﻿// KioskMyAwards — mirrors employee MyAwards (table + filters)
+// KioskMyAwards — mirrors employee MyAwards (table + filters + pagination)
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Trophy, X } from "lucide-react";
-import { useState, useMemo } from "react";
+import { Trophy, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
 
 const KioskMyAwards = () => {
   const { getAwardedSuggestions } = useSuggestions();
@@ -20,6 +20,8 @@ const KioskMyAwards = () => {
   const [suggNoFilter, setSuggNoFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const categories = useMemo(() => {
     const cats = new Set(allAwards.map(a => a.awardCategory).filter(Boolean) as string[]);
@@ -37,14 +39,22 @@ const KioskMyAwards = () => {
     });
   }, [allAwards, nameFilter, empNoFilter, suggNoFilter, dateFilter, categoryFilter]);
 
+  // Reset to page 1 when filters change
+  useEffect(() => { setCurrentPage(1); }, [nameFilter, empNoFilter, suggNoFilter, dateFilter, categoryFilter]);
+
   const handleReset = () => {
     setNameFilter(""); setEmpNoFilter(""); setSuggNoFilter(""); setDateFilter(""); setCategoryFilter("all");
   };
 
   const hasFilter = nameFilter || empNoFilter || suggNoFilter || dateFilter || categoryFilter !== "all";
 
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(awards.length / rowsPerPage));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageRows = awards.slice((safePage - 1) * rowsPerPage, safePage * rowsPerPage);
+
   return (
-    <div className="max-w-5xl space-y-4">
+    <div className="space-y-4 w-full">
       <h2 className="text-xl font-bold text-foreground">
         My Awards <span className="text-sm font-normal text-muted-foreground">/ {t("My Awards")}</span>
       </h2>
@@ -55,39 +65,19 @@ const KioskMyAwards = () => {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Name <span className="text-[9px] opacity-70">/ {t("Name")}</span></Label>
-              <Input
-                className="h-8 text-xs"
-                placeholder="Filter by name..."
-                value={nameFilter}
-                onChange={e => setNameFilter(e.target.value)}
-              />
+              <Input className="h-8 text-xs" placeholder="Filter by name..." value={nameFilter} onChange={e => setNameFilter(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Emp No <span className="text-[9px] opacity-70">/ {t("Employee No")}</span></Label>
-              <Input
-                className="h-8 text-xs"
-                placeholder="Filter by emp no..."
-                value={empNoFilter}
-                onChange={e => setEmpNoFilter(e.target.value)}
-              />
+              <Input className="h-8 text-xs" placeholder="Filter by emp no..." value={empNoFilter} onChange={e => setEmpNoFilter(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Suggestion No <span className="text-[9px] opacity-70">/ {t("Suggestion No")}</span></Label>
-              <Input
-                className="h-8 text-xs"
-                placeholder="Filter by suggestion no..."
-                value={suggNoFilter}
-                onChange={e => setSuggNoFilter(e.target.value)}
-              />
+              <Input className="h-8 text-xs" placeholder="Filter by suggestion no..." value={suggNoFilter} onChange={e => setSuggNoFilter(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">From Date <span className="text-[9px] opacity-70">/ {t("From Date")}</span></Label>
-              <Input
-                type="date"
-                className="h-8 text-xs"
-                value={dateFilter}
-                onChange={e => setDateFilter(e.target.value)}
-              />
+              <Input type="date" className="h-8 text-xs" value={dateFilter} onChange={e => setDateFilter(e.target.value)} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Award Category <span className="text-[9px] opacity-70">/ {t("Award Category")}</span></Label>
@@ -113,61 +103,76 @@ const KioskMyAwards = () => {
 
       {/* Table */}
       <Card className="card-shadow">
-        <CardContent className="pt-4 overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
+        <CardContent className="pt-4">
+          <div className="overflow-auto rounded-md border" style={{ maxHeight: "calc(100vh - 380px)", minHeight: "200px" }}>
+          <table className="min-w-[900px] w-full text-xs">
+            <thead className="sticky top-0 z-20">
               <tr className="border-b text-left bg-muted">
-                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap">
-                  Employee No <span className="text-[9px] opacity-70">/ {t("Employee No")}</span>
-                </th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap">
-                  Employee Name <span className="text-[9px] opacity-70">/ {t("Name")}</span>
-                </th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap">
-                  Employee Department <span className="text-[9px] opacity-70">/ {t("Department")}</span>
-                </th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap">
-                  Suggestion No <span className="text-[9px] opacity-70">/ {t("Suggestion No")}</span>
-                </th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap text-right">
-                  Amount <span className="text-[9px] opacity-70">/ {t("Amount")}</span>
-                </th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap">
-                  Received Date <span className="text-[9px] opacity-70">/ {t("Award Date")}</span>
-                </th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap">
-                  Award Category <span className="text-[9px] opacity-70">/ {t("Award Category")}</span>
-                </th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap w-12">Sl No</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Employee No <span className="text-[9px] opacity-70">/ {t("Employee No")}</span></th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Employee Name <span className="text-[9px] opacity-70">/ {t("Name")}</span></th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Department <span className="text-[9px] opacity-70">/ {t("Department")}</span></th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Suggestion No <span className="text-[9px] opacity-70">/ {t("Suggestion No")}</span></th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap text-right">Amount <span className="text-[9px] opacity-70">/ {t("Amount")}</span></th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Received Date <span className="text-[9px] opacity-70">/ {t("Award Date")}</span></th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Award Category <span className="text-[9px] opacity-70">/ {t("Award Category")}</span></th>
               </tr>
             </thead>
             <tbody>
-              {awards.length === 0 ? (
+              {pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-muted-foreground">
+                  <td colSpan={8} className="py-10 text-center text-muted-foreground">
                     {hasFilter ? "No awards match your filters." : `No awards yet / ${t("No awards yet")}`}
                   </td>
                 </tr>
-              ) : awards.map(a => (
+              ) : pageRows.map((a, idx) => (
                 <tr key={a.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                  <td className="py-2.5 px-3 text-muted-foreground">{(safePage - 1) * rowsPerPage + idx + 1}</td>
                   <td className="py-2.5 px-3 font-mono">{a.employeeNo || "—"}</td>
                   <td className="py-2.5 px-3 font-medium whitespace-nowrap">{a.employeeName || "—"}</td>
                   <td className="py-2.5 px-3">{a.department || "—"}</td>
                   <td className="py-2.5 px-3 font-mono whitespace-nowrap">{a.suggestionNo}</td>
-                  <td className="py-2.5 px-3 font-bold text-primary text-right whitespace-nowrap">
-                    ₹{a.awardAmount?.toLocaleString() || "—"}
-                  </td>
+                  <td className="py-2.5 px-3 font-bold text-primary text-right whitespace-nowrap">₹{a.awardAmount?.toLocaleString() || "—"}</td>
                   <td className="py-2.5 px-3 whitespace-nowrap">{a.awardDate || a.date || "—"}</td>
                   <td className="py-2.5 px-3">
                     {a.awardCategory ? (
-                      <Badge variant="outline" className="text-[10px] gap-1">
-                        <Trophy className="h-3 w-3 text-accent" />{a.awardCategory}
-                      </Badge>
+                      <Badge variant="outline" className="text-[10px] gap-1"><Trophy className="h-3 w-3 text-accent" />{a.awardCategory}</Badge>
                     ) : "—"}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
+
+          {/* Pagination bar */}
+          <div className="flex items-center justify-between gap-4 pt-3 mt-2 border-t border-border/40 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Rows per page:</span>
+              <Select value={String(rowsPerPage)} onValueChange={v => { setRowsPerPage(Number(v)); setCurrentPage(1); }}>
+                <SelectTrigger className="h-7 w-16 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="text-xs text-muted-foreground">
+                {awards.length > 0
+                  ? `${(safePage - 1) * rowsPerPage + 1}–${Math.min(safePage * rowsPerPage, awards.length)} of ${awards.length}`
+                  : "0 records"}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Page {safePage} of {totalPages}</span>
+              <Button variant="outline" size="icon" className="h-7 w-7" disabled={safePage <= 1} onClick={() => setCurrentPage(safePage - 1)}>
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="outline" size="icon" className="h-7 w-7" disabled={safePage >= totalPages} onClick={() => setCurrentPage(safePage + 1)}>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

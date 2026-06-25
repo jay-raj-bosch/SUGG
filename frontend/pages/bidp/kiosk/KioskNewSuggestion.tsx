@@ -129,7 +129,9 @@ const KioskNewSuggestion = () => {
     const selectedFlm = flmOptions.find(f => f.value === typeFields.flm);
     const flmDisplayName = selectedFlm?.name || "Pending Review";
     try {
-      addSuggestion({
+      // await addSuggestion so the context state is updated BEFORE we reset
+      // the form. This prevents back-to-back submissions from colliding.
+      await addSuggestion({
         suggestionNo: "",
         date: today,
         subject: typeFields.subject || typeFields.kaizenTheme || typeFields.machineNoArea || "(no subject)",

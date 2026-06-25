@@ -587,16 +587,16 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
 
                   if (evalType === "SSS") {
                     const SSS_CRITERIA_LABELS = [
-                      { label: "Position or Grade Factor",       optA: { pts: 0.5 }, optB: { pts: 1 } },
-                      { label: "Merit Factor",                   optA: { pts: 0.5 }, optB: { pts: 1 } },
-                      { label: "Technical Value of Suggestion",  optA: { pts: 0.5 }, optB: { pts: 1 } },
-                      { label: "Effort Factor",                  optA: { pts: 0.5 }, optB: { pts: 1 } },
-                      { label: "Safety Factor",                  optA: { pts: 0.5 }, optB: { pts: 1 } },
-                      { label: "Applicability",                  optA: { pts: 0   }, optB: { pts: 1 } },
-                      { label: "Recurring Benefit",              optA: { pts: 0   }, optB: { pts: 1 } },
-                      { label: "Customer Satisfaction",          optA: { pts: 0   }, optB: { pts: 1 } },
-                      { label: "Cycle Time Reduction",           optA: { pts: 0   }, optB: { pts: 1 } },
-                      { label: "Systems & Procedures",           optA: { pts: 0   }, optB: { pts: 1 } },
+                      { label: "Position or Grade Factor", optA: { pts: 0.5 }, optB: { pts: 1 } },
+                      { label: "Merit Factor", optA: { pts: 0.5 }, optB: { pts: 1 } },
+                      { label: "Technical Value of Suggestion", optA: { pts: 0.5 }, optB: { pts: 1 } },
+                      { label: "Effort Factor", optA: { pts: 0.5 }, optB: { pts: 1 } },
+                      { label: "Safety Factor", optA: { pts: 0.5 }, optB: { pts: 1 } },
+                      { label: "Applicability", optA: { pts: 0 }, optB: { pts: 1 } },
+                      { label: "Recurring Benefit", optA: { pts: 0 }, optB: { pts: 1 } },
+                      { label: "Customer Satisfaction", optA: { pts: 0 }, optB: { pts: 1 } },
+                      { label: "Cycle Time Reduction", optA: { pts: 0 }, optB: { pts: 1 } },
+                      { label: "Systems & Procedures", optA: { pts: 0 }, optB: { pts: 1 } },
                     ];
                     const selections: (null | "A" | "B")[] = Array.isArray(meta.selections) ? meta.selections : [];
                     const totalPoints = meta.totalPoints ?? 0;
@@ -653,7 +653,7 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                       { label: "Standardization", max: 15 },
                       { label: "Presentation of project to RC/RH", max: 15 },
                     ];
-                    const SFC_MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+                    const SFC_MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
                     const SFC_MONTH_POINTS = [25, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2];
                     const SFC_WEIGHTAGE_OPTIONS = [
                       { label: "x1 (1st Kaizen)" }, { label: "x1.25 (2nd Kaizen)" },
@@ -744,19 +744,19 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
           // Resolve who it's pending with dynamically
           const pendingEmpNo = suggestion.pendingWith
             ? (() => {
-                const dash = suggestion.pendingWith.indexOf(" - ");
-                if (dash !== -1) {
-                  const name = suggestion.pendingWith.slice(dash + 3).trim();
-                  const found = allEmployeeOptions.find(o => o.name === name);
-                  return { name, empNo: found?.value || "", dept: found?.dept || "" };
-                }
-                // Try to find by assignedFlm or other fields
-                if (pendingWith === "FLM" && suggestion.assignedFlm) {
-                  const info = optByEmpNo[suggestion.assignedFlm];
-                  return { name: info?.name || suggestion.assignedFlm, empNo: suggestion.assignedFlm, dept: info?.dept || "" };
-                }
-                return { name: "", empNo: "", dept: "" };
-              })()
+              const dash = suggestion.pendingWith.indexOf(" - ");
+              if (dash !== -1) {
+                const name = suggestion.pendingWith.slice(dash + 3).trim();
+                const found = allEmployeeOptions.find(o => o.name === name);
+                return { name, empNo: found?.value || "", dept: found?.dept || "" };
+              }
+              // Try to find by assignedFlm or other fields
+              if (pendingWith === "FLM" && suggestion.assignedFlm) {
+                const info = optByEmpNo[suggestion.assignedFlm];
+                return { name: info?.name || suggestion.assignedFlm, empNo: suggestion.assignedFlm, dept: info?.dept || "" };
+              }
+              return { name: "", empNo: "", dept: "" };
+            })()
             : { name: "", empNo: "", dept: "" };
 
           return (
@@ -808,407 +808,449 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl w-[98vw] max-h-[96vh] flex flex-col gap-0 p-0 overflow-hidden rounded-xl [&>button:last-child]:hidden">
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-5xl w-[98vw] max-h-[96vh] flex flex-col gap-0 p-0 overflow-hidden rounded-xl [&>button:last-child]:hidden">
 
-        {/* ── Header ── */}
-        <div className="shrink-0 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground px-8 py-5 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <FileText className="h-5 w-5 opacity-70 shrink-0" />
-              <span className="text-base font-bold">{suggestion.suggestionNo}</span>
-              <Badge variant="outline" className={`text-[11px] border-white/40 bg-white/10 text-white ${statusColors[suggestion.status] || ""}`}>
-                {suggestion.status}
-              </Badge>
+          {/* ── Header ── */}
+          <div className="shrink-0 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground px-8 py-5 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <FileText className="h-5 w-5 opacity-70 shrink-0" />
+                <span className="text-base font-bold">{suggestion.suggestionNo}</span>
+                <Badge variant="outline" className={`text-[11px] border-white/40 bg-white/10 text-white ${statusColors[suggestion.status] || ""}`}>
+                  {suggestion.status}
+                </Badge>
+              </div>
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 shrink-0 rounded-full bg-white/15 text-white hover:text-white hover:bg-white/30 border border-white/20 transition-all"
+              onClick={() => onOpenChange(false)}
+            >
+              <X className="h-5 w-5" />
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0 rounded-full bg-white/15 text-white hover:text-white hover:bg-white/30 border border-white/20 transition-all"
-            onClick={() => onOpenChange(false)}
-          >
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
 
-        {/* ── Scrollable body ── */}
-        <ScrollArea className="flex-1 overflow-y-auto">
-          <div className="px-8 py-6 space-y-6">
+          {/* ── Scrollable body ── */}
+          <ScrollArea className="flex-1 overflow-y-auto">
+            <div className="px-8 py-6 space-y-6">
 
-            {/* ── Identification & Employee — side by side ── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <SectionHead icon={FileText} title="Identification" />
-                <div className="rounded-lg border bg-muted/10 px-4 py-2 mt-1.5 space-y-0">
-                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
-                    <span className="text-xs text-muted-foreground w-40 shrink-0">Suggestion No</span>
-                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.suggestionNo}</span>
-                  </div>
-                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
-                    <span className="text-xs text-muted-foreground w-40 shrink-0">Date</span>
-                    <span className="text-xs text-foreground font-medium flex-1">{formatDate(suggestion.date)}</span>
-                  </div>
-                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
-                    <span className="text-xs text-muted-foreground w-40 shrink-0">Type</span>
-                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.type}</span>
-                  </div>
-                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
-                    <span className="text-xs text-muted-foreground w-40 shrink-0">Category</span>
-                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.category}</span>
-                  </div>
-                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
-                    <span className="text-xs text-muted-foreground w-40 shrink-0">Range</span>
-                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.range || "—"}</span>
-                  </div>
-                  <div className="flex gap-3 py-1.5 items-start">
-                    <span className="text-xs text-muted-foreground w-40 shrink-0">Days Pending</span>
-                    <span className="text-xs text-foreground font-medium flex-1">{String(calculateDaysPending(suggestion))}</span>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <SectionHead icon={User} title="Employee" />
-                <div className="rounded-lg border bg-muted/10 px-4 py-2 mt-1.5 space-y-0">
-                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
-                    <span className="text-xs text-muted-foreground w-40 shrink-0">Employee Name</span>
-                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.employeeName || "—"}</span>
-                  </div>
-                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
-                    <span className="text-xs text-muted-foreground w-40 shrink-0">Employee No</span>
-                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.employeeNo}</span>
-                  </div>
-                  <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
-                    <span className="text-xs text-muted-foreground w-40 shrink-0">Department</span>
-                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.department || optByEmpNo[suggestion.employeeNo || ""]?.dept || "—"}</span>
-                  </div>
-                  {suggestion.formData?.suggestionFor && (
-                    <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
-                      <span className="text-xs text-muted-foreground w-40 shrink-0">Suggestion For</span>
-                      <span className="text-xs text-foreground font-medium flex-1">{suggestion.formData.suggestionFor === "behalf" ? "On Behalf" : "Self"}</span>
-                    </div>
-                  )}
-                  <div className="flex gap-3 py-1.5 items-start">
-                    <span className="text-xs text-muted-foreground w-40 shrink-0">Group Suggestion</span>
-                    <span className="text-xs text-foreground font-medium flex-1">{suggestion.formData?.groupSuggestion === "yes" ? "Yes" : "No"}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* On Behalf — Main Suggestor table */}
-            {suggestion.formData?.suggestionFor === "behalf" && suggestion.formData?.mainSuggestor && (() => {
-              const ms = String(suggestion.formData.mainSuggestor);
-              const msInfo = optByEmpNo[ms];
-              const msName = msInfo?.name || ms;
-              const msInitials = msName.split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-              return (
-                <>
-                  <SectionHead icon={User} title="Main Suggestor (On Behalf)" />
-                  <div className="rounded-lg border overflow-hidden">
-                    <div className="grid grid-cols-[1fr_100px_120px] gap-2 px-3 py-1.5 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      <span>Name</span>
-                      <span>Employee No</span>
-                      <span>Department</span>
-                    </div>
-                    <div className="grid grid-cols-[1fr_100px_120px] gap-2 px-3 py-2.5 items-center">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="h-7 w-7 rounded-full bg-indigo-500 flex items-center justify-center shrink-0 shadow-sm">
-                          <span className="text-white text-[10px] font-bold">{msInitials}</span>
-                        </div>
-                        <span className="text-xs font-medium truncate">{msName}</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground font-mono">{ms}</span>
-                      <span className="text-xs text-muted-foreground">{msInfo?.dept || "—"}</span>
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
-
-            {/* Team Members — table format */}
-            {(suggestion.formData?.teamMembers as string[] | undefined)?.length ? (() => {
-              const avatarColors = ["bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500","bg-rose-500","bg-cyan-500","bg-pink-500","bg-indigo-500"];
-              const teamMembers = suggestion.formData!.teamMembers as string[];
-              const teamMemberShares = (suggestion.formData!.teamMemberShares || {}) as Record<string, string>;
-              return (
-                <>
-                  <SectionHead icon={Users} title="Team Members & Share Distribution" />
-                  <div className="rounded-lg border overflow-hidden">
-                    <div className="grid grid-cols-[1fr_100px_100px_60px] gap-2 px-3 py-2 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      <span>Name</span>
-                      <span>Employee No</span>
-                      <span>Department</span>
-                      <span className="text-right">Share</span>
-                    </div>
-                    {teamMembers.map((m: string, i: number) => {
-                      const share = teamMemberShares[m];
-                      const di = m.indexOf("\u2013");
-                      let mName: string;
-                      let mNo: string;
-                      if (di !== -1) {
-                        mName = m.slice(0, di).trim();
-                        mNo   = m.slice(di + 1).trim();
-                      } else {
-                        const found = optByEmpNo[m];
-                        mName = found?.name || "";
-                        mNo = m;
-                      }
-                      const dept = optByEmpNo[mNo]?.dept || "—";
-                      const initials = (mName || mNo).split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                      const color = avatarColors[i % avatarColors.length];
-                      return (
-                        <div key={i} className="grid grid-cols-[1fr_100px_100px_60px] gap-2 px-3 py-2.5 border-b last:border-0 items-center hover:bg-muted/20">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className={`h-7 w-7 rounded-full ${color} flex items-center justify-center shrink-0 shadow-sm`}>
-                              <span className="text-white text-[10px] font-bold">{initials}</span>
-                            </div>
-                            <span className="text-xs font-medium truncate">{mName || mNo}</span>
-                          </div>
-                          <span className="text-xs text-muted-foreground font-mono">{mNo || "—"}</span>
-                          <span className="text-xs text-muted-foreground">{dept}</span>
-                          <span className={`text-xs font-bold text-right ${share ? "text-primary" : "text-muted-foreground"}`}>
-                            {share ? `${share}%` : "—"}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              );
-            })() : null}
-
-            {/* ── Transfer History ── */}
-            {suggestion.transferHistory && suggestion.transferHistory.length > 0 && (
-              <div className="space-y-3">
-                <SectionHead icon={ArrowRightLeft} title="Transfer History" />
-                <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 px-5 py-4 space-y-2.5">
-                  {suggestion.originalEmployeeName && (
-                    <p className="text-sm text-muted-foreground">Original: <span className="font-medium text-foreground">{suggestion.originalEmployeeName} ({suggestion.originalEmployeeNo})</span></p>
-                  )}
-                  {suggestion.transferHistory.map((tr, i) => (
-                    <div key={i} className="flex items-center gap-2.5 text-sm border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1">
-                      <ArrowRightLeft className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                      <span className="font-medium">{tr.fromName}</span>
-                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="font-medium">{tr.toName}</span>
-                      <span className="text-muted-foreground/70 ml-1">({tr.date})</span>
-                      {tr.reason && <span className="text-muted-foreground italic hidden sm:inline">– {tr.reason}</span>}
-                    </div>
-                  ))}
-                  <p className="text-sm pt-1.5 border-t border-blue-200 dark:border-blue-700">
-                    <span className="text-muted-foreground">Current Owner: </span>
-                    <span className="font-medium text-blue-700 dark:text-blue-300">{suggestion.employeeName} ({suggestion.employeeNo})</span>
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* ── Suggestion Details ── */}
-            <div className="space-y-3">
-              <SectionHead icon={FileText} title="Suggestion Details" />
-              {renderTypeSpecificFields()}
-            </div>
-
-            {/* ── Attachments ── */}
-            {hasAttachments && (
-              <div className="space-y-3">
-                <SectionHead icon={Paperclip} title="Attachments" />
-                {renderAttachments()}
-              </div>
-            )}
-
-            {/* ── Approval Status (simple bar) ── */}
-            {suggestion.pendingWith && suggestion.status !== "Approved & Closed" && suggestion.status !== "Rejected" && (
-              <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 px-5 py-4 flex items-center gap-4">
-                <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+              {/* ── Identification & Employee — side by side ── */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                    Pending with: {suggestion.pendingWith}
-                  </p>
-                  {(() => { const dp = calculateDaysPending(suggestion); return dp > 0 ? (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Waiting for {dp} day{dp !== 1 ? "s" : ""}</p>
-                  ) : null; })()}
-                </div>
-              </div>
-            )}
-
-            {/* ── Award Info (if closed) ── */}
-            {suggestion.awardAmount && suggestion.awardAmount > 0 && (
-              <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/20 px-5 py-4 flex items-center gap-4">
-                <Award className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <div className="flex items-center gap-6 flex-wrap">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Total Award</p>
-                    <p className="text-lg font-bold text-emerald-800 dark:text-emerald-300">₹{suggestion.awardAmount.toLocaleString()}</p>
+                  <SectionHead icon={FileText} title="Identification" />
+                  <div className="rounded-lg border bg-muted/10 px-4 py-2 mt-1.5 space-y-0">
+                    <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                      <span className="text-xs text-muted-foreground w-40 shrink-0">Suggestion No</span>
+                      <span className="text-xs text-foreground font-medium flex-1">{suggestion.suggestionNo}</span>
+                    </div>
+                    <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                      <span className="text-xs text-muted-foreground w-40 shrink-0">Date</span>
+                      <span className="text-xs text-foreground font-medium flex-1">{formatDate(suggestion.date)}</span>
+                    </div>
+                    <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                      <span className="text-xs text-muted-foreground w-40 shrink-0">Type</span>
+                      <span className="text-xs text-foreground font-medium flex-1">{suggestion.type}</span>
+                    </div>
+                    <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                      <span className="text-xs text-muted-foreground w-40 shrink-0">Category</span>
+                      <span className="text-xs text-foreground font-medium flex-1">{suggestion.category}</span>
+                    </div>
+                    <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                      <span className="text-xs text-muted-foreground w-40 shrink-0">Range</span>
+                      <span className="text-xs text-foreground font-medium flex-1">{suggestion.range || "—"}</span>
+                    </div>
+                    <div className="flex gap-3 py-1.5 items-start">
+                      <span className="text-xs text-muted-foreground w-40 shrink-0">Days Pending</span>
+                      <span className="text-xs text-foreground font-medium flex-1">{String(calculateDaysPending(suggestion))}</span>
+                    </div>
                   </div>
-                  {suggestion.awardCategory && (
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Category</p>
-                      <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">{suggestion.awardCategory}</p>
+                </div>
+                <div>
+                  <SectionHead icon={User} title="Employee" />
+                  <div className="rounded-lg border bg-muted/10 px-4 py-2 mt-1.5 space-y-0">
+                    <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                      <span className="text-xs text-muted-foreground w-40 shrink-0">Employee Name</span>
+                      <span className="text-xs text-foreground font-medium flex-1">{suggestion.employeeName || "—"}</span>
                     </div>
-                  )}
-                  {suggestion.awardDate && (
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Award Date</p>
-                      <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">{formatDate(suggestion.awardDate)}</p>
+                    <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                      <span className="text-xs text-muted-foreground w-40 shrink-0">Employee No</span>
+                      <span className="text-xs text-foreground font-medium flex-1">{suggestion.employeeNo}</span>
                     </div>
-                  )}
+                    <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                      <span className="text-xs text-muted-foreground w-40 shrink-0">Department</span>
+                      <span className="text-xs text-foreground font-medium flex-1">{suggestion.department || optByEmpNo[suggestion.employeeNo || ""]?.dept || "—"}</span>
+                    </div>
+                    {suggestion.formData?.suggestionFor && (
+                      <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                        <span className="text-xs text-muted-foreground w-40 shrink-0">Suggestion For</span>
+                        <span className="text-xs text-foreground font-medium flex-1">{suggestion.formData.suggestionFor === "behalf" ? "On Behalf" : "Self"}</span>
+                      </div>
+                    )}
+                    <div className="flex gap-3 py-1.5 items-start">
+                      <span className="text-xs text-muted-foreground w-40 shrink-0">Group Suggestion</span>
+                      <span className="text-xs text-foreground font-medium flex-1">{suggestion.formData?.groupSuggestion === "yes" ? "Yes" : "No"}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
 
-            {/* ── Rejection Info ── */}
-            {suggestion.status === "Rejected" && suggestion.rejectionReason && (
-              <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-950/20 px-5 py-4 space-y-1.5">
-                <p className="text-sm font-semibold text-red-700 dark:text-red-400 flex items-center gap-1.5">
-                  <XCircle className="h-4 w-4" /> Rejected
-                  {suggestion.rejectedByName && <span className="font-normal">by {suggestion.rejectedByName}</span>}
-                  {suggestion.rejectedOn && <span className="font-normal text-muted-foreground">on {formatDate(suggestion.rejectedOn)}</span>}
-                </p>
-                <p className="text-sm text-red-600 dark:text-red-300 pl-5 leading-relaxed">{suggestion.rejectionReason}</p>
-              </div>
-            )}
-
-            <Separator />
-
-            {/* ── Audit Trail ── */}
-            <SectionHead icon={Clock} title="Approval Trail" />
-            {renderAuditTrail()}
-
-            {/* ── Member-wise Amount Distribution (after approval trail, only when closed with award) ── */}
-            {suggestion.status === "Approved & Closed" && suggestion.awardAmount && suggestion.awardAmount > 0 && (() => {
-              const fd: Record<string, any> = suggestion.formData || {};
-              const award = suggestion.awardAmount || 0;
-              const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;
-              const isGroup = fd.groupSuggestion === "yes";
-              const teamMembers: string[] = fd.teamMembers || [];
-              const teamMemberShares: Record<string, string> = fd.teamMemberShares || {};
-
-              type DistEntry = { empNo: string; name: string; sharePercent: number; amount: number };
-              const dist: DistEntry[] = [];
-
-              if (isGroup && teamMembers.length > 0) {
-                const hasShares = Object.keys(teamMemberShares).length > 0;
-                const memberCount = teamMembers.length;
-                teamMembers.forEach((memberId, idx) => {
-                  let sharePct: number;
-                  if (hasShares && teamMemberShares[memberId]) {
-                    sharePct = Number(teamMemberShares[memberId]) || 0;
-                  } else {
-                    const base = Math.floor(100 / memberCount);
-                    sharePct = idx === 0 ? base + (100 - base * memberCount) : base;
-                  }
-                  const memberAmount = Math.round((award * sharePct) / 100);
-                  const details = resolveEmpDetails(memberId);
-                  dist.push({ empNo: memberId, name: details.name, sharePercent: sharePct, amount: memberAmount });
-                });
-              } else if (isOnBehalf) {
-                const details = resolveEmpDetails(fd.mainSuggestor);
-                dist.push({ empNo: fd.mainSuggestor, name: details.name, sharePercent: 100, amount: award });
-              } else {
-                dist.push({ empNo: suggestion.employeeNo || "—", name: suggestion.employeeName || "—", sharePercent: 100, amount: award });
-              }
-
-              if (dist.length === 0) return null;
-
-              return (
-                <>
-                  <Separator />
-                  <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-700 bg-gradient-to-br from-emerald-50/60 via-background to-teal-50/40 dark:from-emerald-950/20 dark:via-background dark:to-teal-950/15 p-5 space-y-4 shadow-sm">
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                        <Award className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              {/* On Behalf — Main Suggestor table */}
+              {suggestion.formData?.suggestionFor === "behalf" && suggestion.formData?.mainSuggestor && (() => {
+                const ms = String(suggestion.formData.mainSuggestor);
+                const msInfo = optByEmpNo[ms];
+                const msName = msInfo?.name || ms;
+                const msInitials = msName.split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                return (
+                  <>
+                    <SectionHead icon={User} title="Main Suggestor (On Behalf)" />
+                    <div className="rounded-lg border overflow-hidden">
+                      <div className="grid grid-cols-[1fr_100px_120px] gap-2 px-3 py-1.5 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span>Name</span>
+                        <span>Employee No</span>
+                        <span>Department</span>
                       </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Amount Distribution</h3>
-                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
-                          Total ₹{award.toLocaleString()} distributed to {dist.length} recipient{dist.length > 1 ? "s" : ""}
-                        </p>
+                      <div className="grid grid-cols-[1fr_100px_120px] gap-2 px-3 py-2.5 items-center">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="h-7 w-7 rounded-full bg-indigo-500 flex items-center justify-center shrink-0 shadow-sm">
+                            <span className="text-white text-[10px] font-bold">{msInitials}</span>
+                          </div>
+                          <span className="text-xs font-medium truncate">{msName}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground font-mono">{ms}</span>
+                        <span className="text-xs text-muted-foreground">{msInfo?.dept || "—"}</span>
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      {dist.map((d, i) => {
-                        const avatarColors = ["bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500","bg-rose-500","bg-cyan-500","bg-pink-500","bg-indigo-500"];
+                  </>
+                );
+              })()}
+
+              {/* Team Members — table format; share/amount only shown after FLM evaluation */}
+              {(suggestion.formData?.teamMembers as string[] | undefined)?.length ? (() => {
+                const avatarColors = ["bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-cyan-500", "bg-pink-500", "bg-indigo-500"];
+                const fd: Record<string, any> = suggestion.formData || {};
+                const teamMembers = fd.teamMembers as string[];
+                const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;
+                const award = suggestion.awardAmount || 0;
+                const hasAward = award > 0;
+
+                // Build correct recipients: primary person + team members
+                const primaryEmpNo = isOnBehalf ? fd.mainSuggestor : (suggestion.employeeNo || "");
+                const recipientSet = new Set<string>();
+                if (primaryEmpNo) recipientSet.add(primaryEmpNo);
+                for (const m of teamMembers) { if (m) recipientSet.add(m); }
+                const recipients = Array.from(recipientSet);
+                const count = recipients.length;
+
+                return (
+                  <>
+                    <SectionHead icon={Users} title={hasAward ? "Team Members & Share Distribution" : "Team Members"} />
+                    <div className="rounded-lg border overflow-hidden">
+                      <div className={`grid ${hasAward ? "grid-cols-[1fr_100px_100px_80px]" : "grid-cols-[1fr_100px_100px]"} gap-2 px-3 py-2 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground`}>
+                        <span>Name</span>
+                        <span>Employee No</span>
+                        <span>Department</span>
+                        {hasAward && <span className="text-right">Share</span>}
+                      </div>
+                      {recipients.map((m: string, i: number) => {
+                        // Equal split (only relevant when award exists)
+                        const base = Math.floor(100 / count);
+                        const sharePct = i === 0 ? base + (100 - base * count) : base;
+                        const shareAmt = hasAward ? Math.round((award * sharePct) / 100) : 0;
+
+                        const di = m.indexOf("\u2013");
+                        let mName: string;
+                        let mNo: string;
+                        if (di !== -1) {
+                          mName = m.slice(0, di).trim();
+                          mNo = m.slice(di + 1).trim();
+                        } else {
+                          const found = optByEmpNo[m];
+                          mName = found?.name || "";
+                          mNo = m;
+                        }
+                        // For the primary person (self), use suggestion's employeeName
+                        if (m === primaryEmpNo && !isOnBehalf && !mName) {
+                          mName = suggestion.employeeName || mNo;
+                        }
+                        const dept = optByEmpNo[mNo]?.dept || "—";
+                        const initials = (mName || mNo).split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
                         const color = avatarColors[i % avatarColors.length];
-                        const initials = d.name.split(" ").filter(Boolean).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                        const isPrimary = m === primaryEmpNo;
                         return (
-                          <div key={d.empNo} className="flex items-center gap-3 bg-background rounded-lg px-4 py-3 border border-emerald-200/60 dark:border-emerald-800/40 shadow-sm">
-                            <div className={`h-9 w-9 rounded-full ${color} flex items-center justify-center shrink-0 shadow-sm`}>
-                              <span className="text-white text-[11px] font-bold">{initials}</span>
+                          <div key={i} className={`grid ${hasAward ? "grid-cols-[1fr_100px_100px_80px]" : "grid-cols-[1fr_100px_100px]"} gap-2 px-3 py-2.5 border-b last:border-0 items-center hover:bg-muted/20 ${isPrimary ? "bg-primary/5" : ""}`}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className={`h-7 w-7 rounded-full ${color} flex items-center justify-center shrink-0 shadow-sm`}>
+                                <span className="text-white text-[10px] font-bold">{initials}</span>
+                              </div>
+                              <span className="text-xs font-medium truncate">{mName || mNo}</span>
+                              {isPrimary && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold shrink-0">
+                                  {isOnBehalf ? "Main Suggestor" : "Suggestor"}
+                                </span>
+                              )}
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold truncate">{d.name}</p>
-                              <p className="text-[10px] text-muted-foreground font-mono">{d.empNo}</p>
-                            </div>
-                            {dist.length > 1 && (
-                              <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-2.5 py-1 rounded-full shrink-0">
-                                {d.sharePercent}%
+                            <span className="text-xs text-muted-foreground font-mono">{mNo || "—"}</span>
+                            <span className="text-xs text-muted-foreground">{dept}</span>
+                            {hasAward && (
+                              <span className="text-xs font-bold text-right text-emerald-600 dark:text-emerald-400">
+                                ₹{shareAmt.toLocaleString()}
                               </span>
                             )}
-                            <div className="shrink-0 px-4 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300/60 dark:border-emerald-700/40">
-                              <span className="text-base font-extrabold tabular-nums text-emerald-700 dark:text-emerald-400">₹{d.amount.toLocaleString()}</span>
-                            </div>
                           </div>
                         );
                       })}
+                      {!hasAward && (
+                        <div className="px-3 py-2 text-[10px] text-muted-foreground/70 italic bg-muted/10">
+                          Share distribution will be calculated after FLM evaluation
+                        </div>
+                      )}
                     </div>
-                    <div className="flex justify-end">
-                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-200/60 dark:bg-emerald-800/40 px-4 py-1.5 rounded-full border border-emerald-300 dark:border-emerald-700">
-                        Grand Total: ₹{dist.reduce((s, d) => s + d.amount, 0).toLocaleString()}
-                      </span>
-                    </div>
+                  </>
+                );
+              })() : null}
+
+              {/* ── Transfer History ── */}
+              {suggestion.transferHistory && suggestion.transferHistory.length > 0 && (
+                <div className="space-y-3">
+                  <SectionHead icon={ArrowRightLeft} title="Transfer History" />
+                  <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 px-5 py-4 space-y-2.5">
+                    {suggestion.originalEmployeeName && (
+                      <p className="text-sm text-muted-foreground">Original: <span className="font-medium text-foreground">{suggestion.originalEmployeeName} ({suggestion.originalEmployeeNo})</span></p>
+                    )}
+                    {suggestion.transferHistory.map((tr, i) => (
+                      <div key={i} className="flex items-center gap-2.5 text-sm border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1">
+                        <ArrowRightLeft className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <span className="font-medium">{tr.fromName}</span>
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="font-medium">{tr.toName}</span>
+                        <span className="text-muted-foreground/70 ml-1">({tr.date})</span>
+                        {tr.reason && <span className="text-muted-foreground italic hidden sm:inline">– {tr.reason}</span>}
+                      </div>
+                    ))}
+                    <p className="text-sm pt-1.5 border-t border-blue-200 dark:border-blue-700">
+                      <span className="text-muted-foreground">Current Owner: </span>
+                      <span className="font-medium text-blue-700 dark:text-blue-300">{suggestion.employeeName} ({suggestion.employeeNo})</span>
+                    </p>
                   </div>
-                </>
-              );
-            })()}
-
-          </div>
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
-
-    {/* ── Attachment Viewer ── */}
-    {viewingAttachment && (
-      <Dialog open={attachmentOpen} onOpenChange={setAttachmentOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-sm">
-              {/^image\//i.test(viewingAttachment.type) ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-              {viewingAttachment.name}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col items-center justify-center min-h-[300px] rounded-md border bg-muted/20 p-6 gap-4">
-            {/^image\//i.test(viewingAttachment.type) ? (
-              viewingAttachment.url && viewingAttachment.url.startsWith("blob:") ? (
-                <img src={viewingAttachment.url} alt={viewingAttachment.name} className="max-h-[400px] max-w-full rounded object-contain" />
-              ) : (
-                <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                  <ImageIcon className="h-16 w-16 opacity-30" />
-                  <p className="text-sm font-medium">{viewingAttachment.name}</p>
-                  <p className="text-xs">[Image preview — connect to storage URL in production]</p>
                 </div>
-              )
-            ) : /\.pdf$/i.test(viewingAttachment.name) ? (
-              <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                <FileText className="h-16 w-16 opacity-30" />
-                <p className="text-sm font-medium">{viewingAttachment.name}</p>
-                <p className="text-xs">[PDF preview — connect to storage URL in production]</p>
+              )}
+
+              {/* ── Suggestion Details ── */}
+              <div className="space-y-3">
+                <SectionHead icon={FileText} title="Suggestion Details" />
+                {renderTypeSpecificFields()}
               </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                <Paperclip className="h-16 w-16 opacity-30" />
-                <p className="text-sm font-medium">{viewingAttachment.name}</p>
-                <p className="text-xs">[File preview — connect to storage URL in production]</p>
-              </div>
-            )}
-            <Button variant="outline" size="sm" className="gap-1.5 mt-2" onClick={() => setAttachmentOpen(false)}>
-              <X className="h-3.5 w-3.5" /> Close
-            </Button>
-          </div>
+
+              {/* ── Attachments ── */}
+              {hasAttachments && (
+                <div className="space-y-3">
+                  <SectionHead icon={Paperclip} title="Attachments" />
+                  {renderAttachments()}
+                </div>
+              )}
+
+              {/* ── Approval Status (simple bar) ── */}
+              {suggestion.pendingWith && suggestion.status !== "Approved & Closed" && suggestion.status !== "Rejected" && (
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/20 px-5 py-4 flex items-center gap-4">
+                  <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                      Pending with: {suggestion.pendingWith}
+                    </p>
+                    {(() => {
+                      const dp = calculateDaysPending(suggestion); return dp > 0 ? (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Waiting for {dp} day{dp !== 1 ? "s" : ""}</p>
+                      ) : null;
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Award Info (if closed) ── */}
+              {suggestion.awardAmount && suggestion.awardAmount > 0 && (
+                <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/20 px-5 py-4 flex items-center gap-4">
+                  <Award className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <div className="flex items-center gap-6 flex-wrap">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Total Award</p>
+                      <p className="text-lg font-bold text-emerald-800 dark:text-emerald-300">₹{suggestion.awardAmount.toLocaleString()}</p>
+                    </div>
+                    {suggestion.awardCategory && (
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Category</p>
+                        <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">{suggestion.awardCategory}</p>
+                      </div>
+                    )}
+                    {suggestion.awardDate && (
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Award Date</p>
+                        <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">{formatDate(suggestion.awardDate)}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Rejection Info ── */}
+              {suggestion.status === "Rejected" && suggestion.rejectionReason && (
+                <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-950/20 px-5 py-4 space-y-1.5">
+                  <p className="text-sm font-semibold text-red-700 dark:text-red-400 flex items-center gap-1.5">
+                    <XCircle className="h-4 w-4" /> Rejected
+                    {suggestion.rejectedByName && <span className="font-normal">by {suggestion.rejectedByName}</span>}
+                    {suggestion.rejectedOn && <span className="font-normal text-muted-foreground">on {formatDate(suggestion.rejectedOn)}</span>}
+                  </p>
+                  <p className="text-sm text-red-600 dark:text-red-300 pl-5 leading-relaxed">{suggestion.rejectionReason}</p>
+                </div>
+              )}
+
+              <Separator />
+
+              {/* ── Audit Trail ── */}
+              <SectionHead icon={Clock} title="Approval Trail" />
+              {renderAuditTrail()}
+
+              {/* ── Member-wise Amount Distribution (after approval trail, only when closed with award) ── */}
+              {suggestion.status === "Approved & Closed" && suggestion.awardAmount && suggestion.awardAmount > 0 && (() => {
+                const fd: Record<string, any> = suggestion.formData || {};
+                const award = suggestion.awardAmount || 0;
+                const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;
+                const isGroup = fd.groupSuggestion === "yes";
+                const teamMembers: string[] = fd.teamMembers || [];
+
+                // Determine the primary person:
+                // On-behalf → mainSuggestor (registering employee is excluded)
+                // Self → registering employee
+                const primaryEmpNo = isOnBehalf ? fd.mainSuggestor : (suggestion.employeeNo || "");
+                const primaryName = isOnBehalf ? undefined : (suggestion.employeeName || undefined);
+
+                type DistEntry = { empNo: string; name: string; sharePercent: number; amount: number };
+                const dist: DistEntry[] = [];
+
+                if (isGroup && teamMembers.length > 0) {
+                  // Build unique recipients: primary + team members
+                  const recipientSet = new Set<string>();
+                  if (primaryEmpNo) recipientSet.add(primaryEmpNo);
+                  for (const m of teamMembers) { if (m) recipientSet.add(m); }
+                  const recipients = Array.from(recipientSet);
+                  const count = recipients.length;
+
+                  // Equal split among all recipients
+                  recipients.forEach((recipientId, idx) => {
+                    const base = Math.floor(100 / count);
+                    const sharePct = idx === 0 ? base + (100 - base * count) : base;
+                    const memberAmount = Math.round((award * sharePct) / 100);
+                    const details = resolveEmpDetails(recipientId);
+                    const name = recipientId === primaryEmpNo && primaryName ? primaryName : details.name;
+                    dist.push({ empNo: recipientId, name, sharePercent: sharePct, amount: memberAmount });
+                  });
+                } else if (primaryEmpNo) {
+                  // No group: full award to primary person
+                  const details = resolveEmpDetails(primaryEmpNo);
+                  const name = primaryName || details.name;
+                  dist.push({ empNo: primaryEmpNo, name, sharePercent: 100, amount: award });
+                }
+
+                if (dist.length === 0) return null;
+
+                return (
+                  <>
+                    <Separator />
+                    <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-700 bg-gradient-to-br from-emerald-50/60 via-background to-teal-50/40 dark:from-emerald-950/20 dark:via-background dark:to-teal-950/15 p-5 space-y-4 shadow-sm">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-8 w-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                          <Award className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Amount Distribution</h3>
+                          <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                            Total ₹{award.toLocaleString()} distributed to {dist.length} recipient{dist.length > 1 ? "s" : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {dist.map((d, i) => {
+                          const avatarColors = ["bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-cyan-500", "bg-pink-500", "bg-indigo-500"];
+                          const color = avatarColors[i % avatarColors.length];
+                          const initials = d.name.split(" ").filter(Boolean).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                          return (
+                            <div key={d.empNo} className="flex items-center gap-3 bg-background rounded-lg px-4 py-3 border border-emerald-200/60 dark:border-emerald-800/40 shadow-sm">
+                              <div className={`h-9 w-9 rounded-full ${color} flex items-center justify-center shrink-0 shadow-sm`}>
+                                <span className="text-white text-[11px] font-bold">{initials}</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold truncate">{d.name}</p>
+                                <p className="text-[10px] text-muted-foreground font-mono">{d.empNo}</p>
+                              </div>
+                              {dist.length > 1 && (
+                                <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-2.5 py-1 rounded-full shrink-0">
+                                  {d.sharePercent}%
+                                </span>
+                              )}
+                              <div className="shrink-0 px-4 py-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300/60 dark:border-emerald-700/40">
+                                <span className="text-base font-extrabold tabular-nums text-emerald-700 dark:text-emerald-400">₹{d.amount.toLocaleString()}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex justify-end">
+                        <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-200/60 dark:bg-emerald-800/40 px-4 py-1.5 rounded-full border border-emerald-300 dark:border-emerald-700">
+                          Grand Total: ₹{dist.reduce((s, d) => s + d.amount, 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+
+            </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
-    )}
+
+      {/* ── Attachment Viewer ── */}
+      {viewingAttachment && (
+        <Dialog open={attachmentOpen} onOpenChange={setAttachmentOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-sm">
+                {/^image\//i.test(viewingAttachment.type) ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+                {viewingAttachment.name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col items-center justify-center min-h-[300px] rounded-md border bg-muted/20 p-6 gap-4">
+              {/^image\//i.test(viewingAttachment.type) ? (
+                viewingAttachment.url && viewingAttachment.url.startsWith("blob:") ? (
+                  <img src={viewingAttachment.url} alt={viewingAttachment.name} className="max-h-[400px] max-w-full rounded object-contain" />
+                ) : (
+                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                    <ImageIcon className="h-16 w-16 opacity-30" />
+                    <p className="text-sm font-medium">{viewingAttachment.name}</p>
+                    <p className="text-xs">[Image preview — connect to storage URL in production]</p>
+                  </div>
+                )
+              ) : /\.pdf$/i.test(viewingAttachment.name) ? (
+                <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                  <FileText className="h-16 w-16 opacity-30" />
+                  <p className="text-sm font-medium">{viewingAttachment.name}</p>
+                  <p className="text-xs">[PDF preview — connect to storage URL in production]</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                  <Paperclip className="h-16 w-16 opacity-30" />
+                  <p className="text-sm font-medium">{viewingAttachment.name}</p>
+                  <p className="text-xs">[File preview — connect to storage URL in production]</p>
+                </div>
+              )}
+              <Button variant="outline" size="sm" className="gap-1.5 mt-2" onClick={() => setAttachmentOpen(false)}>
+                <X className="h-3.5 w-3.5" /> Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 };

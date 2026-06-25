@@ -1,9 +1,11 @@
-﻿import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from "react";
 
 interface KioskKeyboardContextType {
   isVisible: boolean;
   onInput: (char: string) => void;
   onBackspace: () => void;
+  onCursorLeft: () => void;
+  onCursorRight: () => void;
 }
 
 const KioskKeyboardContext = createContext<KioskKeyboardContextType | null>(null);
@@ -34,7 +36,7 @@ export const KioskKeyboardProvider = ({ children }: { children: ReactNode }) => 
     if (!el) return;
     const start = el.selectionStart ?? el.value.length;
     const end   = el.selectionEnd   ?? el.value.length;
-    injectValue(el.value.slice(0, start) + char + el.value.slice(end), start + 1);
+    injectValue(el.value.slice(0, start) + char + el.value.slice(end), start + char.length);
   }, [injectValue]);
 
   const onBackspace = useCallback(() => {
@@ -48,6 +50,26 @@ export const KioskKeyboardProvider = ({ children }: { children: ReactNode }) => 
       injectValue(el.value.slice(0, start - 1) + el.value.slice(start), start - 1);
     }
   }, [injectValue]);
+
+  const onCursorLeft = useCallback(() => {
+    const el = activeElRef.current;
+    if (!el) return;
+    const pos = el.selectionStart ?? 0;
+    const newPos = Math.max(0, pos - 1);
+    requestAnimationFrame(() => {
+      try { el.selectionStart = newPos; el.selectionEnd = newPos; } catch {}
+    });
+  }, []);
+
+  const onCursorRight = useCallback(() => {
+    const el = activeElRef.current;
+    if (!el) return;
+    const pos = el.selectionEnd ?? el.value.length;
+    const newPos = Math.min(el.value.length, pos + 1);
+    requestAnimationFrame(() => {
+      try { el.selectionStart = newPos; el.selectionEnd = newPos; } catch {}
+    });
+  }, []);
 
   useEffect(() => {
     const SKIP_TYPES = new Set(["date","time","datetime-local","checkbox","radio","file","color","range","submit","button","reset","hidden"]);
@@ -81,7 +103,7 @@ export const KioskKeyboardProvider = ({ children }: { children: ReactNode }) => 
   }, []);
 
   return (
-    <KioskKeyboardContext.Provider value={{ isVisible, onInput, onBackspace }}>
+    <KioskKeyboardContext.Provider value={{ isVisible, onInput, onBackspace, onCursorLeft, onCursorRight }}>
       {children}
     </KioskKeyboardContext.Provider>
   );

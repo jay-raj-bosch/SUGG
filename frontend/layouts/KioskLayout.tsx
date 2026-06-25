@@ -1,4 +1,4 @@
-﻿import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { Home, FilePlus, FolderOpen, Trophy, KeyRound, LogOut, Building2 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -69,7 +69,7 @@ const KioskSidebar = () => {
 
 // Inner layout — consumes keyboard context
 const KioskInner = () => {
-  const { isVisible, onInput, onBackspace } = useKioskKeyboard();
+  const { isVisible, onInput, onBackspace, onCursorLeft, onCursorRight } = useKioskKeyboard();
 
   return (
     <div className="h-screen flex overflow-hidden bg-background">
@@ -77,14 +77,14 @@ const KioskInner = () => {
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Scrollable page content */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="max-w-5xl mx-auto">
             <Outlet />
-          </div>
         </main>
         {/* On-screen keyboard — sticky at bottom of right panel */}
         <OnScreenKeyboard
           onInput={onInput}
           onBackspace={onBackspace}
+          onCursorLeft={onCursorLeft}
+          onCursorRight={onCursorRight}
           visible={isVisible}
         />
       </div>

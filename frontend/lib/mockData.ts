@@ -94,10 +94,17 @@ export const statusColors: Record<string, string> = {
 };
 
 export interface Suggestion {
-  id: string;
+  /**
+   * Unique identifier.
+   * Mock data uses string IDs (e.g. "jap-17").
+   * The .NET backend will return numeric IDs — both are accepted here.
+   */
+  id: string | number;
   suggestionNo: string;
   subject: string;
   type: string;
+  /** Plant isolation field. Must be "PLT-01" (BidP) or "PLT-02" (JaP). */
+  plantCode?: string;
   category: string;
   status: string;
   date: string;
@@ -116,7 +123,13 @@ export interface Suggestion {
   benefits?: string;
   attachment?: string;                // legacy single filename or URL
   attachments?: AttachmentItem[];      // uploaded file list (images + docs)
-  formData?: Record<string, any>;      // full form state for draft editing
+  /**
+   * Type-specific extended fields stored as a JSON blob.
+   * JaP shape: see JapFormData in frontend/lib/types/formData.ts
+   * BidP shape: see BidpFormData in frontend/lib/types/formData.ts
+   * The .NET backend should store this as a jsonb column and return it as-is.
+   */
+  formData?: Record<string, unknown>;
   suggestionFor?: string;              // "self" | "others"
   // Rejection metadata
   rejectionReason?: string;

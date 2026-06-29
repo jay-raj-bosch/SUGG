@@ -32,6 +32,30 @@ export interface PaginatedSuggestions {
   limit: number;
 }
 
+/**
+ * API response types below use snake_case to match the current Node.js backend.
+ *
+ * IMPORTANT FOR .NET BACKEND TEAM:
+ *   When the .NET backend is live, configure camelCase serialization:
+ *     builder.Services.AddControllers().AddJsonOptions(o =>
+ *         o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+ *
+ *   Then rename these interface fields to camelCase in the same commit:
+ *     employee_no → employeeNo
+ *     plant_code  → plantCode
+ *     dept_name   → deptName
+ *     mapped_name → mappedName
+ *     user_id     → userId
+ *     is_read     → isRead
+ *     created_at  → createdAt
+ *     neft_status → neftStatus
+ *     neft_date   → neftDate
+ *     award_date  → awardDate
+ *
+ *   All consumer files that read these fields will also need the same rename
+ *   (the compiler will flag every broken reference automatically).
+ */
+
 export interface Employee {
   employee_no: string;
   name: string;
@@ -129,6 +153,11 @@ export interface ReportSummary {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Standard credential-based login.
+ * POST /api/auth/login  →  { token, user }
+ * Stores the returned JWT in localStorage["authToken"].
+ */
 export async function login(
   employeeNo: string,
   password: string,
@@ -137,6 +166,34 @@ export async function login(
   const data = await api.post<LoginResponse>("/auth/login", { employeeNo, password, role });
   setToken(data.token);
   return data;
+}
+
+/**
+ * SSO token exchange.
+ * Called after the SSO provider redirects back with an access token.
+ * POST /api/auth/sso-exchange  →  { token, user }
+ *
+ * The .NET backend must:
+ *  1. Validate the ssoAccessToken with the SSO provider (Azure AD / ADFS / etc.)
+ *  2. Look up the employee record by the SSO identity (e.g. email / UPN)
+ *  3. Return a new app-specific JWT: { employeeNo, name, role, plantCode }
+ *
+ * Stores the returned app JWT in localStorage["authToken"].
+ */
+export async function exchangeSsoToken(ssoAccessToken: string): Promise<LoginResponse> {
+  const data = await api.post<LoginResponse>("/auth/sso-exchange", { token: ssoAccessToken });
+  setToken(data.token);
+  return data;
+}
+
+/**
+ * Restore an existing session by validating the stored JWT.
+ * GET /api/auth/me  →  AuthUser
+ * Throws ApiError(401) if the token is missing or expired.
+ * Use this on page load instead of re-logging in.
+ */
+export async function restoreSession(): Promise<AuthUser> {
+  return api.get<AuthUser>("/auth/me");
 }
 
 export async function logout(): Promise<void> {

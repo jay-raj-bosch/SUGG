@@ -6,6 +6,7 @@ import { createContext, useContext, useState, useCallback, useEffect, useMemo, u
 import { Suggestion, AuditEntry, mockSuggestions as initialSuggestions } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
 import { usePlant } from "@/contexts/PlantContext";
+import { PLANT_SEGMENT_TO_CODE, STORAGE_KEYS } from "@/lib/constants";
 
 interface SuggestionContextType {
   suggestions: Suggestion[];
@@ -31,14 +32,16 @@ const SuggestionContext = createContext<SuggestionContextType | undefined>(undef
 const MOCK_DATA_VERSION = "v12";
 
 // ── Stale-cache eviction ─────────────────────────────────────────────────────
-// Scans all bidp_db_ data keys; removes any whose version tag is missing or stale.
+// Scans all suggestion DB cache keys; removes any whose version tag is stale.
 // Runs at module-load time so it triggers on both page load AND Vite HMR.
 (function evictStaleMockCache() {
   try {
+    const prefix = STORAGE_KEYS.SUGGESTION_DB_PREFIX;
+    const versionPrefix = STORAGE_KEYS.SUGGESTION_VERSION_PREFIX;
     Object.keys(sessionStorage)
-      .filter(k => k.startsWith("bidp_db_") && !k.includes("version_"))
+      .filter(k => k.startsWith(prefix) && !k.includes("version_"))
       .forEach(dataKey => {
-        const vk = dataKey.replace("bidp_db_", "bidp_db_version_");
+        const vk = dataKey.replace(prefix, versionPrefix);
         if (sessionStorage.getItem(vk) !== MOCK_DATA_VERSION) {
           sessionStorage.removeItem(dataKey);
           sessionStorage.removeItem(vk);
@@ -63,10 +66,9 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
   // the effect re-runs even under HMR without a full browser refresh.
   const [seedTick, setSeedTick] = useState(() => {
     try {
-      // If no version key exists for this plant, data was just evicted → tick
-      const plant = sessionStorage.getItem("selectedPlant");
-      if (!plant) return 0;
-      const vk = `bidp_db_version_${plant}`;
+      const activePlant = sessionStorage.getItem(STORAGE_KEYS.SELECTED_PLANT);
+      if (!activePlant) return 0;
+      const vk = `${STORAGE_KEYS.SUGGESTION_VERSION_PREFIX}${activePlant}`;
       return sessionStorage.getItem(vk) === MOCK_DATA_VERSION ? 0 : 1;
     } catch { return 0; }
   });
@@ -84,13 +86,13 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
   // Treat sessionStorage as our "database". The FULL suggestions array is
   // saved on every mutation. On load we check sessionStorage first; if present
   // we use that (preserving all approvals/edits). If absent, seed from mock data.
-  const storageKey = plant ? `bidp_db_${plant}` : null;
+  const storageKey = plant ? `${STORAGE_KEYS.SUGGESTION_DB_PREFIX}${plant}` : null;
 
   const persist = useCallback((data: Suggestion[]) => {
     if (!storageKey) return;
     try {
       sessionStorage.setItem(storageKey, JSON.stringify(data));
-      sessionStorage.setItem(`${storageKey.replace("bidp_db_", "bidp_db_version_")}`, MOCK_DATA_VERSION);
+      sessionStorage.setItem(`${storageKey.replace(STORAGE_KEYS.SUGGESTION_DB_PREFIX, STORAGE_KEYS.SUGGESTION_VERSION_PREFIX)}`, MOCK_DATA_VERSION);
     } catch { /* quota */ }
   }, [storageKey]);
 
@@ -116,8 +118,8 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
       suggestionsRef.current = [];
       return;
     }
-    const key = `bidp_db_${plant}`;
-    const versionKey = `bidp_db_version_${plant}`;
+    const key = `${STORAGE_KEYS.SUGGESTION_DB_PREFIX}${plant}`;
+    const versionKey = `${STORAGE_KEYS.SUGGESTION_VERSION_PREFIX}${plant}`;
     const savedVersion = sessionStorage.getItem(versionKey);
     const saved = sessionStorage.getItem(key);
     if (saved && savedVersion === MOCK_DATA_VERSION) {
@@ -127,7 +129,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
       suggestionsRef.current = restored;
     } else {
       // First visit or mock data updated — seed from fresh mock data
-      const plantKey = plant.toUpperCase().replace("BIDP", "PLT-01").replace("JAP", "PLT-02");
+      const plantKey = PLANT_SEGMENT_TO_CODE[plant] ?? "PLT-01";
       // Suggestions without plantCode are legacy BidP data → treat as PLT-01
       const seed = initialSuggestions.filter(s => (s.plantCode || "PLT-01") === plantKey);
       setSuggestions(seed);
@@ -140,7 +142,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
     }
     // Try backend — if available, overwrite with real data.
     // Only accept the response if it actually contains suggestions for this plant.
-    const expectedPlantCode = plant === "jap" ? "PLT-02" : "PLT-01";
+    const expectedPlantCode = PLANT_SEGMENT_TO_CODE[plant] ?? "PLT-01";
     apiService.fetchSuggestions({ limit: 500, plantCode: plant })
       .then(result => {
         if (result.data.length) {

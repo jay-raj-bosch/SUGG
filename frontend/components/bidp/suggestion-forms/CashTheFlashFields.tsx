@@ -2,7 +2,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { mockUser } from "@/lib/mockData";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCategories } from "@/contexts/CategoryContext";
 import VoiceHighlight from "@/components/VoiceHighlight";
@@ -22,6 +22,7 @@ interface Props {
 
 const CashTheFlashFields = ({ values, onChange, errors, activeVoiceField, voiceMode, onActivateVoice, voiceInterimField, voiceInterimText, voiceIsTranslating, voiceTranslatingLang }: Props) => {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const { categories } = useCategories();
   const hi = (key: string) => activeVoiceField === key;
   const va = (key: string) => ({ voiceMode, onActivate: () => onActivateVoice?.(key), isTranslating: hi(key) && voiceIsTranslating, translatingLang: voiceTranslatingLang });
@@ -98,7 +99,7 @@ const CashTheFlashFields = ({ values, onChange, errors, activeVoiceField, voiceM
 
       <div className="space-y-1.5">
         <Label className="text-xs">Suggestor Name <span className="text-[10px] text-muted-foreground font-normal">/ {t("Suggestor Name")}</span></Label>
-        <Input value={mockUser.name} disabled className="bg-muted" />
+        <Input value={user?.name ?? ""} disabled className="bg-muted" />
       </div>
 
       <VoiceHighlight active={hi("sharePercent")} {...va("sharePercent")}>

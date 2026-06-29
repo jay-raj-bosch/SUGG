@@ -56,7 +56,6 @@ export const createSuggestion = asyncHandler(async (req: Request, res: Response)
     return;
   }
 
-  const isPrivileged = user.role === "admin";
   const created = store.createSuggestion({
     typeCode: body.typeCode,
     subject: body.subject,
@@ -74,8 +73,10 @@ export const createSuggestion = asyncHandler(async (req: Request, res: Response)
     proposedMethod: body.proposedMethod,
     benefits: body.benefits,
     formData: body.formData ?? body,
-    assignedFlm: isPrivileged ? body.assignedFlm : undefined,
-    approvalLevel: isPrivileged ? body.approvalLevel : undefined,
+    // All users can set assignedFlm and approvalLevel — employees
+    // choose which FLM to submit to during the suggestion form.
+    assignedFlm: body.assignedFlm,
+    approvalLevel: body.approvalLevel,
   });
   res.status(201).json(created);
 });

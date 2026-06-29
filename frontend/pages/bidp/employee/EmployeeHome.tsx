@@ -1,21 +1,17 @@
 // TODO [BACKEND]: Dashboard stats → GET /api/dashboard?employeeNo={user.employeeNo}
-// TODO [BACKEND]: Recent suggestions → GET /api/suggestions?employeeNo={user.employeeNo}&limit=4&sort=date:desc
-import { useState } from "react";
+// TODO [BACKEND]: Recent suggestions → GET /api/suggestions?employeeNo={user.employeeNo}&limit=5&sort=date:desc
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { statusColors, Suggestion } from "@/lib/mockData";
+import { statusColors } from "@/lib/mockData";
 import { FilePlus, Clock, CheckCircle, Trophy } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-type FilterKey = "recent" | "total" | "pending" | "approved" | "awards";
-
 const EmployeeHome = () => {
   const { user } = useAuth();
   const { suggestions, getPendingSuggestions, getAwardedSuggestions, getSuggestionsByStatus } = useSuggestions();
   const { t } = useLanguage();
-  const [activeFilter, setActiveFilter] = useState<FilterKey>("recent");
 
   const empNo = user?.employeeNo;
   const mySuggestions = suggestions.filter(s => s.employeeNo === empNo);
@@ -24,21 +20,14 @@ const EmployeeHome = () => {
   const awards = getAwardedSuggestions().filter(s => s.employeeNo === empNo);
 
   const stats = [
-    { key: "total" as FilterKey, label: "Total Suggestions", value: mySuggestions.length, icon: FilePlus, color: "text-primary" },
-    { key: "pending" as FilterKey, label: "Pending", value: pending.length, icon: Clock, color: "text-warning" },
-    { key: "approved" as FilterKey, label: "Approved", value: approved.length, icon: CheckCircle, color: "text-success" },
-    { key: "awards" as FilterKey, label: "Awards Earned", value: awards.length, icon: Trophy, color: "text-accent" },
+    { label: "Total Suggestions", value: mySuggestions.length, icon: FilePlus, color: "text-primary" },
+    { label: "Pending", value: pending.length, icon: Clock, color: "text-warning" },
+    { label: "Approved", value: approved.length, icon: CheckCircle, color: "text-success" },
+    { label: "Awards Earned", value: awards.length, icon: Trophy, color: "text-accent" },
   ];
 
-  const filterDataMap: Record<FilterKey, { title: string; data: Suggestion[] }> = {
-    recent: { title: "Recent Suggestions", data: mySuggestions.slice(0, 4) },
-    total: { title: "All Suggestions", data: mySuggestions },
-    pending: { title: "Pending Suggestions", data: pending },
-    approved: { title: "Approved Suggestions", data: approved },
-    awards: { title: "Awarded Suggestions", data: awards },
-  };
-
-  const { title, data } = filterDataMap[activeFilter];
+  // Show only the 5 most recent suggestions
+  const recentSuggestions = mySuggestions.slice(0, 5);
 
   return (
     <div className="flex flex-col h-full w-full max-w-6xl space-y-6">
@@ -53,11 +42,7 @@ const EmployeeHome = () => {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat) => (
-          <div
-            key={stat.label}
-            className={`kpi-card flex items-center gap-3 cursor-pointer transition-all ${activeFilter === stat.key ? "ring-2 ring-primary shadow-md" : "hover:ring-2 hover:ring-primary/20"}`}
-            onClick={() => setActiveFilter(activeFilter === stat.key ? "recent" : stat.key)}
-          >
+          <div key={stat.label} className="kpi-card flex items-center gap-3">
             <stat.icon className={`h-8 w-8 ${stat.color}`} />
             <div>
               <p className="text-2xl font-bold text-foreground">{stat.value}</p>
@@ -70,17 +55,12 @@ const EmployeeHome = () => {
       <Card className="card-shadow">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">
-            {title} <span className="text-xs font-normal text-muted-foreground">/ {t(title)}</span>
-            {activeFilter !== "recent" && (
-              <Badge variant="secondary" className="ml-2 text-[10px] cursor-pointer" onClick={() => setActiveFilter("recent")}>
-                ✕ Clear filter
-              </Badge>
-            )}
+            Recent Suggestions <span className="text-xs font-normal text-muted-foreground">/ {t("Recent Suggestions")}</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2 max-h-[400px] overflow-y-auto">
-            {data.map((s) => (
+            {recentSuggestions.map((s) => (
               <div
                 key={s.id}
                 className="flex items-center justify-between p-3 rounded-md border hover:bg-muted/50 transition-colors"
@@ -95,13 +75,13 @@ const EmployeeHome = () => {
                   <p className="text-sm font-medium truncate mt-0.5">{s.subject}</p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0 ml-3">
-                  {s.awardAmount && <span className="text-xs font-semibold text-accent">₹{s.awardAmount}</span>}
+                  {s.awardAmount && <span className="text-xs font-semibold text-accent">Rs.{s.awardAmount}</span>}
                   <span className="text-xs text-muted-foreground">{s.date}</span>
                 </div>
               </div>
             ))}
-            {data.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">No suggestions found for {t(title)}</p>
+            {recentSuggestions.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">No suggestions yet</p>
             )}
           </div>
         </CardContent>

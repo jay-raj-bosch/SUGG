@@ -267,7 +267,13 @@ export function downloadXLSX(
 }
 
 export function downloadTablePDF(title: string, headers: string[], rows: string[][], filename: string) {
-  const doc = new jsPDF({ orientation: rows[0]?.length > 6 ? "landscape" : "portrait" });
+  // Sanitize: replace ₹ with Rs. since jsPDF's default font (Helvetica) doesn't support the rupee symbol
+  const sanitize = (s: string) => s.replace(/₹/g, "Rs.");
+  const safeHeaders = headers.map(sanitize);
+  const safeRows = rows.map(row => row.map(sanitize));
+  const safeTitle = sanitize(title);
+
+  const doc = new jsPDF({ orientation: safeRows[0]?.length > 6 ? "landscape" : "portrait" });
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // Header bar
@@ -275,16 +281,16 @@ export function downloadTablePDF(title: string, headers: string[], rows: string[
   doc.rect(0, 0, pageWidth, 20, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(12);
-  doc.text(title, pageWidth / 2, 13, { align: "center" });
+  doc.text(safeTitle, pageWidth / 2, 13, { align: "center" });
 
   // Meta
   doc.setTextColor(100, 100, 100);
   doc.setFontSize(8);
-  doc.text(`Generated: ${new Date().toLocaleString()} | Total Records: ${rows.length}`, 14, 28);
+  doc.text(`Generated: ${new Date().toLocaleString()} | Total Records: ${safeRows.length}`, 14, 28);
 
   // Table
   const startY = 34;
-  const colWidth = (pageWidth - 28) / headers.length;
+  const colWidth = (pageWidth - 28) / safeHeaders.length;
   const rowHeight = 8;
 
   // Header row
@@ -292,7 +298,7 @@ export function downloadTablePDF(title: string, headers: string[], rows: string[
   doc.rect(14, startY, pageWidth - 28, rowHeight, "F");
   doc.setFontSize(7);
   doc.setTextColor(20, 50, 90);
-  headers.forEach((h, i) => {
+  safeHeaders.forEach((h, i) => {
     doc.text(h, 16 + i * colWidth, startY + 5.5);
   });
 
@@ -301,7 +307,7 @@ export function downloadTablePDF(title: string, headers: string[], rows: string[
   doc.setFontSize(7);
   let currentY = startY + rowHeight;
 
-  rows.forEach((row, rIdx) => {
+  safeRows.forEach((row, rIdx) => {
     if (currentY > doc.internal.pageSize.getHeight() - 20) {
       doc.addPage();
       currentY = 20;
@@ -309,7 +315,7 @@ export function downloadTablePDF(title: string, headers: string[], rows: string[
       doc.setFillColor(240, 245, 255);
       doc.rect(14, currentY, pageWidth - 28, rowHeight, "F");
       doc.setTextColor(20, 50, 90);
-      headers.forEach((h, i) => {
+      safeHeaders.forEach((h, i) => {
         doc.text(h, 16 + i * colWidth, currentY + 5.5);
       });
       doc.setTextColor(0, 0, 0);

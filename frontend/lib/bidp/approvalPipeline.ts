@@ -3,6 +3,9 @@
 
 import type { Suggestion, AuditEntry } from "@/lib/mockData";
 
+/** My Idea Card has a fixed award of ₹200 — no FLM evaluation needed */
+export const MIC_FIXED_AMOUNT = 200;
+
 export type ApprovalLevel = "FLM" | "Manager" | "BPS Admin" | "BPS DH";
 
 interface PipelineStep {

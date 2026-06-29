@@ -31,6 +31,7 @@ import {
   getPipeline,
   getPipelineDisplay,
   calculateDaysPending,
+  MIC_FIXED_AMOUNT,
   type ApprovalLevel,
 } from "@/lib/bidp/approvalPipeline";
 
@@ -53,6 +54,11 @@ const MyApprovals = () => {
   const [awardAmount, setAwardAmount] = useState("");
   const [activeTypeFilter, setActiveTypeFilter] = useState<string>("all");
   const [sentBackFilter, setSentBackFilter] = useState<string>("all");
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => { setCurrentPage(1); }, [activeTypeFilter, sentBackFilter]);
 
   // Lightbox state for attachment images inside the review dialog
   const [lightboxImages, setLightboxImages] = useState<AttachmentItem[]>([]);
@@ -172,13 +178,17 @@ const MyApprovals = () => {
     if (currentLevel === "FLM" && selected.type === "Shop Floor CIP") {
       return sfcFinalPoints ?? (selected.awardAmount != null ? selected.awardAmount : null);
     }
-    // CTF and other non-MIC types at FLM: amount is entered manually
-    if (currentLevel === "FLM" && selected.type !== "My Idea Card") {
+    // MIC: always fixed ₹200
+    if (selected.type === "My Idea Card") {
+      return MIC_FIXED_AMOUNT;
+    }
+    // CTF and other types at FLM: amount is entered manually
+    if (currentLevel === "FLM") {
       const amt = parseFloat(awardAmount);
       // If the suggestion already has an award amount (e.g. send-back), use it; otherwise null until entered
       return selected.awardAmount != null ? selected.awardAmount : (Number.isFinite(amt) && amt > 0 ? amt : null);
     }
-    // MIC (fixed amount) or non-FLM levels: use existing award amount
+    // Non-FLM levels: use existing award amount
     return (selected.awardAmount ?? parseFloat(awardAmount)) || 0;
   }, [selected, currentLevel, sssCalculatedAmount, sfcFinalPoints, awardAmount]);
 
@@ -293,7 +303,10 @@ const MyApprovals = () => {
         return;
       }
       amount = sfcFinalPoints;
-    } else if (currentLevel === "FLM" && !isMIC) {
+    } else if (currentLevel === "FLM" && isMIC) {
+      // MIC: fixed ₹200 — no manual input needed
+      amount = MIC_FIXED_AMOUNT;
+    } else if (currentLevel === "FLM") {
       amount = parseFloat(awardAmount) || 0;
       if (!awardAmount.trim()) {
         toast.error("Please enter award amount before approving");
@@ -345,6 +358,44 @@ const MyApprovals = () => {
         : forwardTo
         ? { forwardTo }
         : undefined;
+
+      // ── Build award distribution breakdown for audit trail ──
+      // Rules: on-behalf → mainSuggestor + team; self → registering employee + team
+      if (currentLevel === "FLM" && amount > 0) {
+        const fd: Record<string, any> = selected.formData || {};
+        const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;
+        const isGroup = fd.groupSuggestion === "yes";
+        const teamMembers: string[] = fd.teamMembers || [];
+
+        const primaryEmpNo = isOnBehalf ? fd.mainSuggestor : (selected.employeeNo || "");
+        const recipients: string[] = [];
+        if (primaryEmpNo) recipients.push(primaryEmpNo);
+        if (isGroup && teamMembers.length > 0) {
+          for (const m of teamMembers) {
+            if (m && !recipients.includes(m)) recipients.push(m);
+          }
+        }
+
+        if (recipients.length > 0) {
+          const perPerson = Math.round(amount / recipients.length);
+          const distribution = recipients.map((empNo, idx) => ({
+            empNo,
+            share: idx === 0 ? amount - perPerson * (recipients.length - 1) : perPerson,
+            sharePercent: Math.round((100 / recipients.length) * 100) / 100,
+          }));
+
+          const meta = auditMetadata || {};
+          meta.awardDistribution = distribution;
+          meta.distributionType = isOnBehalf ? "on-behalf" : "self";
+          meta.isGroup = isGroup;
+          meta.totalRecipients = recipients.length;
+          // Reassign if it was undefined before
+          if (!auditMetadata) {
+            // We need to pass this, so assign to a mutable ref
+            Object.assign(meta, { forwardTo: forwardTo || undefined });
+          }
+        }
+      }
 
       // Resolve the display name for the forwarded-to person
       const forwardedToName = isSSS
@@ -868,7 +919,7 @@ const MyApprovals = () => {
   };
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full space-y-4 overflow-y-auto" style={{ maxHeight: "calc(100vh - 80px)" }}>
       <h2 className="text-xl font-bold text-foreground">
         My Approvals
         <span className="text-sm font-normal text-muted-foreground"> / {t("My Approvals")}</span>
@@ -939,73 +990,113 @@ const MyApprovals = () => {
           </div>
 
           {/* Scrollable table */}
-          <div className="overflow-auto rounded-md border" style={{ maxHeight: "420px" }}>
-            <table className="min-w-[700px] w-full text-xs">
-              <thead className="sticky top-0 z-20">
-                <tr className="border-b bg-muted text-left">
-                  <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap w-8 text-center">#</th>
-                  <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap w-14">Type</th>
-                  <th className="py-2 px-3 font-medium text-muted-foreground">Subject</th>
-                  <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Employee</th>
-                  <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Suggestion No</th>
-                  <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Date</th>
-                  <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap text-center">Days</th>
-                  <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingApprovals.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="py-10 text-center text-muted-foreground">
-                      {myApprovals.length === 0 ? "No approvals assigned to you" : `No pending ${activeTypeFilter === "all" ? "" : activeTypeFilter + " "}suggestions`}
-                    </td>
-                  </tr>
-                ) : (
-                  pendingApprovals.map((s, idx) => {
-                    const tf = TYPE_FILTERS.find(f => f.key === s.type);
-                    const days = calculateDaysPending(s);
-                    return (
-                      <tr
-                        key={s.id}
-                        onClick={() => openReview(s)}
-                        className={`border-b last:border-0 cursor-pointer transition-colors hover:bg-muted/40 group ${s.sendBackHistory?.length ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}
-                      >
-                        <td className="py-2.5 px-3 text-center text-muted-foreground font-medium">{idx + 1}</td>
-                        <td className="py-2.5 px-3">
-                          {tf && (
-                            <span className={`inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded border ${tf.color}`}>
-                              <tf.icon className="h-2.5 w-2.5" />{tf.short}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 max-w-[220px]">
-                          <p className="font-medium truncate" title={s.subject}>{s.subject}</p>
-                          {s.sendBackHistory && s.sendBackHistory.length > 0 && (
-                            <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5">
-                              <Undo2 className="h-2.5 w-2.5" /> Sent back
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 whitespace-nowrap" title={s.employeeName || ""}>{s.employeeName || "—"}</td>
-                        <td className="py-2.5 px-3 font-mono text-muted-foreground whitespace-nowrap">{s.suggestionNo}</td>
-                        <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">{s.date}</td>
-                        <td className="py-2.5 px-3 text-center">
-                          <span className={`font-semibold ${days > 10 ? "text-destructive" : days > 5 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
-                            {days}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right">
-                          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 gap-1 opacity-70 group-hover:opacity-100">
-                            <Eye className="h-3 w-3" /> Review
-                          </Button>
-                        </td>
+          {(() => {
+            const totalPages = Math.max(1, Math.ceil(pendingApprovals.length / rowsPerPage));
+            const safePage = Math.min(currentPage, totalPages);
+            const pageRows = pendingApprovals.slice((safePage - 1) * rowsPerPage, safePage * rowsPerPage);
+
+            return (
+              <>
+                <div className="overflow-auto rounded-md border" style={{ maxHeight: "calc(100vh - 230px)" }}>
+                  <table className="min-w-[700px] w-full text-xs">
+                    <thead className="sticky top-0 z-20">
+                      <tr className="border-b bg-muted text-left">
+                        <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap w-8 text-center">#</th>
+                        <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap w-14">Type</th>
+                        <th className="py-2 px-3 font-medium text-muted-foreground">Subject</th>
+                        <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Employee</th>
+                        <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Suggestion No</th>
+                        <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Date</th>
+                        <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap text-center">Days</th>
+                        <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap text-right">Action</th>
                       </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                    </thead>
+                    <tbody>
+                      {pageRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-10 text-center text-muted-foreground">
+                            {myApprovals.length === 0 ? "No approvals assigned to you" : `No pending ${activeTypeFilter === "all" ? "" : activeTypeFilter + " "}suggestions`}
+                          </td>
+                        </tr>
+                      ) : (
+                        pageRows.map((s, idx) => {
+                          const tf = TYPE_FILTERS.find(f => f.key === s.type);
+                          const days = calculateDaysPending(s);
+                          const slNo = (safePage - 1) * rowsPerPage + idx + 1;
+                          return (
+                            <tr
+                              key={s.id}
+                              onClick={() => openReview(s)}
+                              className={`border-b last:border-0 cursor-pointer transition-colors hover:bg-muted/40 group ${s.sendBackHistory?.length ? "bg-amber-50/40 dark:bg-amber-950/10" : ""}`}
+                            >
+                              <td className="py-2.5 px-3 text-center text-muted-foreground font-medium">{slNo}</td>
+                              <td className="py-2.5 px-3">
+                                {tf && (
+                                  <span className={`inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded border ${tf.color}`}>
+                                    <tf.icon className="h-2.5 w-2.5" />{tf.short}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 max-w-[220px]">
+                                <p className="font-medium truncate" title={s.subject}>{s.subject}</p>
+                                {s.sendBackHistory && s.sendBackHistory.length > 0 && (
+                                  <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5">
+                                    <Undo2 className="h-2.5 w-2.5" /> Sent back
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 whitespace-nowrap" title={s.employeeName || ""}>{s.employeeName || "—"}</td>
+                              <td className="py-2.5 px-3 font-mono text-muted-foreground whitespace-nowrap">{s.suggestionNo}</td>
+                              <td className="py-2.5 px-3 text-muted-foreground whitespace-nowrap">{s.date}</td>
+                              <td className="py-2.5 px-3 text-center">
+                                <span className={`font-semibold ${days > 10 ? "text-destructive" : days > 5 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                                  {days}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right">
+                                <Button variant="outline" size="sm" className="h-6 text-[10px] px-2 gap-1 opacity-70 group-hover:opacity-100">
+                                  <Eye className="h-3 w-3" /> Review
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination bar */}
+                <div className="flex items-center justify-between gap-4 pt-3 border-t border-border/40 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Rows per page:</span>
+                    <Select value={String(rowsPerPage)} onValueChange={v => { setRowsPerPage(Number(v)); setCurrentPage(1); }}>
+                      <SelectTrigger className="h-7 w-16 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span className="text-xs text-muted-foreground">
+                      {pendingApprovals.length > 0
+                        ? `${(safePage - 1) * rowsPerPage + 1}–${Math.min(safePage * rowsPerPage, pendingApprovals.length)} of ${pendingApprovals.length}`
+                        : "0 records"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">Page {safePage} of {totalPages}</span>
+                    <Button variant="outline" size="icon" className="h-7 w-7" disabled={safePage <= 1} onClick={() => setCurrentPage(safePage - 1)}>
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="outline" size="icon" className="h-7 w-7" disabled={safePage >= totalPages} onClick={() => setCurrentPage(safePage + 1)}>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </CardContent>
       </Card>
 
@@ -1066,7 +1157,10 @@ const MyApprovals = () => {
                 {/* Pipeline — use the right amount per type so the path preview is accurate */}
                 {(() => {
                   let displayAmount: number;
-                  if (currentLevel === "FLM" && selected.type === "Simple Suggestion Scheme") {
+                  if (selected.type === "My Idea Card") {
+                    // MIC: always fixed ₹200
+                    displayAmount = MIC_FIXED_AMOUNT;
+                  } else if (currentLevel === "FLM" && selected.type === "Simple Suggestion Scheme") {
                     // SSS: amount is the calculated monetary award (sssWeightage × totalPoints)
                     displayAmount = sssCalculatedAmount ?? selected.awardAmount ?? 0;
                   } else if (currentLevel === "FLM" && selected.type === "Shop Floor CIP") {
@@ -1184,52 +1278,87 @@ const MyApprovals = () => {
                   );
                 })()}
 
-                {/* Team Members — table format */}
-                {(fd.teamMembers as string[] | undefined)?.length ? (
-                  <>
-                    <SectionHead icon={Users} title="Team Members & Share Distribution" />
-                    <div className="rounded-lg border overflow-hidden">
-                      <div className="grid grid-cols-[1fr_100px_100px_60px] gap-2 px-3 py-2 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        <span>Name</span>
-                        <span>Employee No</span>
-                        <span>Department</span>
-                        <span className="text-right">Share</span>
-                      </div>
-                      {(fd.teamMembers as string[]).map((m: string, i: number) => {
-                        const share = (fd.teamMemberShares as Record<string, string> | undefined)?.[m];
-                        const di = m.indexOf("\u2013");
-                        let mName: string;
-                        let mNo: string;
-                        if (di !== -1) {
-                          mName = m.slice(0, di).trim();
-                          mNo   = m.slice(di + 1).trim();
-                        } else {
-                          const found = optByEmpNo[m];
-                          mName = found?.name || "";
-                          mNo = m;
-                        }
-                        const dept = optByEmpNo[mNo]?.dept || "—";
-                        const initials = (mName || mNo).split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                        const color = avatarColors[i % avatarColors.length];
-                        return (
-                          <div key={i} className="grid grid-cols-[1fr_100px_100px_60px] gap-2 px-3 py-2.5 border-b last:border-0 items-center hover:bg-muted/20">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className={`h-7 w-7 rounded-full ${color} flex items-center justify-center shrink-0 shadow-sm`}>
-                                <span className="text-white text-[10px] font-bold">{initials}</span>
+                {/* Team Members — share/amount only shown after FLM evaluation */}
+                {(fd.teamMembers as string[] | undefined)?.length ? (() => {
+                  const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;
+                  const award = selected.awardAmount || 0;
+                  const hasAward = award > 0;
+                  const teamMembersList = fd.teamMembers as string[];
+
+                  // Build correct recipients: primary person + team members
+                  const primaryEmpNo = isOnBehalf ? fd.mainSuggestor : (selected.employeeNo || "");
+                  const recipientSet = new Set<string>();
+                  if (primaryEmpNo) recipientSet.add(primaryEmpNo);
+                  for (const m of teamMembersList) { if (m) recipientSet.add(m); }
+                  const recipients = Array.from(recipientSet);
+                  const count = recipients.length;
+
+                  return (
+                    <>
+                      <SectionHead icon={Users} title={hasAward ? "Team Members & Share Distribution" : "Team Members"} />
+                      <div className="rounded-lg border overflow-hidden">
+                        <div className={`grid ${hasAward ? "grid-cols-[1fr_100px_100px_80px]" : "grid-cols-[1fr_100px_100px]"} gap-2 px-3 py-2 bg-muted/40 border-b text-[10px] font-semibold uppercase tracking-wide text-muted-foreground`}>
+                          <span>Name</span>
+                          <span>Employee No</span>
+                          <span>Department</span>
+                          {hasAward && <span className="text-right">Share</span>}
+                        </div>
+                        {recipients.map((m: string, i: number) => {
+                          // Equal split (only relevant when award exists)
+                          const base = Math.floor(100 / count);
+                          const sharePct = i === 0 ? base + (100 - base * count) : base;
+                          const shareAmt = hasAward ? Math.round((award * sharePct) / 100) : 0;
+
+                          const di = m.indexOf("\u2013");
+                          let mName: string;
+                          let mNo: string;
+                          if (di !== -1) {
+                            mName = m.slice(0, di).trim();
+                            mNo   = m.slice(di + 1).trim();
+                          } else {
+                            const found = optByEmpNo[m];
+                            mName = found?.name || "";
+                            mNo = m;
+                          }
+                          if (m === primaryEmpNo && !isOnBehalf && !mName) {
+                            mName = selected.employeeName || mNo;
+                          }
+                          const dept = optByEmpNo[mNo]?.dept || "—";
+                          const initials = (mName || mNo).split(" ").filter(Boolean).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                          const color = avatarColors[i % avatarColors.length];
+                          const isPrimary = m === primaryEmpNo;
+                          return (
+                            <div key={i} className={`grid ${hasAward ? "grid-cols-[1fr_100px_100px_80px]" : "grid-cols-[1fr_100px_100px]"} gap-2 px-3 py-2.5 border-b last:border-0 items-center hover:bg-muted/20 ${isPrimary ? "bg-primary/5" : ""}`}>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className={`h-7 w-7 rounded-full ${color} flex items-center justify-center shrink-0 shadow-sm`}>
+                                  <span className="text-white text-[10px] font-bold">{initials}</span>
+                                </div>
+                                <span className="text-xs font-medium truncate">{mName || mNo}</span>
+                                {isPrimary && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold shrink-0">
+                                    {isOnBehalf ? "Main Suggestor" : "Suggestor"}
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-xs font-medium truncate">{mName || mNo}</span>
+                              <span className="text-xs text-muted-foreground font-mono">{mNo || "—"}</span>
+                              <span className="text-xs text-muted-foreground">{dept}</span>
+                              {hasAward && (
+                                <span className="text-xs font-bold text-right text-emerald-600 dark:text-emerald-400">
+                                  ₹{shareAmt.toLocaleString()}
+                                </span>
+                              )}
                             </div>
-                            <span className="text-xs text-muted-foreground font-mono">{mNo || "—"}</span>
-                            <span className="text-xs text-muted-foreground">{dept}</span>
-                            <span className={`text-xs font-bold text-right ${share ? "text-primary" : "text-muted-foreground"}`}>
-                              {share ? `${share}%` : "—"}
-                            </span>
+                          );
+                        })}
+                        {!hasAward && (
+                          <div className="px-3 py-2 text-[10px] text-muted-foreground/70 italic bg-muted/10">
+                            Share distribution will be calculated after evaluation
                           </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                ) : null}
+                        )}
+                      </div>
+                    </>
+                  );
+                })() : null}
 
                 {/* Type-specific details */}
                 <SectionHead icon={Info} title="Suggestion Details" />
@@ -2045,11 +2174,14 @@ const MyApprovals = () => {
 
                 {/* MIC — fixed amount notice */}
                 {selected.type === "My Idea Card" && (
-                  <div className="rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/20 p-3 flex items-start gap-2">
-                    <Info className="h-4 w-4 text-purple-600 shrink-0 mt-0.5" />
-                    <div>
+                  <div className="rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/20 p-3 flex items-center gap-3">
+                    <Info className="h-4 w-4 text-purple-600 shrink-0" />
+                    <div className="flex-1">
                       <p className="text-xs font-semibold text-purple-800 dark:text-purple-300">My Idea Card — Fixed Award</p>
-                      <p className="text-[11px] text-purple-700 dark:text-purple-400 mt-0.5">Award amount for MIC is fixed and does not require FLM input.</p>
+                      <p className="text-[11px] text-purple-700 dark:text-purple-400 mt-0.5">MIC has a fixed award of <strong>Rs.{MIC_FIXED_AMOUNT}</strong>. No manual evaluation required.</p>
+                    </div>
+                    <div className="shrink-0 px-3 py-1.5 rounded-lg bg-purple-100 dark:bg-purple-900/30 border border-purple-300 dark:border-purple-700">
+                      <span className="text-sm font-bold text-purple-800 dark:text-purple-300">Rs.{MIC_FIXED_AMOUNT}</span>
                     </div>
                   </div>
                 )}

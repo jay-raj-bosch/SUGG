@@ -27,6 +27,8 @@ const FLM_TYPES = suggestionTypes.filter(t => t !== "Daily CIP" && t !== "Shop F
 // Types that need Moderator assignment
 const MODERATOR_TYPES = ["Shop Floor CIP"];
 
+const REOPEN_LOG_KEY = "bidp_reopen_log";
+
 interface ReopenRecord {
   id: string;
   suggestionNo: string;
@@ -51,11 +53,23 @@ const ReopenSuggestion = () => {
   const [selectedModerator, setSelectedModerator] = useState("");
   const [remark, setRemark] = useState("");
   const [reopened, setReopened] = useState(false);
-  const [reopenLog, setReopenLog] = useState<ReopenRecord[]>([]);
   const [searchLog, setSearchLog] = useState("");
   const [authorities, setAuthorities] = useState<apiService.AuthorityAssignment[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(20);
+
+  // Persist reopen log to sessionStorage
+  const [reopenLog, setReopenLog] = useState<ReopenRecord[]>(() => {
+    try {
+      const saved = sessionStorage.getItem(REOPEN_LOG_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch { /* */ }
+    return [];
+  });
+
+  useEffect(() => {
+    try { sessionStorage.setItem(REOPEN_LOG_KEY, JSON.stringify(reopenLog)); } catch { /* */ }
+  }, [reopenLog]);
 
   // Load authority assignments from backend for FLM/Moderator dropdowns
   useEffect(() => {
@@ -63,24 +77,42 @@ const ReopenSuggestion = () => {
   }, []);
 
   // Only show rejected suggestions of reopenable types (excludes Daily CIP)
-  const rejectedSuggestions = suggestions.filter(
-    s => s.status === "Rejected" && REOPENABLE_TYPES.includes(s.type)
+  const rejectedSuggestions = useMemo(
+    () => suggestions.filter(
+      s => s.status === "Rejected" && REOPENABLE_TYPES.includes(s.type)
+    ),
+    [suggestions],
   );
 
   const rejectedOptions = useMemo(() =>
     rejectedSuggestions.map(s => ({
       value: s.suggestionNo,
       label: `${s.suggestionNo} — ${s.subject}`,
-      sublabel: `${s.employeeName} • ${s.type}`,
+      sublabel: `${s.employeeName} • ${s.type} • Rejected`,
     })), [rejectedSuggestions]);
 
   const suggestion = suggestions.find(s => s.suggestionNo === selectedSuggestion);
 
+  // If the selected suggestion is no longer "Rejected" (was just reopened), clear it
+  useEffect(() => {
+    if (selectedSuggestion && suggestion && suggestion.status !== "Rejected") {
+      setSelectedSuggestion("");
+      setReopened(false);
+    }
+  }, [selectedSuggestion, suggestion]);
+
   const needsFLM = suggestion && FLM_TYPES.includes(suggestion.type);
   const needsModerator = suggestion && MODERATOR_TYPES.includes(suggestion.type);
 
+  // Dynamic target status based on suggestion type
+  const targetStatus = needsModerator ? "Under Evaluation" : "Pending FLM";
+
   const handleReopen = async () => {
     if (!selectedSuggestion) { toast.error("Please select a suggestion"); return; }
+    if (!suggestion || suggestion.status !== "Rejected") {
+      toast.error("Selected suggestion is not in Rejected status");
+      return;
+    }
     if (!remark.trim()) { toast.error("Remark is mandatory"); return; }
     if (needsFLM && !selectedFlm) { toast.error("Please select an FLM"); return; }
     if (needsModerator && !selectedModerator) { toast.error("Please select a Moderator"); return; }
@@ -98,14 +130,28 @@ const ReopenSuggestion = () => {
           })()
         : "";
 
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Build audit trail entry
+    const auditEntry = {
+      id: auditId,
+      action: "Reopened",
+      performedBy: user?.employeeNo || "Admin",
+      performedByName: user?.name || "Admin",
+      performedByDept: user?.department || "",
+      role: "Admin",
+      date: today,
+      fromStatus: "Rejected",
+      toStatus: targetStatus,
+      comments: remark.trim(),
+    };
+
     // Update suggestion via context (updates local state + backend)
-    if (suggestion) {
-      const today = new Date().toISOString().slice(0, 10);
-      updateSuggestion(suggestion.id, {
-        status: "Pending FLM",
+    try {
+      await updateSuggestion(suggestion.id, {
+        status: targetStatus,
         assignedFlm: needsFLM ? selectedFlm : needsModerator ? selectedModerator : suggestion.assignedFlm,
         pendingWith: assignedTo,
-        pendingSince: today,
         reopenRemark: remark.trim(),
         reopenedOn: today,
         reopenedBy: user?.name || "Admin",
@@ -114,28 +160,30 @@ const ReopenSuggestion = () => {
         rejectedBy: undefined,
         rejectedByName: undefined,
         rejectedOn: undefined,
-      });
-    }
+        // Append audit trail
+        auditTrail: [...(suggestion.auditTrail || []), auditEntry],
+      } as Partial<Suggestion>);
 
-    const record: ReopenRecord = {
-      id: String(Date.now()),
-      suggestionNo: selectedSuggestion,
-      subject: suggestion?.subject || "",
-      employeeName: suggestion?.employeeName || "",
-      type: suggestion?.type || "",
-      assignedTo,
-      remark: remark.trim(),
-      date: new Date().toISOString().slice(0, 10),
-      auditId,
-    };
-    setReopenLog(prev => [record, ...prev]);
-    setReopened(true);
-    toast.success(`Suggestion ${selectedSuggestion} reopened and assigned to ${assignedTo}`, {
-      description: "Redirecting to Pending Approvals…",
-    });
-    addNotification(`${selectedSuggestion} reopened — assigned to ${assignedTo} for review`, "warning");
-    // Req #28: after a successful reopen, navigate to the pending approvals list.
-    setTimeout(() => navigate(`${plantPrefix}/employee/my-approvals`), 600);
+      const record: ReopenRecord = {
+        id: String(Date.now()),
+        suggestionNo: selectedSuggestion,
+        subject: suggestion.subject || "",
+        employeeName: suggestion.employeeName || "",
+        type: suggestion.type || "",
+        assignedTo,
+        remark: remark.trim(),
+        date: today,
+        auditId,
+      };
+      setReopenLog(prev => [record, ...prev]);
+      setReopened(true);
+      toast.success(`Suggestion ${selectedSuggestion} reopened → ${targetStatus}`, {
+        description: `Assigned to ${assignedTo}`,
+      });
+      addNotification(`${selectedSuggestion} reopened — assigned to ${assignedTo} for review`, "warning");
+    } catch (err) {
+      toast.error("Failed to reopen suggestion. Please try again.");
+    }
   };
 
   const handleReset = () => {
@@ -151,6 +199,8 @@ const ReopenSuggestion = () => {
     r.employeeName.toLowerCase().includes(searchLog.toLowerCase())
   );
 
+  const totalPages = Math.max(1, Math.ceil(filteredLog.length / rowsPerPage));
+
   return (
     <div className="max-w-3xl space-y-5">
       <h2 className="text-xl font-bold text-foreground">Reopen Rejected Suggestion <span className="text-sm font-normal text-muted-foreground">/ {t("Reopen Rejected Suggestion")}</span></h2>
@@ -158,17 +208,17 @@ const ReopenSuggestion = () => {
       <Card className="card-shadow">
         <CardContent className="pt-6 space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs">Suggestion No <span className="text-[9px] opacity-70">/ {t("Suggestion No")}</span></Label>
+            <Label className="text-xs">Suggestion No <span className="text-destructive">*</span> <span className="text-[9px] opacity-70">/ {t("Suggestion No")}</span></Label>
             <SuggestionCombobox
               options={rejectedOptions}
               value={selectedSuggestion}
               onChange={v => { setSelectedSuggestion(v); setReopened(false); setSelectedFlm(""); setSelectedModerator(""); }}
-              placeholder="Type suggestion no or keyword..."
+              placeholder={rejectedSuggestions.length > 0 ? "Type suggestion no or keyword..." : "No rejected suggestions available"}
             />
             <p className="text-[10px] text-muted-foreground">Note: Daily CIP suggestions cannot be reopened</p>
           </div>
 
-          {suggestion && (
+          {suggestion && suggestion.status === "Rejected" && (
             <>
               <div className="bg-muted/40 border rounded-lg p-3 space-y-2">
                 <div className="flex justify-between items-start">
@@ -184,12 +234,29 @@ const ReopenSuggestion = () => {
                   <p><span className="text-muted-foreground">Range:</span> {suggestion.range}</p>
                   <p><span className="text-muted-foreground">Dept:</span> {suggestion.department || "N/A"}</p>
                 </div>
+                {suggestion.rejectionReason && (
+                  <div className="mt-2 p-2 bg-destructive/5 border border-destructive/20 rounded text-xs">
+                    <p className="text-[10px] font-semibold text-destructive mb-0.5">Rejection Reason:</p>
+                    <p className="text-muted-foreground">{suggestion.rejectionReason}</p>
+                    {suggestion.rejectedByName && (
+                      <p className="text-[10px] mt-1 text-muted-foreground/70">
+                        Rejected by {suggestion.rejectedByName} on {suggestion.rejectedOn}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Suggestion Type — auto-filled, read-only */}
               <div className="space-y-1.5">
                 <Label className="text-xs">Suggestion Type <span className="text-[9px] opacity-70">/ {t("Type")}</span></Label>
                 <Input value={suggestion.type} readOnly disabled className="bg-muted/50 font-medium" />
+              </div>
+
+              {/* Target status — dynamic */}
+              <div className="space-y-1.5">
+                <Label className="text-xs">Will be reopened as</Label>
+                <Input value={targetStatus} readOnly disabled className="bg-primary/5 font-medium text-primary border-primary/30" />
               </div>
 
               {/* FLM Selection — for Simple Suggestion, My Idea Card, Cash The Flash */}
@@ -235,7 +302,7 @@ const ReopenSuggestion = () => {
 
           <div className="bg-muted/50 border rounded-md p-2.5 text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
             <span className="flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Admin only</span>
-            <span className="flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Rejected → Pending FLM / Moderator</span>
+            <span className="flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Rejected → {targetStatus || "Pending FLM / Moderator"}</span>
             <span className="flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Audit entry created</span>
             <span className="flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Daily CIP not eligible for reopen</span>
           </div>
@@ -245,13 +312,17 @@ const ReopenSuggestion = () => {
               <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
               <div className="text-xs space-y-0.5">
                 <p className="font-medium text-primary">Suggestion Reopened Successfully</p>
-                <p className="text-muted-foreground">{selectedSuggestion} status changed: Rejected → Pending FLM</p>
+                <p className="text-muted-foreground">{selectedSuggestion} status changed: Rejected → {targetStatus}</p>
               </div>
             </div>
           )}
 
           <div className="flex gap-2">
-            <Button className="gap-1.5" onClick={handleReopen} disabled={reopened || !selectedSuggestion}>
+            <Button
+              className="gap-1.5"
+              onClick={handleReopen}
+              disabled={reopened || !selectedSuggestion || !suggestion || suggestion.status !== "Rejected"}
+            >
               <RotateCcw className="h-3.5 w-3.5" /> Reopen / {t("Reopen Rejected Suggestion")}
             </Button>
             <Button variant="outline" onClick={handleReset}>Reset / {t("Reset")}</Button>
@@ -318,11 +389,11 @@ const ReopenSuggestion = () => {
                   </Select>
                 </div>
                 <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-muted-foreground">Page {currentPage} of {Math.max(1, Math.ceil(filteredLog.length / rowsPerPage))}</span>
+                  <span className="text-muted-foreground">Page {currentPage} of {totalPages}</span>
                   <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
                     <ChevronLeft className="h-3.5 w-3.5" />
                   </Button>
-                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredLog.length / rowsPerPage), p + 1))} disabled={currentPage >= Math.ceil(filteredLog.length / rowsPerPage)}>
+                  <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages}>
                     <ChevronRight className="h-3.5 w-3.5" />
                   </Button>
                 </div>

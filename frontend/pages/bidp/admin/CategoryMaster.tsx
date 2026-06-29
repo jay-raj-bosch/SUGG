@@ -12,6 +12,7 @@ import { useNotifications } from "@/contexts/NotificationContext";
 import { useCategories } from "@/contexts/CategoryContext";
 import * as apiService from "@/lib/apiService";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
+import { usePlant } from "@/contexts/PlantContext";
 
 interface CategoryEntry {
   id: string;
@@ -24,15 +25,15 @@ const CategoryMaster = () => {
   const { t } = useLanguage();
   const { addNotification } = useNotifications();
   const { refreshCategories } = useCategories();
+  const { plant } = usePlant();
   const [catList, setCatList] = useState<CategoryEntry[]>([]);
   const [search, setSearch] = useState("");
-  const [plant, setPlant] = useState("PLT-01");
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
 
   // Load categories from backend on mount
   useEffect(() => {
-    apiService.fetchCategories().then(cats => {
+    apiService.fetchCategories(plant as "bidp" | "jap").then(cats => {
       setCatList(cats.map(c => ({ id: String(c.id), plant: c.plant_code, name: c.name, desc: c.description || "" })));
     }).catch(() => {});
   }, []);
@@ -51,7 +52,7 @@ const CategoryMaster = () => {
       toast.error("Category already exists"); return;
     }
     try {
-      const created = await apiService.addCategory(plant, name.trim(), desc.trim());
+      const created = await apiService.addCategory(plant as "bidp" | "jap", name.trim(), desc.trim());
       setCatList(prev => [...prev, { id: String(created.id), plant: created.plant_code, name: created.name, desc: created.description || "" }]);
       toast.success(`Category "${name.trim()}" added`);
       addNotification(`New category "${name.trim()}" added to master`, "info");

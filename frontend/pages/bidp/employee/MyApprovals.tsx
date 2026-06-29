@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePlant } from "@/contexts/PlantContext";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { CheckSquare, Clock, User, Users, FileText, IndianRupee, XCircle, ChevronRight, ChevronLeft, Eye, Send, Lightbulb, Zap, Star, TrendingUp, Layers, Undo2, AlertTriangle, MessageSquare, RotateCcw, ArrowRightLeft, Paperclip, Download, ZoomIn, Image as ImageIcon, Award, Info, Calculator, Upload, X, CheckCircle2, ShieldCheck } from "lucide-react";
@@ -36,6 +37,7 @@ import {
 const MyApprovals = () => {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const { plant } = usePlant();
   const { suggestions, updateSuggestion } = useSuggestions();
   const { addNotification } = useNotifications();
 
@@ -84,7 +86,7 @@ const MyApprovals = () => {
 
   // Load authority list for Forward-For-Approval dropdown
   useEffect(() => {
-    apiService.fetchAuthority().then(list => {
+    apiService.fetchAuthority(plant as "bidp" | "jap").then(list => {
       // Load all approvers; forward dropdown filters dynamically by next pipeline level
       setSssApprovers(list);
     }).catch(() => {});

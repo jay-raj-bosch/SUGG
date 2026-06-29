@@ -21,6 +21,7 @@ import { Plus, Search, Trash2, Pencil, Check, X } from "lucide-react";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { useDeptMappings } from "@/contexts/DeptMappingContext";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
+import { usePlant } from "@/contexts/PlantContext";
 
 const knownDepartments = [
   "BIDP1/TEF", "BIDP2/QAL", "BIDP1/HRD", "BIDP1/MNT",
@@ -31,6 +32,7 @@ const knownDepartments = [
 const DeptMapping = () => {
   const { t } = useLanguage();
   const { addNotification } = useNotifications();
+  const { plant } = usePlant();
   const { entries: depts, addEntry, updateEntry, removeEntry } = useDeptMappings();
   const [search, setSearch] = useState("");
   const [deptName, setDeptName] = useState("");
@@ -55,7 +57,7 @@ const DeptMapping = () => {
     }
     let newEntry = { id: String(Date.now()), dept: deptName.trim(), mapped: mappedName.trim() };
     try {
-      const created = await apiService.addDeptMapping(deptName.trim(), mappedName.trim());
+      const created = await apiService.addDeptMapping(plant as "bidp" | "jap", deptName.trim(), mappedName.trim());
       newEntry = { id: String(created.id), dept: created.dept_name, mapped: created.mapped_name };
     } catch {
       // fallback: local add with generated id
@@ -83,7 +85,7 @@ const DeptMapping = () => {
   const handleEditSave = async (id: string) => {
     if (!editingMapped.trim()) { toast.error("Mapped name is required"); return; }
     try {
-      await apiService.updateDeptMapping(parseInt(id), editingMapped.trim());
+      await apiService.updateDeptMapping(plant as "bidp" | "jap", parseInt(id), editingMapped.trim());
     } catch { /* fallback: local update */ }
     updateEntry(id, editingMapped.trim());
     const entry = depts.find(d => d.id === id);
@@ -97,7 +99,7 @@ const DeptMapping = () => {
     const entry = depts.find(d => d.id === pendingDeleteId);
     if (!entry) return;
     try {
-      await apiService.removeDeptMapping(parseInt(entry.id));
+      await apiService.removeDeptMapping(plant as "bidp" | "jap", parseInt(entry.id));
     } catch { /* keep local delete even if backend fails */ }
     removeEntry(entry.id);
     toast.success(`Mapping "${entry.dept} → ${entry.mapped}" deleted`);

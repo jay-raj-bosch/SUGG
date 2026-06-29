@@ -6,7 +6,7 @@ import { createContext, useContext, useState, useCallback, useEffect, useMemo, u
 import { Suggestion, AuditEntry, mockSuggestions as initialSuggestions } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
 import { usePlant } from "@/contexts/PlantContext";
-import { PLANT_SEGMENT_TO_CODE, STORAGE_KEYS } from "@/lib/constants";
+import { PLANT_CODE_BIDP, PLANT_SEGMENT_TO_CODE, STORAGE_KEYS } from "@/lib/constants";
 
 interface SuggestionContextType {
   suggestions: Suggestion[];
@@ -99,7 +99,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
   /** Re-fetch from backend; falls back to current local state */
   const refreshSuggestions = useCallback(async (): Promise<Suggestion[]> => {
     try {
-      const result = await apiService.fetchSuggestions({ limit: 2000, plantCode: plant ?? undefined });
+      const result = await apiService.fetchSuggestions(plant as "bidp" | "jap", { limit: 2000 });
       if (result.data?.length) {
         setSuggestions(result.data);
         suggestionsRef.current = result.data;
@@ -129,9 +129,9 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
       suggestionsRef.current = restored;
     } else {
       // First visit or mock data updated — seed from fresh mock data
-      const plantKey = PLANT_SEGMENT_TO_CODE[plant] ?? "PLT-01";
+      const plantKey = PLANT_SEGMENT_TO_CODE[plant] ?? PLANT_CODE_BIDP;
       // Suggestions without plantCode are legacy BidP data → treat as PLT-01
-      const seed = initialSuggestions.filter(s => (s.plantCode || "PLT-01") === plantKey);
+      const seed = initialSuggestions.filter(s => (s.plantCode || PLANT_CODE_BIDP) === plantKey);
       setSuggestions(seed);
       suggestionsRef.current = seed;
       // Persist the seed so all roles share the same state
@@ -142,8 +142,8 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
     }
     // Try backend — if available, overwrite with real data.
     // Only accept the response if it actually contains suggestions for this plant.
-    const expectedPlantCode = PLANT_SEGMENT_TO_CODE[plant] ?? "PLT-01";
-    apiService.fetchSuggestions({ limit: 500, plantCode: plant })
+    const expectedPlantCode = PLANT_SEGMENT_TO_CODE[plant] ?? PLANT_CODE_BIDP;
+    apiService.fetchSuggestions(plant as "bidp" | "jap", { limit: 500 })
       .then(result => {
         if (result.data.length) {
           // Guard: the JWT user may belong to a different plant, so the backend
@@ -194,7 +194,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
         "Improvement Suggestion": "JAP",
       };
       const typeCode = typeCodeMap[suggestion.type] ?? "SSS";
-      const created = await apiService.createSuggestion({
+      const created = await apiService.createSuggestion(plant as "bidp" | "jap", {
         typeCode,
         subject: suggestion.subject,
         category: suggestion.category,
@@ -239,7 +239,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
       return updated;
     });
     try {
-      await apiService.updateSuggestion(id, updates as Record<string, unknown>);
+      await apiService.updateSuggestion(plant as "bidp" | "jap", id, updates as Record<string, unknown>);
     } catch (err) {
       // Rollback the optimistic update so the UI does not drift from the server
       console.error("[SuggestionContext] updateSuggestion failed, rolling back:", err);

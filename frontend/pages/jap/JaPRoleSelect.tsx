@@ -11,6 +11,7 @@ import {
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import type { JapRole } from "@/lib/jap/workflowPipeline";
+import { PLANT_CODE_JAP } from "@/lib/constants";
 
 interface RoleOption {
   role: JapRole;
@@ -120,7 +121,7 @@ const JaPRoleSelect = () => {
       name: option.name,
       department: option.department,
       area: "RBIN/JAP",
-      plantCode: "PLT-02",
+      plantCode: PLANT_CODE_JAP,
       ntid: option.name.toLowerCase().replace(/\s+/g, ""),
       email: `${option.name.toLowerCase().replace(/\s+/g, ".")}@company.com`,
     });

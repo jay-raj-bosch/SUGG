@@ -107,7 +107,7 @@ const JaPAssignAuthority = () => {
     }
     let newRow: AuthorityRow;
     try {
-      const created = await apiService.addAuthority({
+      const created = await apiService.addAuthority("jap", {
         plant_code: "JAP",
         employee_no: empNo.trim().toUpperCase(),
         name, department: dept, role: stage as any, type: "Internal", email, ntid,

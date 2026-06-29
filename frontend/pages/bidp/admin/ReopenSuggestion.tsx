@@ -59,7 +59,7 @@ const ReopenSuggestion = () => {
 
   // Load authority assignments from backend for FLM/Moderator dropdowns
   useEffect(() => {
-    apiService.fetchAuthority().then(setAuthorities).catch(() => {});
+    apiService.fetchAuthority(plant as "bidp" | "jap").then(setAuthorities).catch(() => {});
   }, []);
 
   // Only show rejected suggestions of reopenable types (excludes Daily CIP)

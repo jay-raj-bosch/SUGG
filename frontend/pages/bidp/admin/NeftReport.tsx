@@ -13,6 +13,7 @@ import type { Suggestion } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
 import { downloadXLSX, downloadTablePDF } from "@/lib/pdfUtils";
 import { useDeptMappings } from "@/contexts/DeptMappingContext";
+import { usePlant } from "@/contexts/PlantContext";
 
 const reportTypes = ["NEFT Report", "Manpower Report", "Employee Involvement", "Non-Participant Report"];
 
@@ -25,6 +26,7 @@ const toShortName = (type: string) =>
 
 const NeftReport = () => {
   const { t } = useLanguage();
+  const { plant } = usePlant();
   const [reportType, setReportType] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -38,8 +40,8 @@ const NeftReport = () => {
 
   // Load data from backend on mount
   useEffect(() => {
-    apiService.fetchSuggestions({ limit: 2000 }).then(r => setAllSuggestions(r.data)).catch(() => {});
-    apiService.fetchEmployees().then(setAllEmployees).catch(() => {});
+    apiService.fetchSuggestions(plant as "bidp" | "jap", { limit: 2000 }).then(r => setAllSuggestions(r.data)).catch(() => {});
+    apiService.fetchEmployees(plant as "bidp" | "jap").then(setAllEmployees).catch(() => {});
   }, []);
 
   const isManpower           = reportType === "Manpower Report";

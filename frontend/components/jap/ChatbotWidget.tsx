@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { MessageCircle, X, Send, Bot, User, ChevronDown } from "lucide-react";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { JAP_STATUSES, STATUS_TO_PHASE, PHASE_SLA, STATUS_PENDING_WITH } from "@/lib/jap/workflowPipeline";
+import { PLANT_CODE_JAP } from "@/lib/constants";
 
 interface Message {
   id: string;
@@ -43,7 +44,7 @@ function generateResponse(input: string, suggestions: any[]): string {
     ?? lower.match(/(jap-sugg-\d{4}-\d+)/i);
   if (suggMatch) {
     const no = suggMatch[1].toUpperCase();
-    const s = suggestions.find(s => s.plantCode === "PLT-02" && s.suggestionNo?.toUpperCase() === no);
+    const s = suggestions.find(s => s.plantCode === PLANT_CODE_JAP && s.suggestionNo?.toUpperCase() === no);
     if (s) {
       const phase = STATUS_TO_PHASE[s.status] || s.status;
       const sla = PHASE_SLA[s.status];
@@ -59,7 +60,7 @@ function generateResponse(input: string, suggestions: any[]): string {
 
   // Stats
   if (lower.includes("how many") || lower.includes("count") || lower.includes("total")) {
-    const japSuggs = suggestions.filter(s => s.plantCode === "PLT-02");
+    const japSuggs = suggestions.filter(s => s.plantCode === PLANT_CODE_JAP);
     const active = japSuggs.filter(s => !["Draft", "Closed / Awarded", "Rejected"].includes(s.status)).length;
     const drafted = japSuggs.filter(s => s.status === "Draft").length;
     const closed = japSuggs.filter(s => s.status === JAP_STATUSES.CLOSED_AWARDED).length;
@@ -70,7 +71,7 @@ function generateResponse(input: string, suggestions: any[]): string {
   if (lower.includes("overdue") || lower.includes("late") || lower.includes("delay")) {
     const overdue = suggestions.filter(s => {
       const sla = PHASE_SLA[s.status];
-      return sla && (s.daysPending ?? 0) > sla && s.plantCode === "PLT-02";
+      return sla && (s.daysPending ?? 0) > sla && s.plantCode === PLANT_CODE_JAP;
     });
     if (overdue.length === 0) return "✅ No overdue suggestions right now!";
     return `⚠️ ${overdue.length} overdue suggestion(s):\n${overdue.slice(0, 5).map(s => `• ${s.suggestionNo} — ${STATUS_TO_PHASE[s.status]} (${s.daysPending}d)`).join("\n")}`;

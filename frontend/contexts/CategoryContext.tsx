@@ -15,7 +15,7 @@ export const CategoryProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshCategories = useCallback(async () => {
     try {
-      const cats = await apiService.fetchCategories(plant ?? undefined);
+      const cats = await apiService.fetchCategories(plant as "bidp" | "jap");
       setCategories(cats.map(c => c.name));
     } catch {
       // keep current list on error

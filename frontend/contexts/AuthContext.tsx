@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useEffect, ReactNode 
 import * as apiService from "@/lib/apiService";
 import { clearToken } from "@/lib/api";
 import type { JapRole } from "@/lib/jap/workflowPipeline";
+import { PLANT_CODE_BIDP } from "@/lib/constants";
 export type { JapRole };
 
 export type BidpRole = "employee" | "flm" | "manager" | "bps_admin" | "bps_dh";
@@ -28,7 +29,7 @@ const DEMO_EMPLOYEE: AuthUser = {
   name: "Demo Employee",
   department: "Demo Dept",
   area: "Demo Area",
-  plantCode: "PLT-01",
+  plantCode: PLANT_CODE_BIDP,
   role: "employee",
   ntid: "demo_emp",
   email: "demo.employee@company.com",
@@ -39,7 +40,7 @@ const DEMO_ADMIN: AuthUser = {
   name: "Demo Admin",
   department: "Demo Admin Dept",
   area: "Demo Area",
-  plantCode: "PLT-01",
+  plantCode: PLANT_CODE_BIDP,
   role: "admin",
   ntid: "demo_admin",
   email: "demo.admin@company.com",

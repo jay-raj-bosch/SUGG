@@ -8,6 +8,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { suggestionTypes } from "@/lib/mockData";
 import type { Suggestion } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
+import { usePlant } from "@/contexts/PlantContext";
 import { Download } from "lucide-react";
 import { downloadCSV } from "@/lib/pdfUtils";
 import { toast } from "sonner";
@@ -34,6 +35,7 @@ const PIE_COLORS = [
 
 const MisGraphical = () => {
   const { t } = useLanguage();
+  const { plant } = usePlant();
   const [year, setYear] = useState("2026");
   const [filterType, setFilterType] = useState("all");
   const [allSuggestions, setAllSuggestions] = useState<Suggestion[]>([]);
@@ -42,9 +44,9 @@ const MisGraphical = () => {
 
   // Load data from backend on mount
   useEffect(() => {
-    apiService.fetchSuggestions({ limit: 2000 }).then(r => setAllSuggestions(r.data)).catch(() => {});
-    apiService.fetchDeptStats().then(setDepartmentStats).catch(() => {});
-    apiService.fetchCategoryStats().then(setCategoryStats).catch(() => {});
+    apiService.fetchSuggestions(plant as "bidp" | "jap", { limit: 2000 }).then(r => setAllSuggestions(r.data)).catch(() => {});
+    apiService.fetchDeptStats(plant as "bidp" | "jap").then(setDepartmentStats).catch(() => {});
+    apiService.fetchCategoryStats(plant as "bidp" | "jap").then(setCategoryStats).catch(() => {});
   }, []);
 
   const totalSuggestions = allSuggestions.length;

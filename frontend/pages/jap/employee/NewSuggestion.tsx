@@ -3,6 +3,7 @@
 // Independent of the BidP suggestion workflow.
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { PLANT_CODE_JAP } from "@/lib/constants";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -350,7 +351,7 @@ const JaPNewSuggestion = () => {
       employeeNo:   user?.employeeNo ?? "",
       employeeName: user?.name       ?? "",
       department:   user?.department ?? "",
-      plantCode: "PLT-02",
+      plantCode: PLANT_CODE_JAP,
       presentMethod,
       proposedMethod,
       benefits,

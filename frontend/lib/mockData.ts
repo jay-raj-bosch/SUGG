@@ -13,18 +13,6 @@
 import { User } from "lucide-react";
 import type { AttachmentItem } from "./attachmentUtils";
 
-// Mock logged-in user data
-export const mockUser = {
-  employeeNo: "30698665",
-  name: "Karthik",
-  department: "BIDP1/TEF",
-  area: "RBIN/BIDP1",
-  plantCode: "PLT-01",
-  role: "employee" as "employee" | "admin",
-  ntid: "karthik",
-  email: "karthik@company.com",
-};
-
 export const suggestionTypes = [
   "Simple Suggestion Scheme",
   "Shop Floor CIP",

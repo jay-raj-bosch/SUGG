@@ -87,7 +87,7 @@ const JaPReopenSuggestion = () => {
   useEffect(() => {
     const ctx = contextSuggestions.filter(s => s.plantCode === "PLT-02");
     setAllSuggestions(ctx);
-    apiService.fetchSuggestions({ plantCode: "jap", limit: 2000 })
+    apiService.fetchSuggestions("jap", { limit: 2000 })
       .then(r => {
         if (r.data?.length) {
           const japOnly = r.data.filter(s => s.plantCode === "PLT-02");
@@ -163,7 +163,7 @@ const JaPReopenSuggestion = () => {
           prev.map(s => s.id === target.id ? { ...s, ...buildJapReopenUpdate(reopenReason) } : s),
         );
         try {
-          await apiService.patchSuggestionStatus(target.id, "Reopened");
+          await apiService.patchSuggestionStatus("jap", target.id, "Reopened");
         } catch { /* local fallback */ }
       }
       toast.success(`${updated.suggNo} fully approved and reopened`);

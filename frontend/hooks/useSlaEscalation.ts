@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { PHASE_SLA, STATUS_TO_PHASE, STATUS_PENDING_WITH } from "@/lib/jap/workflowPipeline";
+import { PLANT_CODE_JAP } from "@/lib/constants";
 
 const SEEN_KEY = "jap_sla_alerts_seen";
 
@@ -32,7 +33,7 @@ export function useSlaEscalation() {
   useEffect(() => {
     if (fired.current) return;
 
-    const japSuggs = suggestions.filter(s => s.plantCode === "PLT-02");
+    const japSuggs = suggestions.filter(s => s.plantCode === PLANT_CODE_JAP);
     if (japSuggs.length === 0) return;
 
     const seen = getSeenIds();

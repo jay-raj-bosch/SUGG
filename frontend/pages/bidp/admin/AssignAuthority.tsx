@@ -11,6 +11,7 @@ import { Plus, Search } from "lucide-react";
 import { useNotifications } from "@/contexts/NotificationContext";
 import * as apiService from "@/lib/apiService";
 import { useDeptMappings } from "@/contexts/DeptMappingContext";
+import { usePlant } from "@/contexts/PlantContext";
 
 interface AuthorityRow {
   id: string;
@@ -27,6 +28,7 @@ interface AuthorityRow {
 
 const AssignAuthority = () => {
   const { t } = useLanguage();
+  const { plant } = usePlant();
   const { uniqueRanges } = useDeptMappings();
   const { addNotification } = useNotifications();
   const [searchTerm, setSearchTerm] = useState("");
@@ -47,7 +49,7 @@ const AssignAuthority = () => {
 
   // Load authorities from backend on mount
   useEffect(() => {
-    apiService.fetchAuthority().then(list => {
+    apiService.fetchAuthority(plant as "bidp" | "jap").then(list => {
       setAuthorities(list.map(a => ({
         id: String(a.id),
         plantCode: a.plant_code,
@@ -74,7 +76,7 @@ const AssignAuthority = () => {
     if (!val) { clearAutoFill(); return; }
 
     try {
-      const employees = await apiService.fetchEmployees(plantCode || undefined);
+      const employees = await apiService.fetchEmployees(plant as "bidp" | "jap");
       const found = employees.find(e => e.employee_no === val);
       if (!found) { clearAutoFill(); toast.error("Employee not found"); return; }
 
@@ -105,7 +107,7 @@ const AssignAuthority = () => {
       return;
     }
     try {
-      const created = await apiService.addAuthority({
+      const created = await apiService.addAuthority(plant as "bidp" | "jap", {
         plant_code: plantCode || "PLT-01",
         employee_no: empNo.trim().toUpperCase(),
         name, department: dept, role: role as any, type: type as any, email, ntid,

@@ -13,18 +13,6 @@
 import { User } from "lucide-react";
 import type { AttachmentItem } from "./attachmentUtils";
 
-// Mock logged-in user data
-export const mockUser = {
-  employeeNo: "30698665",
-  name: "Karthik",
-  department: "BIDP1/TEF",
-  area: "RBIN/BIDP1",
-  plantCode: "PLT-01",
-  role: "employee" as "employee" | "admin",
-  ntid: "karthik",
-  email: "karthik@company.com",
-};
-
 export const suggestionTypes = [
   "Simple Suggestion Scheme",
   "Shop Floor CIP",
@@ -94,10 +82,17 @@ export const statusColors: Record<string, string> = {
 };
 
 export interface Suggestion {
-  id: string;
+  /**
+   * Unique identifier.
+   * Mock data uses string IDs (e.g. "jap-17").
+   * The .NET backend will return numeric IDs — both are accepted here.
+   */
+  id: string | number;
   suggestionNo: string;
   subject: string;
   type: string;
+  /** Plant isolation field. Must be "PLT-01" (BidP) or "PLT-02" (JaP). */
+  plantCode?: string;
   category: string;
   status: string;
   date: string;
@@ -116,7 +111,13 @@ export interface Suggestion {
   benefits?: string;
   attachment?: string;                // legacy single filename or URL
   attachments?: AttachmentItem[];      // uploaded file list (images + docs)
-  formData?: Record<string, any>;      // full form state for draft editing
+  /**
+   * Type-specific extended fields stored as a JSON blob.
+   * JaP shape: see JapFormData in frontend/lib/types/formData.ts
+   * BidP shape: see BidpFormData in frontend/lib/types/formData.ts
+   * The .NET backend should store this as a jsonb column and return it as-is.
+   */
+  formData?: Record<string, unknown>;
   suggestionFor?: string;              // "self" | "others"
   // Rejection metadata
   rejectionReason?: string;

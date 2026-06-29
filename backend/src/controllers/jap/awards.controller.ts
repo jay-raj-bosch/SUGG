@@ -1,24 +1,28 @@
+// JaP — Awards Controller
+// Handles /api/jap/awards* — plant code enforced by plantGuard (PLT-02) + JWT.
 import { Request, Response } from "express";
-import * as store from "../data/store";
-import { asyncHandler } from "../middleware/errorHandler";
+import * as store from "../../data/store";
+import { asyncHandler } from "../../middleware/errorHandler";
 
-/**
- * GET /api/awards?employeeNo=&neftStatus=
- */
+// JaP suggestions become award-eligible once they reach the Award or Evaluation phase.
+const AWARD_ELIGIBLE_STATUSES = [
+  "In Award",
+  "In Evaluation",
+  "Closed / Awarded",
+] as const;
+
+/** GET /api/jap/awards?employeeNo=&neftStatus= */
 export const listAwards = asyncHandler(async (req: Request, res: Response) => {
   const { employeeNo, neftStatus } = req.query;
   const awards = store.getAwards({
-    plantCode: req.user!.plantCode,          // always scope to the caller's plant
+    plantCode: req.user!.plantCode,
     employeeNo: employeeNo as string | undefined,
     neftStatus: neftStatus as string | undefined,
   });
   res.json(awards);
 });
 
-/**
- * POST /api/awards
- * Body: { suggestionId, suggestionNo, employeeNo, amount, category, awardDate }
- */
+/** POST /api/jap/awards — admin only */
 export const createAward = asyncHandler(async (req: Request, res: Response) => {
   const { suggestionId, suggestionNo, employeeNo, amount, category, awardDate } = req.body;
   if (!suggestionId || !employeeNo || amount === undefined || amount === null) {
@@ -30,15 +34,13 @@ export const createAward = asyncHandler(async (req: Request, res: Response) => {
     res.status(400).json({ error: "amount must be a non-negative number up to 1,000,000" });
     return;
   }
-  // Ensure the suggestion being awarded belongs to the caller's plant
   const suggestion = store.getSuggestionById(Number(suggestionId), req.user!.plantCode);
   if (!suggestion) {
-    res.status(404).json({ error: "Suggestion not found in your plant" });
+    res.status(404).json({ error: "Suggestion not found in JaP" });
     return;
   }
-  const AWARD_ELIGIBLE_STATUSES = ["Approved", "Approved & Closed", "Closed / Awarded", "Implemented"];
-  if (!AWARD_ELIGIBLE_STATUSES.includes(suggestion.status)) {
-    res.status(409).json({ error: `Suggestion status \"${suggestion.status}\" is not eligible for award` });
+  if (!AWARD_ELIGIBLE_STATUSES.includes(suggestion.status as typeof AWARD_ELIGIBLE_STATUSES[number])) {
+    res.status(409).json({ error: `Suggestion status "${suggestion.status}" is not eligible for award in JaP` });
     return;
   }
   const created = store.addAward({
@@ -52,20 +54,11 @@ export const createAward = asyncHandler(async (req: Request, res: Response) => {
   res.status(201).json(created);
 });
 
-/**
- * PATCH /api/awards/:id/neft
- * Body: { neftStatus, neftDate? }
- */
+/** PATCH /api/jap/awards/:id/neft — admin only */
 export const updateNeft = asyncHandler(async (req: Request, res: Response) => {
   const { neftStatus, neftDate } = req.body;
-  if (!neftStatus) {
-    res.status(400).json({ error: "neftStatus is required" });
-    return;
-  }
+  if (!neftStatus) { res.status(400).json({ error: "neftStatus is required" }); return; }
   const updated = store.updateNeftStatus(Number(req.params.id), neftStatus, neftDate);
-  if (!updated) {
-    res.status(404).json({ error: "Award not found" });
-    return;
-  }
+  if (!updated) { res.status(404).json({ error: "Award not found" }); return; }
   res.json(updated);
 });

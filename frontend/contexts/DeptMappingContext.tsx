@@ -15,6 +15,7 @@ import {
   type ReactNode,
 } from "react";
 import * as apiService from "@/lib/apiService";
+import { usePlant } from "@/contexts/PlantContext";
 
 // ── Hardcoded fallback (mirrors DeptMapping.tsx initialDepts) ────────────────
 const FALLBACK_MAPPINGS: Record<string, string> = {
@@ -56,6 +57,7 @@ interface DeptMappingContextType {
 const DeptMappingContext = createContext<DeptMappingContextType | undefined>(undefined);
 
 export const DeptMappingProvider = ({ children }: { children: ReactNode }) => {
+  const { plant } = usePlant();
   const [entries, setEntries] = useState<DeptMappingEntry[]>(() =>
     Object.entries(FALLBACK_MAPPINGS).map(([dept, mapped], i) => ({
       id: String(i + 1),
@@ -66,8 +68,9 @@ export const DeptMappingProvider = ({ children }: { children: ReactNode }) => {
 
   // ── Load from backend on mount ──────────────────────────────────────────────
   const refresh = useCallback(async () => {
+    if (!plant) return;
     try {
-      const rows = await apiService.fetchDeptMappings();
+      const rows = await apiService.fetchDeptMappings(plant as "bidp" | "jap");
       if (rows.length) {
         setEntries(
           rows.map((r) => ({ id: String(r.id), dept: r.dept_name, mapped: r.mapped_name })),
@@ -76,7 +79,7 @@ export const DeptMappingProvider = ({ children }: { children: ReactNode }) => {
     } catch {
       // keep current list on error
     }
-  }, []);
+  }, [plant]);
 
   useEffect(() => {
     refresh();

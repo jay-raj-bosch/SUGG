@@ -32,6 +32,30 @@ export interface PaginatedSuggestions {
   limit: number;
 }
 
+/**
+ * API response types below use snake_case to match the current Node.js backend.
+ *
+ * IMPORTANT FOR .NET BACKEND TEAM:
+ *   When the .NET backend is live, configure camelCase serialization:
+ *     builder.Services.AddControllers().AddJsonOptions(o =>
+ *         o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+ *
+ *   Then rename these interface fields to camelCase in the same commit:
+ *     employee_no → employeeNo
+ *     plant_code  → plantCode
+ *     dept_name   → deptName
+ *     mapped_name → mappedName
+ *     user_id     → userId
+ *     is_read     → isRead
+ *     created_at  → createdAt
+ *     neft_status → neftStatus
+ *     neft_date   → neftDate
+ *     award_date  → awardDate
+ *
+ *   All consumer files that read these fields will also need the same rename
+ *   (the compiler will flag every broken reference automatically).
+ */
+
 export interface Employee {
   employee_no: string;
   name: string;
@@ -129,6 +153,11 @@ export interface ReportSummary {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Standard credential-based login.
+ * POST /api/auth/login  →  { token, user }
+ * Stores the returned JWT in localStorage["authToken"].
+ */
 export async function login(
   employeeNo: string,
   password: string,
@@ -137,6 +166,34 @@ export async function login(
   const data = await api.post<LoginResponse>("/auth/login", { employeeNo, password, role });
   setToken(data.token);
   return data;
+}
+
+/**
+ * SSO token exchange.
+ * Called after the SSO provider redirects back with an access token.
+ * POST /api/auth/sso-exchange  →  { token, user }
+ *
+ * The .NET backend must:
+ *  1. Validate the ssoAccessToken with the SSO provider (Azure AD / ADFS / etc.)
+ *  2. Look up the employee record by the SSO identity (e.g. email / UPN)
+ *  3. Return a new app-specific JWT: { employeeNo, name, role, plantCode }
+ *
+ * Stores the returned app JWT in localStorage["authToken"].
+ */
+export async function exchangeSsoToken(ssoAccessToken: string): Promise<LoginResponse> {
+  const data = await api.post<LoginResponse>("/auth/sso-exchange", { token: ssoAccessToken });
+  setToken(data.token);
+  return data;
+}
+
+/**
+ * Restore an existing session by validating the stored JWT.
+ * GET /api/auth/me  →  AuthUser
+ * Throws ApiError(401) if the token is missing or expired.
+ * Use this on page load instead of re-logging in.
+ */
+export async function restoreSession(): Promise<AuthUser> {
+  return api.get<AuthUser>("/auth/me");
 }
 
 export async function logout(): Promise<void> {
@@ -153,37 +210,35 @@ export interface SuggestionFilters {
   status?: string;
   type?: string;
   employeeNo?: string;
-  /** Plant code — REQUIRED for strict plant isolation. Always pass this. */
-  plantCode?: string;
   page?: number;
   limit?: number;
 }
 
-export async function fetchSuggestions(filters: SuggestionFilters = {}): Promise<PaginatedSuggestions> {
+export async function fetchSuggestions(plant: "bidp" | "jap", filters: SuggestionFilters = {}): Promise<PaginatedSuggestions> {
   const params = new URLSearchParams();
   if (filters.status)      params.set("status",      filters.status);
   if (filters.type)        params.set("type",         filters.type);
   if (filters.employeeNo)  params.set("employeeNo",   filters.employeeNo);
-  if (filters.plantCode)   params.set("plantCode",    filters.plantCode);
   if (filters.page)        params.set("page",         String(filters.page));
   if (filters.limit)       params.set("limit",        String(filters.limit));
   const query = params.toString();
-  return api.get<PaginatedSuggestions>(`/suggestions${query ? `?${query}` : ""}`);
+  return api.get<PaginatedSuggestions>(`/${plant}/suggestions${query ? `?${query}` : ""}`);
 }
 
-export async function fetchSuggestion(id: string | number): Promise<Suggestion> {
-  return api.get<Suggestion>(`/suggestions/${id}`);
+export async function fetchSuggestion(plant: "bidp" | "jap", id: string | number): Promise<Suggestion> {
+  return api.get<Suggestion>(`/${plant}/suggestions/${id}`);
 }
 
-export async function createSuggestion(payload: Record<string, unknown>): Promise<Suggestion> {
-  return api.post<Suggestion>("/suggestions", payload);
+export async function createSuggestion(plant: "bidp" | "jap", payload: Record<string, unknown>): Promise<Suggestion> {
+  return api.post<Suggestion>(`/${plant}/suggestions`, payload);
 }
 
-export async function updateSuggestion(id: string | number, payload: Record<string, unknown>): Promise<Suggestion> {
-  return api.put<Suggestion>(`/suggestions/${id}`, payload);
+export async function updateSuggestion(plant: "bidp" | "jap", id: string | number, payload: Record<string, unknown>): Promise<Suggestion> {
+  return api.put<Suggestion>(`/${plant}/suggestions/${id}`, payload);
 }
 
 export async function patchSuggestionStatus(
+  plant: "bidp" | "jap",
   id: string | number,
   status: string,
   pendingWith?: string,
@@ -194,68 +249,61 @@ export async function patchSuggestionStatus(
     rejectedOn?: string;
   }
 ): Promise<Suggestion> {
-  return api.patch<Suggestion>(`/suggestions/${id}/status`, { status, pendingWith, ...meta });
+  return api.patch<Suggestion>(`/${plant}/suggestions/${id}/status`, { status, pendingWith, ...meta });
 }
 
 // ─── Employees ────────────────────────────────────────────────────────────────
 
-export async function fetchEmployees(plantCode?: string, role?: string): Promise<Employee[]> {
-  const params = new URLSearchParams();
-  if (plantCode) params.set("plantCode", plantCode);
-  if (role)      params.set("role", role);
-  const query = params.toString();
-  return api.get<Employee[]>(`/employees${query ? `?${query}` : ""}`);
+export async function fetchEmployees(plant: "bidp" | "jap", role?: string): Promise<Employee[]> {
+  const query = role ? `?role=${role}` : "";
+  return api.get<Employee[]>(`/${plant}/employees${query}`);
 }
 
 // ─── Categories ───────────────────────────────────────────────────────────────
 
-export async function fetchCategories(plantCode?: string): Promise<Category[]> {
-  const query = plantCode ? `?plantCode=${plantCode}` : "";
-  return api.get<Category[]>(`/categories${query}`);
+export async function fetchCategories(plant: "bidp" | "jap"): Promise<Category[]> {
+  return api.get<Category[]>(`/${plant}/categories`);
 }
 
-export async function addCategory(plantCode: string, name: string, description?: string): Promise<Category> {
-  return api.post<Category>("/categories", { plantCode, name, description });
+export async function addCategory(plant: "bidp" | "jap", name: string, description?: string): Promise<Category> {
+  return api.post<Category>(`/${plant}/categories`, { name, description });
 }
 
-export async function removeCategory(id: number): Promise<void> {
-  return api.delete(`/categories/${id}`);
+export async function removeCategory(plant: "bidp" | "jap", id: number): Promise<void> {
+  return api.delete(`/${plant}/categories/${id}`);
 }
 
 // ─── Dept Mappings ────────────────────────────────────────────────────────────
 
-export async function fetchDeptMappings(): Promise<DeptMapping[]> {
-  return api.get<DeptMapping[]>("/dept-mappings");
+export async function fetchDeptMappings(plant: "bidp" | "jap"): Promise<DeptMapping[]> {
+  return api.get<DeptMapping[]>(`/${plant}/dept-mappings`);
 }
 
-export async function addDeptMapping(deptName: string, mappedName: string): Promise<DeptMapping> {
-  return api.post<DeptMapping>("/dept-mappings", { deptName, mappedName });
+export async function addDeptMapping(plant: "bidp" | "jap", deptName: string, mappedName: string): Promise<DeptMapping> {
+  return api.post<DeptMapping>(`/${plant}/dept-mappings`, { deptName, mappedName });
 }
 
-export async function updateDeptMapping(id: number, mappedName: string): Promise<DeptMapping> {
-  return api.put<DeptMapping>(`/dept-mappings/${id}`, { mappedName });
+export async function updateDeptMapping(plant: "bidp" | "jap", id: number, mappedName: string): Promise<DeptMapping> {
+  return api.put<DeptMapping>(`/${plant}/dept-mappings/${id}`, { mappedName });
 }
 
-export async function removeDeptMapping(id: number): Promise<void> {
-  return api.delete(`/dept-mappings/${id}`);
+export async function removeDeptMapping(plant: "bidp" | "jap", id: number): Promise<void> {
+  return api.delete(`/${plant}/dept-mappings/${id}`);
 }
 
 // ─── Authority Assignments ────────────────────────────────────────────────────
 
-export async function fetchAuthority(plantCode?: string, role?: string): Promise<AuthorityAssignment[]> {
-  const params = new URLSearchParams();
-  if (plantCode) params.set("plantCode", plantCode);
-  if (role)      params.set("role", role);
-  const query = params.toString();
-  return api.get<AuthorityAssignment[]>(`/authority-assignments${query ? `?${query}` : ""}`);
+export async function fetchAuthority(plant: "bidp" | "jap", role?: string): Promise<AuthorityAssignment[]> {
+  const query = role ? `?role=${role}` : "";
+  return api.get<AuthorityAssignment[]>(`/${plant}/authority-assignments${query}`);
 }
 
-export async function addAuthority(payload: Partial<AuthorityAssignment>): Promise<AuthorityAssignment> {
-  return api.post<AuthorityAssignment>("/authority-assignments", payload);
+export async function addAuthority(plant: "bidp" | "jap", payload: Partial<AuthorityAssignment>): Promise<AuthorityAssignment> {
+  return api.post<AuthorityAssignment>(`/${plant}/authority-assignments`, payload);
 }
 
-export async function removeAuthority(id: number): Promise<void> {
-  return api.delete(`/authority-assignments/${id}`);
+export async function removeAuthority(plant: "bidp" | "jap", id: number): Promise<void> {
+  return api.delete(`/${plant}/authority-assignments/${id}`);
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -278,12 +326,12 @@ export async function markAllNotificationsRead(): Promise<void> {
 
 // ─── Awards ───────────────────────────────────────────────────────────────────
 
-export async function fetchAwards(employeeNo?: string): Promise<Award[]> {
+export async function fetchAwards(plant: "bidp" | "jap", employeeNo?: string): Promise<Award[]> {
   const query = employeeNo ? `?employeeNo=${employeeNo}` : "";
-  return api.get<Award[]>(`/awards${query}`);
+  return api.get<Award[]>(`/${plant}/awards${query}`);
 }
 
-export async function createAward(payload: {
+export async function createAward(plant: "bidp" | "jap", payload: {
   suggestionId: number;
   suggestionNo: string;
   employeeNo: string;
@@ -291,31 +339,32 @@ export async function createAward(payload: {
   category: string;
   awardDate: string;
 }): Promise<Award> {
-  return api.post<Award>("/awards", payload);
+  return api.post<Award>(`/${plant}/awards`, payload);
 }
 
 export async function updateNeftStatus(
+  plant: "bidp" | "jap",
   id: number,
   neftStatus: "Pending" | "Processed" | "Failed",
   neftDate?: string
 ): Promise<Award> {
-  return api.patch<Award>(`/awards/${id}/neft`, { neftStatus, neftDate });
+  return api.patch<Award>(`/${plant}/awards/${id}/neft`, { neftStatus, neftDate });
 }
 
 // ─── Reports ─────────────────────────────────────────────────────────────────
 
-export async function fetchReportSummary(): Promise<ReportSummary> {
-  return api.get<ReportSummary>("/reports/summary");
+export async function fetchReportSummary(plant: "bidp" | "jap"): Promise<ReportSummary> {
+  return api.get<ReportSummary>(`/${plant}/reports/summary`);
 }
 
-export async function fetchDeptStats(): Promise<DeptStats[]> {
-  return api.get<DeptStats[]>("/reports/dept-stats");
+export async function fetchDeptStats(plant: "bidp" | "jap"): Promise<DeptStats[]> {
+  return api.get<DeptStats[]>(`/${plant}/reports/dept-stats`);
 }
 
-export async function fetchCategoryStats(): Promise<CategoryStats[]> {
-  return api.get<CategoryStats[]>("/reports/category-stats");
+export async function fetchCategoryStats(plant: "bidp" | "jap"): Promise<CategoryStats[]> {
+  return api.get<CategoryStats[]>(`/${plant}/reports/category-stats`);
 }
 
-export async function fetchMemoReport(month: string, year: string, type: string): Promise<MemoEntry[]> {
-  return api.get<MemoEntry[]>(`/reports/memo?month=${month}&year=${year}&type=${type}`);
+export async function fetchMemoReport(plant: "bidp" | "jap", month: string, year: string, type: string): Promise<MemoEntry[]> {
+  return api.get<MemoEntry[]>(`/${plant}/reports/memo?month=${month}&year=${year}&type=${type}`);
 }

@@ -10,9 +10,11 @@ import type { Suggestion } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
 import { downloadAwardLetterPDF } from "@/lib/pdfUtils";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
+import { usePlant } from "@/contexts/PlantContext";
 
 const AwardLetter = () => {
   const { t } = useLanguage();
+  const { plant } = usePlant();
   const [selectedSuggestion, setSelectedSuggestion] = useState("");
   const [found, setFound] = useState<Suggestion | null>(null);
   const [allSuggestions, setAllSuggestions] = useState<Suggestion[]>([]);
@@ -20,7 +22,7 @@ const AwardLetter = () => {
   const AWARD_ELIGIBLE_STATUSES = ["Approved & Closed", "Closed / Awarded"];
 
   useEffect(() => {
-    apiService.fetchSuggestions({ limit: 2000 }).then(r => setAllSuggestions(r.data)).catch(() => {});
+    apiService.fetchSuggestions(plant as "bidp" | "jap", { limit: 2000 }).then(r => setAllSuggestions(r.data)).catch(() => {});
   }, []);
 
   const awardedOptions = useMemo(() =>

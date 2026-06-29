@@ -19,6 +19,7 @@ import { calculateDaysPending } from "@/lib/bidp/approvalPipeline";
 import { teamMemberOptions, flmOptions } from "@/lib/bidp/suggestionConstants";
 import { useCategories } from "@/contexts/CategoryContext";
 import { useDeptMappings } from "@/contexts/DeptMappingContext";
+import { usePlant } from "@/contexts/PlantContext";
 
 // Statuses where all pending columns collapse to "Closed"
 const CLOSED_STATUSES = ["Approved & Closed", "Implemented", "Rejected", "Closed"];
@@ -101,6 +102,7 @@ const getSuggestionLevel = (type: string, status: string): string => {
 
 const GeneralEnquiry = () => {
   const { t } = useLanguage();
+  const { plant } = usePlant();
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [suggestionNo, setSuggestionNo] = useState("");
@@ -126,12 +128,12 @@ const GeneralEnquiry = () => {
   // Load suggestions and employees from backend on mount
   // Exclude drafts — drafts are only visible to the owning employee in MySuggestions
   useEffect(() => {
-    apiService.fetchSuggestions({ limit: 2000 }).then(r => {
+    apiService.fetchSuggestions(plant as "bidp" | "jap", { limit: 2000 }).then(r => {
       const nonDrafts = r.data.filter(s => s.status !== "Draft");
       setAllSuggestions(nonDrafts);
       setResults(nonDrafts);
     }).catch(() => {});
-    apiService.fetchEmployees().then(setAllEmployees).catch(() => {});
+    apiService.fetchEmployees(plant as "bidp" | "jap").then(setAllEmployees).catch(() => {});
   }, []);
 
   const suggestionOptions = useMemo(() =>

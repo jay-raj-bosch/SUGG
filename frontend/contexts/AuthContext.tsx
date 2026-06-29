@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 import * as apiService from "@/lib/apiService";
-import { setToken, clearToken } from "@/lib/api";
+import { clearToken } from "@/lib/api";
 import type { JapRole } from "@/lib/jap/workflowPipeline";
+import { PLANT_CODE_BIDP } from "@/lib/constants";
 export type { JapRole };
 
 export type BidpRole = "employee" | "flm" | "manager" | "bps_admin" | "bps_dh";
@@ -19,17 +20,41 @@ export interface AuthUser {
   email: string;
 }
 
-// Default credentials for auto-login (hardcoded in backend store)
-const DEFAULT_EMPLOYEE_NO = "30698665";
-const DEFAULT_ADMIN_NO = "30698720";
-const DEFAULT_PASSWORD = "password123";
+// ── Demo-mode fallback users ──────────────────────────────────────────────────
+// Used ONLY when the backend is unreachable (VITE_DEMO_MODE=true).
+// In production with SSO these are never used — the real user identity
+// comes from the SSO provider via POST /api/auth/sso-exchange.
+const DEMO_EMPLOYEE: AuthUser = {
+  employeeNo: "DEMO-EMP",
+  name: "Demo Employee",
+  department: "Demo Dept",
+  area: "Demo Area",
+  plantCode: PLANT_CODE_BIDP,
+  role: "employee",
+  ntid: "demo_emp",
+  email: "demo.employee@company.com",
+};
+
+const DEMO_ADMIN: AuthUser = {
+  employeeNo: "DEMO-ADMIN",
+  name: "Demo Admin",
+  department: "Demo Admin Dept",
+  area: "Demo Area",
+  plantCode: PLANT_CODE_BIDP,
+  role: "admin",
+  ntid: "demo_admin",
+  email: "demo.admin@company.com",
+};
 
 interface AuthContextType {
   user: AuthUser | null;
+  /** Demo/fallback only — sets a placeholder role when no real auth is present. */
   setRole: (role: "employee" | "admin") => void;
   setBidpRole: (bidpRole: BidpRole, userData: Partial<AuthUser>) => void;
   setJapRole: (japRole: JapRole, userData: Partial<AuthUser>) => void;
   login: (employeeNo: string, password: string, requiredRole: "employee" | "admin") => Promise<string | null>;
+  /** SSO login — pass the access token received from the SSO provider redirect. */
+  loginWithSsoToken: (ssoAccessToken: string) => Promise<string | null>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -39,66 +64,46 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
 
-  // Auto-login on mount — restore saved BidP or JaP role session
+  // Session restore on mount.
+  // 1. Tries GET /api/auth/me with the stored JWT — works for both credential
+  //    login and SSO (the app JWT is the same format either way).
+  // 2. Falls back to demo mode if no token or backend is unreachable.
   useEffect(() => {
     (async () => {
-      const savedBidpRole   = sessionStorage.getItem("bidpRole") as BidpRole | null;
-      const savedBidpData   = sessionStorage.getItem("bidpUserData");
-      const savedJapRole    = sessionStorage.getItem("japRole") as JapRole | null;
-      const savedJapData    = sessionStorage.getItem("japUserData");
+      const savedBidpRole = sessionStorage.getItem("bidpRole") as BidpRole | null;
+      const savedBidpData = sessionStorage.getItem("bidpUserData");
+      const savedJapRole  = sessionStorage.getItem("japRole") as JapRole | null;
+      const savedJapData  = sessionStorage.getItem("japUserData");
+
+      // Apply a saved role context on top of the resolved user
+      const applyRoleContext = (baseUser: AuthUser): AuthUser => {
+        if (savedJapRole && savedJapData) {
+          const extra = JSON.parse(savedJapData) as Partial<AuthUser>;
+          return { ...baseUser, ...extra, role: savedJapRole === "employee" ? "employee" : "admin", japRole: savedJapRole, bidpRole: undefined };
+        }
+        if (savedBidpRole && savedBidpData) {
+          const extra = JSON.parse(savedBidpData) as Partial<AuthUser>;
+          return { ...baseUser, ...extra, role: savedBidpRole === "employee" ? "employee" : "admin", bidpRole: savedBidpRole, japRole: undefined };
+        }
+        return baseUser;
+      };
 
       try {
-        const res = await apiService.login(DEFAULT_EMPLOYEE_NO, DEFAULT_PASSWORD, "employee");
-        if (savedJapRole && savedJapData) {
-          const userData = JSON.parse(savedJapData) as Partial<AuthUser>;
-          const baseRole = savedJapRole === "employee" ? "employee" : "admin";
-          setUser({ ...res.user, ...userData, role: baseRole, japRole: savedJapRole } as AuthUser);
-        } else if (savedBidpRole && savedBidpData) {
-          const userData = JSON.parse(savedBidpData) as Partial<AuthUser>;
-          const baseRole = savedBidpRole === "employee" ? "employee" : "admin";
-          setUser({ ...res.user, ...userData, role: baseRole, bidpRole: savedBidpRole } as AuthUser);
-        } else {
-          setUser(res.user);
-        }
+        // Restore from existing JWT — no credentials needed
+        const restoredUser = await apiService.restoreSession();
+        setUser(applyRoleContext(restoredUser));
       } catch {
-        const fallback: AuthUser = {
-          employeeNo: DEFAULT_EMPLOYEE_NO,
-          name: "Karthik",
-          department: "BIDP1/TEF",
-          area: "RBIN/BIDP1",
-          plantCode: "PLT-01",
-          role: "employee",
-          ntid: "karthik",
-          email: "karthik@company.com",
-        };
-        if (savedJapRole && savedJapData) {
-          const userData = JSON.parse(savedJapData) as Partial<AuthUser>;
-          const baseRole = savedJapRole === "employee" ? "employee" : "admin";
-          setUser({ ...fallback, ...userData, role: baseRole, japRole: savedJapRole } as AuthUser);
-        } else if (savedBidpRole && savedBidpData) {
-          const userData = JSON.parse(savedBidpData) as Partial<AuthUser>;
-          const baseRole = savedBidpRole === "employee" ? "employee" : "admin";
-          setUser({ ...fallback, ...userData, role: baseRole, bidpRole: savedBidpRole } as AuthUser);
-        } else {
-          setUser(fallback);
-        }
+        // No valid token or backend offline — use demo fallback
+        setUser(applyRoleContext(DEMO_EMPLOYEE));
       }
     })();
   }, []);
 
-  const setRole = useCallback(async (role: "employee" | "admin") => {
-    const empNo = role === "admin" ? DEFAULT_ADMIN_NO : DEFAULT_EMPLOYEE_NO;
-    try {
-      const res = await apiService.login(empNo, DEFAULT_PASSWORD, role);
-      setUser(res.user);
-    } catch {
-      // Fallback if backend is unreachable
-      if (role === "admin") {
-        setUser({ employeeNo: "30698720", name: "Vijay Sharma", department: "BIDP1/ADM", area: "RBIN/BIDP1", plantCode: "PLT-01", role: "admin", ntid: "vsharma", email: "vijay.sharma@company.com" });
-      } else {
-        setUser({ employeeNo: DEFAULT_EMPLOYEE_NO, name: "Karthik", department: "BIDP1/TEF", area: "RBIN/BIDP1", plantCode: "PLT-01", role: "employee", ntid: "karthik", email: "karthik@company.com" });
-      }
-    }
+  // Demo/fallback only — called by BidPUnifiedLayout when no user is present.
+  // In production with SSO this path is never reached because SSO provides
+  // the user identity before any plant page is rendered.
+  const setRole = useCallback((role: "employee" | "admin") => {
+    setUser(role === "admin" ? DEMO_ADMIN : DEMO_EMPLOYEE);
   }, []);
 
   const login = useCallback(async (
@@ -112,6 +117,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return null;
     } catch (err: any) {
       return err?.message || "Login failed";
+    }
+  }, []);
+
+  // SSO login — call this from the SSO redirect callback page.
+  // Pass the access token received from the SSO provider.
+  // The backend validates the SSO token and returns an app JWT + user.
+  const loginWithSsoToken = useCallback(async (ssoAccessToken: string): Promise<string | null> => {
+    try {
+      const res = await apiService.exchangeSsoToken(ssoAccessToken);
+      setUser(res.user);
+      return null;
+    } catch (err: any) {
+      return err?.message || "SSO login failed";
     }
   }, []);
 
@@ -157,7 +175,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, setRole, setBidpRole, setJapRole, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, setRole, setBidpRole, setJapRole, login, loginWithSsoToken, logout, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

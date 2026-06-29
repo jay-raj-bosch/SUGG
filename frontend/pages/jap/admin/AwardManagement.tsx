@@ -19,6 +19,7 @@ import { downloadCSV } from "@/lib/pdfUtils";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { PLANT_CODE_JAP } from "@/lib/constants";
 
 const JaPAwardManagement = () => {
   const { t } = useLanguage();
@@ -52,9 +53,9 @@ const JaPAwardManagement = () => {
   const { suggestions: contextSuggestions, updateSuggestion } = useSuggestions();
 
   useEffect(() => {
-    const ctx = contextSuggestions.filter(s => s.plantCode === "PLT-02");
+      const ctx = contextSuggestions.filter(s => s.plantCode === PLANT_CODE_JAP);
     setAllSuggestions(ctx);
-    apiService.fetchSuggestions({ plantCode: "jap", limit: 2000 })
+    apiService.fetchSuggestions("jap", { limit: 2000 })
       .then(r => {
         if (r.data?.length) {
           const japOnly = r.data.filter(s => s.plantCode === "PLT-02");
@@ -86,7 +87,7 @@ const JaPAwardManagement = () => {
     const auditId = `JAP-AWD-${Date.now().toString().slice(-6)}`;
     if (suggestion) {
       try {
-        await apiService.patchSuggestionStatus(suggestion.id, "Closed / Awarded");
+        await apiService.patchSuggestionStatus("jap", suggestion.id, "Closed / Awarded");
       } catch { /* local fallback */ }
       updateSuggestion(suggestion.id, { status: "Closed / Awarded", awardAmount: awardType === "cash" ? Number(amount) : undefined, awardCategory: "Silver", awardDate: new Date().toISOString().slice(0, 10) });
     }

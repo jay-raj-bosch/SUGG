@@ -33,7 +33,7 @@ export const CategoryProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshCategories = useCallback(async () => {
     try {
-      const cats = await apiService.fetchCategories(plant ?? undefined);
+      const cats = await apiService.fetchCategories(plant as "bidp" | "jap");
       const names = cats.map(c => c.name);
       // Merge: keep any session-only categories that the backend doesn't know about
       const saved = restore() || [];

@@ -14,6 +14,7 @@ import { useNotifications } from "@/contexts/NotificationContext";
 import { useCategories } from "@/contexts/CategoryContext";
 import * as apiService from "@/lib/apiService";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
+import { usePlant } from "@/contexts/PlantContext";
 
 interface CategoryEntry {
   id: string;
@@ -28,6 +29,7 @@ const CategoryMaster = () => {
   const { t } = useLanguage();
   const { addNotification } = useNotifications();
   const { refreshCategories, addCategory: ctxAddCategory, removeCategories: ctxRemoveCategories } = useCategories();
+  const { plant } = usePlant();
 
   // Restore catList from sessionStorage on mount
   const [catList, setCatList] = useState<CategoryEntry[]>(() => {
@@ -38,7 +40,6 @@ const CategoryMaster = () => {
     return [];
   });
   const [search, setSearch] = useState("");
-  const [plant, setPlant] = useState("PLT-01");
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -52,7 +53,7 @@ const CategoryMaster = () => {
 
   // Load categories from backend on mount and merge with session data
   useEffect(() => {
-    apiService.fetchCategories().then(cats => {
+    apiService.fetchCategories(plant as "bidp" | "jap").then(cats => {
       const backendEntries = cats.map(c => ({ id: String(c.id), plant: c.plant_code, name: c.name, desc: c.description || "" }));
       setCatList(prev => {
         // Merge: backend entries + any session-only entries not in backend
@@ -93,7 +94,7 @@ const CategoryMaster = () => {
       toast.error("Category already exists"); return;
     }
     try {
-      const created = await apiService.addCategory(plant, name.trim(), desc.trim());
+      const created = await apiService.addCategory(plant as "bidp" | "jap", name.trim(), desc.trim());
       const entry = { id: String(created.id), plant: created.plant_code, name: created.name, desc: created.description || "" };
       setCatList(prev => [...prev, entry]);
       ctxAddCategory(created.name);
@@ -117,7 +118,7 @@ const CategoryMaster = () => {
 
     // Delete all selected — fire in parallel
     await Promise.allSettled(
-      toDelete.map(c => apiService.removeCategory(Number(c.id)).catch(() => {}))
+      toDelete.map(c => apiService.removeCategory(plant as "bidp" | "jap", Number(c.id)).catch(() => {}))
     );
 
     setCatList(prev => prev.filter(c => !selectedIds.has(c.id)));
@@ -146,7 +147,7 @@ const CategoryMaster = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs">Plant Code <span className="text-[9px] opacity-70">/ {t("Plant Code")}</span></Label>
-              <Input value={plant} onChange={e => setPlant(e.target.value)} />
+              <Input value={plant ?? ""} disabled className="bg-muted" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Category Name <span className="text-[9px] opacity-70">/ {t("Category")}</span></Label>

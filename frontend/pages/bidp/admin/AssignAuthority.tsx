@@ -47,7 +47,7 @@ const AssignAuthority = () => {
   const [suggestionRange, setSuggestionRange] = useState("");
   const [lookupDone, setLookupDone] = useState(false);
 
-  // Load authorities from backend on mount
+  // Load authorities from backend on mount — re-run if plant changes
   useEffect(() => {
     apiService.fetchAuthority(plant as "bidp" | "jap").then(list => {
       setAuthorities(list.map(a => ({
@@ -63,7 +63,7 @@ const AssignAuthority = () => {
         suggestionRange: "",
       })));
     }).catch(() => {});
-  }, []);
+  }, [plant]);
 
   // Clear auto-filled fields helper
   const clearAutoFill = () => {

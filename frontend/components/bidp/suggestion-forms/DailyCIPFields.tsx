@@ -4,8 +4,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Upload, X, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
-import { workshopOptions } from "@/lib/bidp/suggestionConstants";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useCategories } from "@/contexts/CategoryContext";
 import VoiceHighlight from "@/components/VoiceHighlight";
 import { type AttachmentItem, filesToAttachmentItems } from "@/lib/attachmentUtils";
 import { validateFiles } from "@/lib/fileSecurityUtils";
@@ -83,6 +83,7 @@ const ImageUploadSection = ({
 
 const DailyCIPFields = ({ values, onChange, errors, activeVoiceField, voiceMode, onActivateVoice, voiceInterimField, voiceInterimText, voiceIsTranslating, voiceTranslatingLang }: Props) => {
   const { t } = useLanguage();
+  const { categories } = useCategories();
   const today = new Date().toISOString().split("T")[0];
   const hi = (key: string) => activeVoiceField === key;
   const va = (key: string) => ({ voiceMode, onActivate: () => onActivateVoice?.(key), isTranslating: hi(key) && voiceIsTranslating, translatingLang: voiceTranslatingLang });
@@ -106,11 +107,12 @@ const DailyCIPFields = ({ values, onChange, errors, activeVoiceField, voiceMode,
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs">Workshop <span className="text-[10px] text-muted-foreground font-normal">/ {t("Workshop")}</span></Label>
-        <Select value={values.workshop || ""} onValueChange={v => onChange("workshop", v)}>
-          <SelectTrigger><SelectValue placeholder="Select workshop" /></SelectTrigger>
-          <SelectContent>{workshopOptions.map(w => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
+        <Label className="text-xs">Category <span className="text-destructive">*</span> <span className="text-[10px] text-muted-foreground font-normal">/ {t("Category")}</span></Label>
+        <Select value={values.category || ""} onValueChange={v => onChange("category", v)}>
+          <SelectTrigger className={errors.category ? "border-destructive" : ""}><SelectValue placeholder="Select category" /></SelectTrigger>
+          <SelectContent>{categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
         </Select>
+        {errors.category && <p className="text-xs text-destructive">{errors.category}</p>}
       </div>
 
       <VoiceHighlight active={hi("machineNoArea")} {...va("machineNoArea")}>

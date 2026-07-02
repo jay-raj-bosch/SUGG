@@ -115,6 +115,9 @@ export function downloadCSV(headers: string[], rows: string[][], filename: strin
  * @param rows       Data rows
  * @param filename   Output .xlsx filename
  * @param filters    Key-value pairs of active filters shown before the data table
+ * @param numericColumns  Column indices whose values are plain integers (e.g. Serial No,
+ *                        Days Pending) — rendered as right-aligned numbers instead of text
+ *                        so Excel doesn't flag them as "numbers stored as text".
  */
 export function downloadXLSX(
   title: string,
@@ -122,7 +125,9 @@ export function downloadXLSX(
   rows: string[][],
   filename: string,
   filters?: Record<string, string>,
+  numericColumns?: number[],
 ) {
+  const numericSet = new Set(numericColumns ?? []);
   // ── Style definitions ──────────────────────────────────────────────────────
   const TITLE_STYLE = {
     font: { bold: true, sz: 14, color: { rgb: "FFFFFF" } },
@@ -177,6 +182,16 @@ export function downloadXLSX(
     fill: { fgColor: { rgb: "EEF3FA" } },
   };
 
+  const DATA_STYLE_EVEN_NUM = {
+    ...DATA_STYLE_EVEN,
+    alignment: { ...DATA_STYLE_EVEN.alignment, horizontal: "right" },
+  };
+
+  const DATA_STYLE_ODD_NUM = {
+    ...DATA_STYLE_ODD,
+    alignment: { ...DATA_STYLE_ODD.alignment, horizontal: "right" },
+  };
+
   // ── Build worksheet cell-by-cell ──────────────────────────────────────────
   const wb = XLSXStyle.utils.book_new();
   // We'll track current row index
@@ -185,6 +200,17 @@ export function downloadXLSX(
   const setCell = (r: number, c: number, v: string, s?: object) => {
     const addr = XLSXStyle.utils.encode_cell({ r, c });
     ws[addr] = { v, t: "s", s };
+  };
+  // Numeric-aware cell setter — used for data rows only, so columns like
+  // Serial No / Days Pending render as real numbers (right-aligned, no
+  // "number stored as text" warning) instead of plain strings.
+  const setDataCell = (r: number, c: number, v: string, s?: object) => {
+    const addr = XLSXStyle.utils.encode_cell({ r, c });
+    if (numericSet.has(c) && v !== "" && !Number.isNaN(Number(v))) {
+      ws[addr] = { v: Number(v), t: "n", s };
+    } else {
+      ws[addr] = { v, t: "s", s };
+    }
   };
 
   // ── Row 0: Title spanning all columns ──
@@ -223,10 +249,14 @@ export function downloadXLSX(
   rowIdx++;
 
   // ── Data rows ──
+  const dataStartRowIdx = rowIdx;
   rows.forEach((row, ri) => {
-    const style = ri % 2 === 0 ? DATA_STYLE_EVEN : DATA_STYLE_ODD;
+    const isEven = ri % 2 === 0;
     headers.forEach((_, c) => {
-      setCell(rowIdx, c, row[c] ?? "", style);
+      const style = numericSet.has(c)
+        ? (isEven ? DATA_STYLE_EVEN_NUM : DATA_STYLE_ODD_NUM)
+        : (isEven ? DATA_STYLE_EVEN : DATA_STYLE_ODD);
+      setDataCell(rowIdx, c, row[c] ?? "", style);
     });
     rowIdx++;
   });
@@ -245,22 +275,42 @@ export function downloadXLSX(
       : []),
   ];
 
-  // ── Row heights ──
+  // ── Row heights — data rows grow to fit wrapped multi-line cell content ──
   const rowHeights: { hpt: number }[] = [];
   for (let i = 0; i < rowIdx; i++) {
     if (i === 0) rowHeights.push({ hpt: 24 });           // title
     else if (i === headerRowIdx) rowHeights.push({ hpt: 20 }); // header
-    else rowHeights.push({ hpt: 16 });
+    else if (i >= dataStartRowIdx) {
+      const row = rows[i - dataStartRowIdx];
+      const maxLines = row.reduce((m, cell) => Math.max(m, (cell ?? "").split("\n").length), 1);
+      rowHeights.push({ hpt: Math.min(16 * maxLines, 96) });
+    } else rowHeights.push({ hpt: 16 });
   }
   ws["!rows"] = rowHeights;
 
-  // ── Column widths ──
+  // ── Column widths — based on the longest single line within each cell ──
   const colWidths = headers.map((h, i) => {
     let max = h.length;
-    rows.forEach(r => { if (r[i] && r[i].length > max) max = r[i].length; });
+    rows.forEach(r => {
+      const cell = r[i];
+      if (!cell) return;
+      const longestLine = cell.split("\n").reduce((m, l) => Math.max(m, l.length), 0);
+      if (longestLine > max) max = longestLine;
+    });
     return { wch: Math.min(max + 2, 45) };
   });
   ws["!cols"] = colWidths;
+
+  // ── Freeze the header row + enable autofilter over the data range ──
+  ws["!views"] = [{ state: "frozen", ySplit: headerRowIdx + 1, xSplit: 0, topLeftCell: XLSXStyle.utils.encode_cell({ r: headerRowIdx + 1, c: 0 }), activePane: "bottomLeft" }];
+  if (rows.length > 0) {
+    ws["!autofilter"] = {
+      ref: XLSXStyle.utils.encode_range(
+        { r: headerRowIdx, c: 0 },
+        { r: rowIdx - 1, c: headers.length - 1 },
+      ),
+    };
+  }
 
   XLSXStyle.utils.book_append_sheet(wb, ws as XLSXStyle.WorkSheet, "Report");
   XLSXStyle.writeFile(wb, filename);

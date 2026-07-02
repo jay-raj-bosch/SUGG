@@ -7,12 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { statusColors, suggestionTypes } from "@/lib/mockData";
+import { statusColors, suggestionTypes, mockEmployees } from "@/lib/mockData";
 import type { Suggestion } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
-import { Search, Download, FileText, SendHorizonal, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Download, SendHorizonal, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { downloadCSV, downloadTablePDF, downloadXLSX } from "@/lib/pdfUtils";
+import { downloadXLSX } from "@/lib/pdfUtils";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
 import GeneralEnquiryDetailDialog from "@/components/bidp/GeneralEnquiryDetailDialog";
 import { calculateDaysPending } from "@/lib/bidp/approvalPipeline";
@@ -20,6 +20,7 @@ import { teamMemberOptions, flmOptions } from "@/lib/bidp/suggestionConstants";
 import { useCategories } from "@/contexts/CategoryContext";
 import { useDeptMappings } from "@/contexts/DeptMappingContext";
 import { usePlant } from "@/contexts/PlantContext";
+import { useSuggestions } from "@/contexts/SuggestionContext";
 
 // Statuses where all pending columns collapse to "Closed"
 const CLOSED_STATUSES = ["Approved & Closed", "Implemented", "Rejected", "Closed"];
@@ -43,7 +44,8 @@ const parsePendingWith = (
   pendingWith: string | undefined,
   status: string,
   employees: apiService.Employee[] = [],
-  suggestion?: { assignedFlm?: string; evaluatedBy?: string; approvedByManager?: string; approvedByBpsAdmin?: string; approvedByBpsDh?: string }
+  suggestion?: { assignedFlm?: string; evaluatedBy?: string; approvedByManager?: string; approvedByBpsAdmin?: string; approvedByBpsDh?: string; department?: string; suggestionDepartment?: string },
+  authorities: apiService.AuthorityAssignment[] = []
 ) => {
   if (CLOSED_STATUSES.includes(status)) {
     return { currentLevel: "CLS", pendingWithEno: "Closed", pendingWithName: "Closed", pendingWithDept: "Closed", pendingDate: "Closed" };
@@ -53,7 +55,9 @@ const parsePendingWith = (
   }
   const dash = pendingWith.indexOf(" - ");
   const currentLevel    = dash !== -1 ? pendingWith.slice(0, dash).trim() : pendingWith;
-  const pendingWithName = dash !== -1 ? pendingWith.slice(dash + 3).trim() : "—";
+  let pendingWithName   = dash !== -1 ? pendingWith.slice(dash + 3).trim() : "—";
+  // "Revision"/"Revision Required" suffixes (used on send-back) aren't real names
+  if (pendingWithName === "Revision" || pendingWithName === "Revision Required") pendingWithName = "—";
 
   // Priority 1: direct emp no from suggestion status fields
   let empNo = "";
@@ -76,11 +80,33 @@ const parsePendingWith = (
   if (!empNo && pendingAuthorityLookup[pendingWithName]) empNo = pendingAuthorityLookup[pendingWithName].empNo;
   if (!empNo && pendingAuthorityLookup[firstName]) empNo = pendingAuthorityLookup[firstName].empNo;
 
+  // Priority 5: Manager/BPS Admin/BPS DH (and other authority roles) are
+  // routed by department rather than a single assigned person, so
+  // pendingWith for those stages is often just the bare role label with no
+  // name attached. Resolve the authority who actually covers this
+  // suggestion's department, falling back to any authority holding that
+  // role — mirrors the routing logic used to decide who sees the
+  // suggestion in "My Approvals".
+  if (!empNo && currentLevel !== "FLM" && currentLevel !== "Employee" && authorities.length) {
+    const suggDept = suggestion?.suggestionDepartment || suggestion?.department;
+    const atRole = authorities.filter(a => a.role === currentLevel);
+    const deptMatch = atRole.find(a => a.department === suggestion?.department || a.department === suggDept);
+    const chosen = deptMatch || atRole[0];
+    if (chosen) {
+      empNo = chosen.employee_no;
+      if (pendingWithName === "—") pendingWithName = chosen.name;
+    }
+  }
+
   // Resolve dept from live employee list
   let dept = "—";
   if (empNo) {
     const emp = employees.find(e => e.employee_no === empNo);
     if (emp) dept = emp.department;
+    if (dept === "—") {
+      const auth = authorities.find(a => a.employee_no === empNo);
+      if (auth?.department) dept = auth.department;
+    }
   }
   if (dept === "—" && pendingAuthorityLookup[firstName]) dept = pendingAuthorityLookup[firstName].dept;
 
@@ -112,7 +138,8 @@ const GeneralEnquiry = () => {
   const [suggestionType, setSuggestionType] = useState("all");
   const [category, setCategory] = useState("all");
   const [onBehalfFilter, setOnBehalfFilter] = useState("all");
-  const [allSuggestions, setAllSuggestions] = useState<Suggestion[]>([]);
+  const { getSubmittedSuggestions } = useSuggestions();
+  const allSuggestions = useMemo(() => getSubmittedSuggestions(), [getSubmittedSuggestions]);
   const [results, setResults] = useState<Suggestion[]>([]);
   const [searched, setSearched] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -122,19 +149,37 @@ const GeneralEnquiry = () => {
   const [selectedSerialNo, setSelectedSerialNo] = useState<number | null>(null);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [allEmployees, setAllEmployees] = useState<apiService.Employee[]>([]);
+  const [authorities, setAuthorities] = useState<apiService.AuthorityAssignment[]>([]);
   const { categories: categoryOptions } = useCategories();
   const { mapDept, entries: deptEntries } = useDeptMappings();
 
-  // Load suggestions and employees from backend on mount
-  // Exclude drafts — drafts are only visible to the owning employee in MySuggestions
+  // Keep results in sync with the shared suggestion list (e.g. new submissions)
+  // whenever no search/filter has been applied yet.
   useEffect(() => {
-    apiService.fetchSuggestions(plant as "bidp" | "jap", { limit: 2000 }).then(r => {
-      const nonDrafts = r.data.filter(s => s.status !== "Draft");
-      setAllSuggestions(nonDrafts);
-      setResults(nonDrafts);
-    }).catch(() => {});
-    apiService.fetchEmployees(plant as "bidp" | "jap").then(setAllEmployees).catch(() => {});
-  }, []);
+    if (!searched) setResults(allSuggestions);
+  }, [allSuggestions, searched]);
+
+  // Load employees from backend on mount — re-run if plant changes
+  useEffect(() => {
+    apiService.fetchEmployees(plant as "bidp" | "jap").then(setAllEmployees).catch(() => {
+      setAllEmployees(mockEmployees.filter(e => e.plantCode === "PLT-01").map(e => ({ employee_no: e.employeeNo, name: e.name, department: e.department, area: "", plant_code: e.plantCode, role: "employee" as const, ntid: e.ntid, email: e.email })));
+    });
+  }, [plant]);
+
+  // Load authority assignments (Manager/BPS Admin/BPS DH etc.) — used to
+  // resolve "Pending With" for department-routed approval stages.
+  useEffect(() => {
+    apiService.fetchAuthority(plant as "bidp" | "jap").then(setAuthorities).catch(() => {
+      setAuthorities([
+        { id: 110, plant_code: "PLT-01", employee_no: "30698710", name: "Suresh M",     department: "BIDP1/TEF", role: "FLM",       type: "Internal", email: "", ntid: "" },
+        { id: 111, plant_code: "PLT-01", employee_no: "30698711", name: "Ganesh R",     department: "BIDP2/QAL", role: "FLM",       type: "Internal", email: "", ntid: "" },
+        { id: 112, plant_code: "PLT-01", employee_no: "30698712", name: "Priya S",      department: "BIDP1/HRD", role: "FLM",       type: "Internal", email: "", ntid: "" },
+        { id: 113, plant_code: "PLT-01", employee_no: "30698702", name: "Anita Sharma", department: "BIDP1/MNT", role: "Manager",   type: "Internal", email: "", ntid: "" },
+        { id: 114, plant_code: "PLT-01", employee_no: "30698720", name: "Vijay Sharma", department: "BIDP1/ADM", role: "BPS Admin", type: "Internal", email: "", ntid: "" },
+        { id: 115, plant_code: "PLT-01", employee_no: "30698704", name: "Priya Devi",   department: "BIDP1/SAF", role: "BPS DH",    type: "Internal", email: "", ntid: "" },
+      ]);
+    });
+  }, [plant]);
 
   const suggestionOptions = useMemo(() =>
     allSuggestions.map(s => ({
@@ -149,6 +194,26 @@ const GeneralEnquiry = () => {
       label: `${e.employee_no} — ${e.name}`,
       sublabel: e.department,
     })), [allEmployees]);
+
+  // empNo → { name, dept } lookup for resolving the "On Behalf" person —
+  // prefers the live backend employee list, falls back to the static
+  // teamMemberOptions/mockEmployees seed data so it always resolves.
+  const empByNo = useMemo(() => {
+    const m: Record<string, { name: string; dept: string }> = {};
+    for (const e of allEmployees) m[e.employee_no] = { name: e.name, dept: e.department || "" };
+    for (const t of teamMemberOptions) if (!m[t.value]) m[t.value] = { name: t.name, dept: t.dept };
+    for (const e of mockEmployees) if (!m[e.employeeNo]) m[e.employeeNo] = { name: e.name, dept: e.department };
+    return m;
+  }, [allEmployees]);
+
+  /** Resolve the "on behalf" person's empNo/name/dept for a suggestion, or null if not on-behalf. */
+  const resolveOnBehalf = (s: Suggestion): { empNo: string; name: string; dept: string } | null => {
+    const fd = (s.formData || {}) as Record<string, any>;
+    if (fd.suggestionFor !== "behalf" || !fd.mainSuggestor) return null;
+    const empNo = String(fd.mainSuggestor);
+    const found = empByNo[empNo];
+    return { empNo, name: found?.name || "—", dept: found?.dept ? mapDept(found.dept) : "—" };
+  };
 
   // Build dropdown options from department mapping entries (all mapped names)
   const deptFilterOptions = useMemo(() => {
@@ -203,47 +268,28 @@ const GeneralEnquiry = () => {
 
   const exportData = useMemo(() => {
     const headers = [
-      "Serial No", "Requested By (Name)", "Requested By (Emp No)", "Team Members", "Department",
-      "Suggestion No", "Suggestion Date", "On Behalf", "Status", "Current Level", "Suggestion Level",
-      "Pending With Eno", "Pending With Name", "Pending With Department", "Days Pending",
+      "Serial No", "Requested By (Name)", "Requested By (Emp No)", "Department",
+      "Suggestion No", "Suggestion Date", "On Behalf Emp No", "On Behalf Name", "On Behalf Dept", "Status", "Current Level", "Suggestion Level",
+      "Pending With", "Days Pending",
     ];
     const rows = results.map((s, i) => {
-      const p = parsePendingWith(s.pendingWith, s.status, allEmployees, s);
+      const p = parsePendingWith(s.pendingWith, s.status, allEmployees, s, authorities);
       const isClosed = CLOSED_STATUSES.includes(s.status);
-      const fd = (s.formData || {}) as Record<string, any>;
-      const teamMembers: string[] = (fd.teamMembers || []);
-      const teamStr = teamMembers.map((m: string) => {
-        const di = m.indexOf("\u2013");
-        if (di !== -1) return `${m.slice(0, di).trim()} (${m.slice(di + 1).trim()})`;
-        const opt = teamMemberOptions.find(o => o.value === m);
-        if (opt) {
-          return `${opt.name} (${m})`;
-        }
-        return m;
-      }).join(" | ");
-      const isOnBehalf = fd.suggestionFor === "behalf" ? "Yes" : "No";
+      const ob = resolveOnBehalf(s);
+      const pendingWithStr = (p.pendingWithName === "—" || p.pendingWithName === "Closed")
+        ? p.pendingWithName
+        : `${p.pendingWithName} (${p.pendingWithEno})${p.pendingWithDept && p.pendingWithDept !== "—" ? " - " + p.pendingWithDept : ""}`;
       return [
-        String(i + 1), s.employeeName || "", s.employeeNo || "", teamStr, mapDept(s.department),
-        s.suggestionNo, s.date, isOnBehalf, s.status,
+        String(i + 1), s.employeeName || "", s.employeeNo || "", mapDept(s.department),
+        s.suggestionNo, s.date, ob?.empNo || "—", ob?.name || "—", ob?.dept || "—", s.status,
         p.currentLevel, getSuggestionLevel(s.type, s.status),
-        p.pendingWithEno, p.pendingWithName, p.pendingWithDept,
+        pendingWithStr,
         isClosed ? "0" : String(calculateDaysPending(s)),
       ];
     });
     return { headers, rows };
-  }, [results, mapDept]);
+  }, [results, mapDept, empByNo, allEmployees, authorities]);
 
-  const handleExportCSV = () => {
-    const { headers, rows } = exportData;
-    downloadCSV(headers, rows, `General_Enquiry_${new Date().toISOString().slice(0, 10)}.csv`);
-    toast.success("CSV exported!");
-  };
-
-  const handleExportPDF = () => {
-    const { headers, rows } = exportData;
-    downloadTablePDF("General Enquiry Report", headers, rows, `General_Enquiry_${new Date().toISOString().slice(0, 10)}.pdf`);
-    toast.success("PDF exported!");
-  };
 
   const handleExportXLSX = () => {
     const { headers, rows } = exportData;
@@ -264,6 +310,7 @@ const GeneralEnquiry = () => {
       rows,
       `General_Enquiry_${new Date().toISOString().slice(0, 10)}.xlsx`,
       filters,
+      [0, 13], // Serial No, Days Pending — numeric columns
     );
     toast.success("XLSX exported!");
   };
@@ -373,17 +420,9 @@ const GeneralEnquiry = () => {
             </Button>
             <Button variant="outline" onClick={handleReset}>Reset / {t("Reset")}</Button>
             {searched && results.length > 0 && (
-              <>
-                <Button variant="outline" size="sm" className="gap-1 ml-auto" onClick={handleExportCSV}>
-                  <Download className="h-3 w-3" /> CSV
-                </Button>
-                <Button variant="outline" size="sm" className="gap-1" onClick={handleExportXLSX}>
-                  <Download className="h-3 w-3" /> XLSX
-                </Button>
-                <Button variant="outline" size="sm" className="gap-1" onClick={handleExportPDF}>
-                  <FileText className="h-3 w-3" /> PDF
-                </Button>
-              </>
+              <Button variant="outline" size="sm" className="gap-1 ml-auto" onClick={handleExportXLSX}>
+                <Download className="h-3 w-3" /> XLSX
+              </Button>
             )}
           </div>
         </CardContent>
@@ -413,13 +452,11 @@ const GeneralEnquiry = () => {
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Suggestion No</th>
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Subject</th>
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Suggestion Date</th>
-                  <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">On Behalf</th>
+                  <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">On Behalf Of</th>
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Status</th>
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Current Level</th>
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Suggestion Level</th>
-                  <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Pending With Eno</th>
-                  <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Pending With Name</th>
-                  <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Pending With Dept</th>
+                  <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Pending With</th>
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Days Pending</th>
                   <th className="pb-2 px-2 font-medium text-muted-foreground whitespace-nowrap">Detail</th>
                 </tr>
@@ -427,11 +464,11 @@ const GeneralEnquiry = () => {
               <tbody>
                 {pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={15} className="py-8 text-center text-muted-foreground text-sm">No records found.</td>
+                    <td colSpan={13} className="py-8 text-center text-muted-foreground text-sm">No records found.</td>
                   </tr>
                 ) : (
                   pageRows.map((s, i) => {
-                    const p = parsePendingWith(s.pendingWith, s.status, allEmployees, s);
+                    const p = parsePendingWith(s.pendingWith, s.status, allEmployees, s, authorities);
                     const isClosed = CLOSED_STATUSES.includes(s.status);
                     const isSentBack = s.status === "Sent Back";
                     const globalIdx = (currentPage - 1) * rowsPerPage + i + 1;
@@ -464,21 +501,39 @@ const GeneralEnquiry = () => {
                           <span className="block truncate" title={s.subject}>{s.subject || "—"}</span>
                         </td>
                         <td className="py-2 px-2 whitespace-nowrap">{s.date}</td>
-                        <td className="py-2 px-2 text-center">
-                          {s.formData?.suggestionFor === "behalf" ? (
-                            <Badge variant="outline" className="text-[10px] bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700">Yes</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">No</span>
-                          )}
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {(() => {
+                            const ob = resolveOnBehalf(s);
+                            if (!ob) return <span className="text-muted-foreground">—</span>;
+                            return (
+                              <div className="flex flex-col leading-tight gap-0.5">
+                                <span className="font-medium">{ob.name}</span>
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1 flex-wrap">
+                                  <span className="font-mono">{ob.empNo}</span>
+                                  {ob.dept !== "—" && <><span className="opacity-40">·</span><span>{ob.dept}</span></>}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="py-2 px-2">
                           <Badge variant="outline" className={`text-[10px] ${statusColors[s.status] || ""}`}>{s.status}</Badge>
                         </td>
                         <td className={`py-2 px-2 font-medium whitespace-nowrap ${isClosed ? "text-muted-foreground" : ""}`}>{p.currentLevel}</td>
                         <td className={`py-2 px-2 whitespace-nowrap ${isClosed ? "text-muted-foreground" : ""}`}>{getSuggestionLevel(s.type, s.status)}</td>
-                        <td className={`py-2 px-2 font-mono ${isClosed ? "text-muted-foreground" : ""}`}>{p.pendingWithEno}</td>
-                        <td className={`py-2 px-2 whitespace-nowrap ${isClosed ? "text-muted-foreground" : ""}`}>{p.pendingWithName}</td>
-                        <td className={`py-2 px-2 ${isClosed ? "text-muted-foreground" : ""}`}>{p.pendingWithDept}</td>
+                        <td className="py-2 px-2 whitespace-nowrap">
+                          {p.pendingWithName === "—" || p.pendingWithName === "Closed" ? (
+                            <span className="text-muted-foreground">{p.pendingWithName}</span>
+                          ) : (
+                            <div className="flex flex-col leading-tight gap-0.5">
+                              <span className="font-medium">{p.pendingWithName}</span>
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-1 flex-wrap">
+                                <span className="font-mono">{p.pendingWithEno}</span>
+                                {p.pendingWithDept && p.pendingWithDept !== "—" && <><span className="opacity-40">·</span><span>{p.pendingWithDept}</span></>}
+                              </span>
+                            </div>
+                          )}
+                        </td>
                         <td className={`py-2 px-2 whitespace-nowrap font-medium ${isClosed ? "text-muted-foreground" : ""}`}>
                           {(() => {
                             if (isClosed) return "—";

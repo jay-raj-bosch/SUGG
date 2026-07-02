@@ -1,7 +1,7 @@
 // BidP — Admin Sidebar
 // This file owns all BidP admin menu items. Never import JaP items here.
 import {
-  Search, DollarSign, BarChart3, Building,
+  Search, DollarSign, FileSpreadsheet, BarChart3, Building,
   Tag, ArrowRightLeft, RotateCcw, Award, ArrowLeft,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
@@ -9,6 +9,8 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { usePlant } from "@/contexts/PlantContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { bidpRoleCanAccessAdminPath } from "@/lib/bidp/roles";
 
 interface Props { onClose?: () => void; }
 
@@ -16,17 +18,20 @@ const BidPAdminSidebarContent = ({ onClose }: Props) => {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { plantPrefix } = usePlant();
+  const { user } = useAuth();
 
   const menuItems = [
-    { title: "General Enquiry",     translationKey: "General Enquiry",            url: `${plantPrefix}/admin/general-enquiry`,     icon: Search },
-    { title: "NEFT/MIS Report",     translationKey: "NEFT / MIS Report",          url: `${plantPrefix}/admin/neft-report`,         icon: DollarSign },
-    { title: "MIS Graphical",       translationKey: "MIS Graphical Report",       url: `${plantPrefix}/admin/mis-graphical`,       icon: BarChart3 },
-    { title: "Dept Mapping",        translationKey: "Add Department Mapping",     url: `${plantPrefix}/admin/dept-mapping`,        icon: Building },
-    { title: "Category Master",     translationKey: "Category Master",            url: `${plantPrefix}/admin/category-master`,     icon: Tag },
-    { title: "Transfer Suggestion", translationKey: "Transfer Suggestion",        url: `${plantPrefix}/admin/transfer-suggestion`, icon: ArrowRightLeft },
-    { title: "Reopen Suggestion",   translationKey: "Reopen Rejected Suggestion", url: `${plantPrefix}/admin/reopen-suggestion`,   icon: RotateCcw },
-    { title: "Award Letter",        translationKey: "Award Letter",               url: `${plantPrefix}/admin/award-letter`,        icon: Award },
-  ];
+    { title: "General Enquiry",     translationKey: "General Enquiry",            url: `${plantPrefix}/admin/general-enquiry`,     icon: Search,          path: "general-enquiry" },
+    { title: "NEFT Report",         translationKey: "NEFT Report",                 url: `${plantPrefix}/admin/neft-report`,         icon: DollarSign,      path: "neft-report" },
+    { title: "MIS Report",          translationKey: "MIS Report",                  url: `${plantPrefix}/admin/mis-report`,          icon: FileSpreadsheet, path: "mis-report" },
+    { title: "MIS Graphical",       translationKey: "MIS Graphical Report",       url: `${plantPrefix}/admin/mis-graphical`,       icon: BarChart3,       path: "mis-graphical" },
+    { title: "Dept Mapping",        translationKey: "Add Department Mapping",     url: `${plantPrefix}/admin/dept-mapping`,        icon: Building,        path: "dept-mapping" },
+    { title: "Category Master",     translationKey: "Category Master",            url: `${plantPrefix}/admin/category-master`,     icon: Tag,             path: "category-master" },
+    { title: "Transfer Suggestion", translationKey: "Transfer Suggestion",        url: `${plantPrefix}/admin/transfer-suggestion`, icon: ArrowRightLeft,  path: "transfer-suggestion" },
+    { title: "Reopen Suggestion",   translationKey: "Reopen Rejected Suggestion", url: `${plantPrefix}/admin/reopen-suggestion`,   icon: RotateCcw,       path: "reopen-suggestion" },
+    { title: "Award Letter",        translationKey: "Award Letter",               url: `${plantPrefix}/admin/award-letter`,        icon: Award,           path: "award-letter" },
+  ].filter(item => bidpRoleCanAccessAdminPath(user?.bidpRole, item.path));
+
 
   return (
     <>

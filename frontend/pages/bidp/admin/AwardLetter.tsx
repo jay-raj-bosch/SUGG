@@ -5,25 +5,20 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Download, Search, Award } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import type { Suggestion } from "@/lib/mockData";
-import * as apiService from "@/lib/apiService";
 import { downloadAwardLetterPDF } from "@/lib/pdfUtils";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
-import { usePlant } from "@/contexts/PlantContext";
+import { useSuggestions } from "@/contexts/SuggestionContext";
 
 const AwardLetter = () => {
   const { t } = useLanguage();
-  const { plant } = usePlant();
+  const { getSubmittedSuggestions } = useSuggestions();
   const [selectedSuggestion, setSelectedSuggestion] = useState("");
   const [found, setFound] = useState<Suggestion | null>(null);
-  const [allSuggestions, setAllSuggestions] = useState<Suggestion[]>([]);
+  const allSuggestions = getSubmittedSuggestions();
 
   const AWARD_ELIGIBLE_STATUSES = ["Approved & Closed", "Closed / Awarded"];
-
-  useEffect(() => {
-    apiService.fetchSuggestions(plant as "bidp" | "jap", { limit: 2000 }).then(r => setAllSuggestions(r.data)).catch(() => {});
-  }, []);
 
   const awardedOptions = useMemo(() =>
     allSuggestions.filter(s => !!s.awardAmount && AWARD_ELIGIBLE_STATUSES.includes(s.status)).map(s => ({

@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { moderatorOptions, kaizenThemes } from "@/lib/bidp/suggestionConstants";
+import { moderatorOptions } from "@/lib/bidp/suggestionConstants";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCategories } from "@/contexts/CategoryContext";
 import { Search } from "lucide-react";
@@ -132,10 +132,12 @@ const ShopFloorCIPFields = ({ values, onChange, errors, activeVoiceField, voiceM
 
       <div className="space-y-1.5">
         <Label className="text-xs">Kaizen Theme <span className="text-destructive">*</span> <span className="text-[10px] text-muted-foreground font-normal">/ {t("Kaizen Theme")}</span></Label>
-        <Select value={values.kaizenTheme || ""} onValueChange={v => onChange("kaizenTheme", v)}>
-          <SelectTrigger className={errors.kaizenTheme ? "border-destructive" : ""}><SelectValue placeholder="Select theme" /></SelectTrigger>
-          <SelectContent>{kaizenThemes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-        </Select>
+        <Input
+          value={values.kaizenTheme || ""}
+          onChange={e => onChange("kaizenTheme", e.target.value)}
+          placeholder="Enter kaizen theme"
+          className={errors.kaizenTheme ? "border-destructive" : ""}
+        />
         {errors.kaizenTheme && <p className="text-xs text-destructive">{errors.kaizenTheme}</p>}
       </div>
 
@@ -160,7 +162,7 @@ const ShopFloorCIPFields = ({ values, onChange, errors, activeVoiceField, voiceM
 
       <VoiceHighlight active={hi("horizontalDeployment")} {...va("horizontalDeployment")}>
         <div className="space-y-1.5">
-          <Label className="text-xs">Horizontal Deployment Count <span className="text-destructive">*</span> <span className="text-[10px] text-muted-foreground font-normal">/ {t("Horizontal Deployment Count")}</span></Label>
+          <Label className="text-xs">How many places this kaizen is deployed horizontally <span className="text-[10px] text-muted-foreground font-normal">/ {t("Horizontal Deployment Count")}</span> <span className="text-destructive">*</span></Label>
           <Input
             type="text" inputMode="numeric"
             value={values.horizontalDeployment || ""}

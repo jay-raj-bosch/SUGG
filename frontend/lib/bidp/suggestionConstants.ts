@@ -21,13 +21,6 @@ export const flmOptions = [
   { value: "30698730", name: "Karthik M", dept: "BIDP1/TEF", label: "Karthik M (30698730) · BIDP1/TEF" },
 ];
 
-export const workshopOptions = [
-  "Workshop A",
-  "Workshop B",
-  "Workshop C",
-  "Workshop D",
-];
-
 export const kaizenThemes = [
   "Quality Improvement",
   "Safety Enhancement",

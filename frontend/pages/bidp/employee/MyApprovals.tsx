@@ -26,11 +26,13 @@ import {
   buildApprovalUpdate,
   buildRejectionUpdate,
   buildSendBackUpdate,
+  buildRerouteUpdate,
   getPreviousStep,
   getNextStep,
   getPipeline,
   getPipelineDisplay,
   calculateDaysPending,
+  calculateCtfAward,
   MIC_FIXED_AMOUNT,
   type ApprovalLevel,
 } from "@/lib/bidp/approvalPipeline";
@@ -51,6 +53,10 @@ const MyApprovals = () => {
   const [sendBackTargetLevel, setSendBackTargetLevel] = useState<string>("");
   const [sendBackAttachFiles, setSendBackAttachFiles] = useState<AttachmentItem[]>([]);
   const sendBackFileInputRef = useRef<HTMLInputElement>(null);
+  const [rerouteOpen, setRerouteOpen] = useState(false);
+  const [rerouteLevel, setRerouteLevel] = useState<string>("");
+  const [rerouteTargetEmpNo, setRerouteTargetEmpNo] = useState("");
+  const [rerouteReason, setRerouteReason] = useState("");
   const [awardAmount, setAwardAmount] = useState("");
   const [activeTypeFilter, setActiveTypeFilter] = useState<string>("all");
   const [sentBackFilter, setSentBackFilter] = useState<string>("all");
@@ -88,15 +94,27 @@ const MyApprovals = () => {
   const [sssAttachFiles, setSssAttachFiles] = useState<AttachmentItem[]>([]);
   const [sssAttachCount, setSssAttachCount] = useState("");
   const sssFileInputRef = useRef<HTMLInputElement>(null);
-  const [sssApprovers, setSssApprovers] = useState<apiService.AuthorityAssignment[]>([]);
+  // Fallback authority data — used when backend is unreachable so the forward dropdown is never empty
+  const FALLBACK_AUTHORITY: apiService.AuthorityAssignment[] = [
+    { id: 110, plant_code: "PLT-01", employee_no: "30698710", name: "Suresh M",     department: "BIDP1/TEF", role: "FLM",       type: "Internal" },
+    { id: 111, plant_code: "PLT-01", employee_no: "30698711", name: "Ganesh R",     department: "BIDP2/QAL", role: "FLM",       type: "Internal" },
+    { id: 112, plant_code: "PLT-01", employee_no: "30698712", name: "Priya S",      department: "BIDP1/HRD", role: "FLM",       type: "Internal" },
+    { id: 113, plant_code: "PLT-01", employee_no: "30698702", name: "Anita Sharma", department: "BIDP1/MNT", role: "Manager",   type: "Internal" },
+    { id: 114, plant_code: "PLT-01", employee_no: "30698720", name: "Vijay Sharma", department: "BIDP1/ADM", role: "BPS Admin", type: "Internal" },
+    { id: 115, plant_code: "PLT-01", employee_no: "30698704", name: "Priya Devi",   department: "BIDP1/SAF", role: "BPS DH",    type: "Internal" },
+    { id: 116, plant_code: "PLT-01", employee_no: "30698750", name: "Rajesh Kumar", department: "BIDP1/FIN", role: "CTG",       type: "Internal" },
+    { id: 117, plant_code: "PLT-01", employee_no: "30698751", name: "Venkat Rao",   department: "BIDP1/TEF", role: "Implementation", type: "Internal" },
+    { id: 118, plant_code: "PLT-01", employee_no: "30698740", name: "Deepak Verma", department: "BIDP1/ADM", role: "VS RC",     type: "Internal" },
+  ];
+  const [sssApprovers, setSssApprovers] = useState<apiService.AuthorityAssignment[]>(FALLBACK_AUTHORITY);
 
   // Load authority list for Forward-For-Approval dropdown
   useEffect(() => {
     apiService.fetchAuthority(plant as "bidp" | "jap").then(list => {
       // Load all approvers; forward dropdown filters dynamically by next pipeline level
-      setSssApprovers(list);
-    }).catch(() => {});
-  }, []);
+      if (list.length > 0) setSssApprovers(list);
+    }).catch(() => { /* keep fallback */ });
+  }, [plant]);
 
   const sssTotalPoints = sssSelections.reduce<number>((sum, sel, i) => {
     if (sel === null) return sum;
@@ -133,24 +151,45 @@ const MyApprovals = () => {
 
   const [sfcSelectedMonth, setSfcSelectedMonth] = useState<number | null>(null); // index 0-11
   const [sfcSelectedWeightage, setSfcSelectedWeightage] = useState<number | null>(null); // index 0-3
-  const [sfcKaizenPoints, setSfcKaizenPoints] = useState<number | null>(null);
   const [sfcGembaSelections, setSfcGembaSelections] = useState<(number | null)[]>(Array(6).fill(null)); // points scored per row
-  const [sfcGembaTotal, setSfcGembaTotal] = useState<number | null>(null);
   const [sfcFinalPoints, setSfcFinalPoints] = useState<number | null>(null);
   const [sfcForwardTo, setSfcForwardTo] = useState("");
   const [sfcComments, setSfcComments] = useState("");
   const [sfcAttachFiles, setSfcAttachFiles] = useState<AttachmentItem[]>([]);
   const sfcFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Kaizen Project Points — computed automatically as soon as both a month
+  // and a weightage factor are selected (no separate "Calculate" click needed).
+  const sfcKaizenPoints = useMemo<number | null>(() => {
+    if (sfcSelectedMonth === null || sfcSelectedWeightage === null) return null;
+    const pts = SFC_MONTH_POINTS[sfcSelectedMonth] * SFC_WEIGHTAGE_OPTIONS[sfcSelectedWeightage].value;
+    return parseFloat(pts.toFixed(2));
+  }, [sfcSelectedMonth, sfcSelectedWeightage]);
+
+  // GEMBA total — computed automatically once all 6 rows have a selection.
+  const sfcGembaTotal = useMemo<number | null>(() => {
+    if (sfcGembaSelections.some(s => s === null)) return null;
+    return sfcGembaSelections.reduce<number>((s, v) => s + (v ?? 0), 0);
+  }, [sfcGembaSelections]);
+
+  // Any change to the underlying Kaizen/GEMBA inputs invalidates a previously
+  // calculated Final Points value — FLM must click "Calculate Final Points" again.
+  useEffect(() => {
+    setSfcFinalPoints(null);
+  }, [sfcKaizenPoints, sfcGembaTotal]);
+
   // General forward-to state for non-SSS/SFC types and non-FLM levels
   const [forwardTo, setForwardTo] = useState("");
+  // General comments — used for Manager / BPS Admin / BPS DH review (and MIC/CTF at FLM level)
+  const [reviewComments, setReviewComments] = useState("");
+  // General attachments — used for Manager / BPS Admin / BPS DH review (and MIC/CTF at FLM level)
+  const [reviewAttachFiles, setReviewAttachFiles] = useState<AttachmentItem[]>([]);
+  const reviewFileInputRef = useRef<HTMLInputElement>(null);
 
   const resetSfcForm = () => {
     setSfcSelectedMonth(null);
     setSfcSelectedWeightage(null);
-    setSfcKaizenPoints(null);
     setSfcGembaSelections(Array(6).fill(null));
-    setSfcGembaTotal(null);
     setSfcFinalPoints(null);
     setSfcForwardTo("");
     setSfcComments("");
@@ -178,9 +217,20 @@ const MyApprovals = () => {
     if (currentLevel === "FLM" && selected.type === "Shop Floor CIP") {
       return sfcFinalPoints ?? (selected.awardAmount != null ? selected.awardAmount : null);
     }
-    // MIC: always fixed ₹200
+    // MIC: always fixed ₹250
     if (selected.type === "My Idea Card") {
       return MIC_FIXED_AMOUNT;
+    }
+    // CTF at FLM level: no evaluation — forward with 0 amount (CTG does eval later)
+    if (currentLevel === "FLM" && selected.type === "Cash The Flash") {
+      return 0;
+    }
+    // CTF at CTG level: CTG enters net savings → route is based on calculateCtfAward(netSavings)
+    // selected.awardAmount at this stage is 0 (FLM placeholder) — always derive from the CTG input
+    if (currentLevel === "CTG" && selected.type === "Cash The Flash") {
+      const netSavings = parseFloat(awardAmount);
+      if (!Number.isFinite(netSavings) || netSavings <= 0) return null; // not yet entered
+      return calculateCtfAward(netSavings);
     }
     // CTF and other types at FLM: amount is entered manually
     if (currentLevel === "FLM") {
@@ -197,21 +247,62 @@ const MyApprovals = () => {
 
   // Next approval level based on type + effective amount
   const nextApprovalLevel = useMemo(() => {
-    if (!selected || !currentLevel) return null;
+    if (!selected) return null;
     if (effectiveAmount === null) return null; // not yet calculated
-    return getNextStep(selected.type, effectiveAmount, currentLevel)?.level ?? null;
-  }, [selected, currentLevel, effectiveAmount]);
+    // CTF self-implementation: user IS the implementer — route from "Implementation" level
+    const isSelfImpl =
+      selected.type === "Cash The Flash" &&
+      selected.status === "Pending Implementation" &&
+      selected.employeeNo === user?.employeeNo &&
+      user?.bidpRole !== "bps_admin" &&
+      user?.bidpRole !== "bps_dh";
+    const level = isSelfImpl ? "Implementation" : currentLevel;
+    if (!level) return null;
+    return getNextStep(selected.type, effectiveAmount, level)?.level ?? null;
+  }, [selected, currentLevel, effectiveAmount, user]);
 
-  // Approvers filtered to just the next pipeline level
+  // Approvers filtered to just the next pipeline level, preferring the
+  // suggestion's own two departments (submitter's department or the
+  // suggestion's target department). Falls back to all approvers at that
+  // level when none match those departments, so the dropdown is never
+  // empty (the demo seed data only has one Manager/BPS Admin/BPS DH persona
+  // each, fixed to a single department).
   const forwardCandidates = useMemo(() => {
-    if (!nextApprovalLevel) return [];
-    return sssApprovers.filter(a => a.role === nextApprovalLevel);
-  }, [sssApprovers, nextApprovalLevel]);
+    if (!nextApprovalLevel || !selected) return [];
+    const atLevel = sssApprovers.filter(a => a.role === nextApprovalLevel && a.employee_no !== selected.employeeNo);
+    // Resolve suggestion department from top-level OR formData (some suggestions
+    // only store it inside formData, e.g. when loaded from backend seed data)
+    const suggDept = selected.suggestionDepartment
+      || (selected.formData as Record<string, any> | undefined)?.suggestionDepartment;
+    const relevantDepts = [selected.department, suggDept].filter(Boolean) as string[];
+    if (relevantDepts.length === 0) return atLevel;
+    const deptMatched = atLevel.filter(a => relevantDepts.includes(a.department!));
+    return deptMatched.length > 0 ? deptMatched : atLevel;
+  }, [sssApprovers, nextApprovalLevel, selected]);
 
   const myApprovals = useMemo(() => {
-    if (!user?.employeeNo || user.bidpRole === "employee" || !currentLevel) return [];
+    if (!user?.employeeNo) return [];
+    // CTF self-implementation: the suggester handles the "Pending Implementation" step for
+    // their own CTF suggestion. Any non-BPS role (including plain "employee") qualifies.
+    const ctfSelfImpl = (user.bidpRole !== "bps_admin" && user.bidpRole !== "bps_dh")
+      ? suggestions.filter(s =>
+          s.type === "Cash The Flash" &&
+          s.status === "Pending Implementation" &&
+          s.employeeNo === user.employeeNo
+        )
+      : [];
+    if (user.bidpRole === "employee" || !currentLevel) return ctfSelfImpl;
     const validStatuses = getStatusesForLevel(currentLevel);
-    return suggestions.filter(s => {
+    // Approvers at this level across all departments — used to detect whether
+    // ANY persona actually covers a given suggestion's department(s). If none
+    // do (demo seed data only has one Manager/BPS Admin/BPS DH persona each,
+    // fixed to a single department), fall back to showing it to this approver
+    // anyway so the suggestion never gets stuck with nobody able to act on it.
+    const levelApprovers = sssApprovers.filter(a => a.role === currentLevel);
+    const regular = suggestions.filter(s => {
+      // Self-exclusion: own suggestions never appear in the regular approval queue
+      // (CTF self-impl items are collected separately above and merged at the end)
+      if (s.employeeNo === user.employeeNo) return false;
       // FLM: must be assigned to this FLM specifically
       if (currentLevel === "FLM") {
         if (s.assignedFlm === user.employeeNo && validStatuses.includes(s.status)) return true;
@@ -222,7 +313,25 @@ const MyApprovals = () => {
         }
         return false;
       }
-      // Manager/BPS Admin/BPS DH: see all plant suggestions at their approval level
+      // Manager/BPS Admin/BPS DH: prefer suggestions belonging to one of the
+      // suggestion's two departments (submitter's own department OR the
+      // suggestion's target/subject department) that matches this approver's
+      // own department. If no approver at this level covers either
+      // department, fall back to showing it (see comment above).
+      // Exception: if this suggestion was explicitly rerouted to THIS person,
+      // always show it to them regardless of department (BPS deliberately
+      // chose them, overriding the normal department-based routing).
+      if (validStatuses.includes(s.status) && s.rerouteTargetEmpNo === user.employeeNo) return true;
+      const suggDept = s.suggestionDepartment
+        || (s.formData as Record<string, any> | undefined)?.suggestionDepartment;
+      const deptMatches = !!user.department &&
+        (s.department === user.department || suggDept === user.department);
+      if (!deptMatches) {
+        const anyApproverCoversDept = levelApprovers.some(a =>
+          a.department === s.department || a.department === suggDept
+        );
+        if (anyApproverCoversDept) return false;
+      }
       if (validStatuses.includes(s.status)) return true;
       // Also include sent-back suggestions targeted to this level
       if (s.status === "Sent Back" && s.sendBackHistory?.length) {
@@ -231,7 +340,9 @@ const MyApprovals = () => {
       }
       return false;
     });
-  }, [suggestions, user, currentLevel]);
+    // Merge: ctfSelfImpl are the user's own suggestions (excluded from `regular` by self-exclusion)
+    return [...ctfSelfImpl, ...regular];
+  }, [suggestions, user, currentLevel, sssApprovers]);
 
   // Helper: check if a suggestion was sent back to the current approver's level
   const isSentBackToMe = (s: Suggestion) => {
@@ -247,13 +358,21 @@ const MyApprovals = () => {
     (sentBackFilter === "all" || isSentBackToMe(s))
   );
   const processedApprovals = useMemo(() => {
-    if (!user?.employeeNo || !currentLevel) return [];
+    if (!user?.employeeNo) return [];
+    if (!currentLevel) {
+      // Employee role (no approval level): show CTF self-implementation history
+      return suggestions.filter(s => (s as any).implementedBy === user.employeeNo);
+    }
     // Show items this user has already acted on
     return suggestions.filter(s => {
       if (currentLevel === "FLM") return s.evaluatedBy === user.employeeNo;
       if (currentLevel === "Manager") return s.approvedByManager === user.employeeNo;
       if (currentLevel === "BPS Admin") return s.approvedByBpsAdmin === user.employeeNo;
+      if (currentLevel === "CTG") return (s as any).ctgEvaluatedBy === user.employeeNo;
+      if (currentLevel === "VS RC") return (s as any).approvedByVsRc === user.employeeNo;
       if (currentLevel === "BPS DH") return s.approvedByBpsDh === user.employeeNo;
+      // CTF self-implemented (any non-BPS role can be the implementer)
+      if ((s as any).implementedBy === user.employeeNo) return true;
       return false;
     });
   }, [suggestions, user, currentLevel]);
@@ -264,6 +383,8 @@ const MyApprovals = () => {
     resetSssForm();
     resetSfcForm();
     setForwardTo("");
+    setReviewComments("");
+    setReviewAttachFiles([]);
     setDialogOpen(true);
   };
 
@@ -276,6 +397,14 @@ const MyApprovals = () => {
     const isMIC = selected.type === "My Idea Card";
     const isSSS = selected.type === "Simple Suggestion Scheme";
     const isSFC = selected.type === "Shop Floor CIP";
+    const isCTF = selected.type === "Cash The Flash";
+    // CTF self-implementation: the suggester handles their own Pending Implementation step
+    // Any non-BPS role (including "employee") can be the implementer
+    const isSelfImpl = isCTF &&
+      selected.status === "Pending Implementation" &&
+      selected.employeeNo === user.employeeNo &&
+      user.bidpRole !== "bps_admin" &&
+      user.bidpRole !== "bps_dh";
 
     // For SSS FLM: use the calculated evaluation amount
     let amount: number;
@@ -304,8 +433,26 @@ const MyApprovals = () => {
       }
       amount = sfcFinalPoints;
     } else if (currentLevel === "FLM" && isMIC) {
-      // MIC: fixed ₹200 — no manual input needed
+      // MIC: fixed ₹250 — no manual input needed
       amount = MIC_FIXED_AMOUNT;
+    } else if (isSelfImpl) {
+      // CTF self-implementation: suggester forwards to BPS Admin with implementation notes
+      if (!reviewComments.trim()) {
+        toast.error("Please enter implementation comments before forwarding");
+        return;
+      }
+      amount = selected.awardAmount ?? 0;
+    } else if (currentLevel === "FLM" && isCTF) {
+      // CTF at FLM (not the suggester): forward to suggester for implementation with 0 amount
+      amount = 0;
+    } else if (currentLevel === "CTG" && isCTF) {
+      // CTG evaluates net savings and calculates award
+      const netSavings = parseFloat(awardAmount);
+      if (!Number.isFinite(netSavings) || netSavings <= 0) {
+        toast.error("Please enter valid Net Savings amount");
+        return;
+      }
+      amount = calculateCtfAward(netSavings);
     } else if (currentLevel === "FLM") {
       amount = parseFloat(awardAmount) || 0;
       if (!awardAmount.trim()) {
@@ -326,16 +473,24 @@ const MyApprovals = () => {
 
     let updates;
     try {
-      // Gather comments and metadata for audit trail
+      // Gather comments and metadata for audit trail.
+      // IMPORTANT: the SSS/SFC-specific evaluation sheet (with its own comments/
+      // attachments/forward-to fields) only renders at the FLM level for those
+      // types — at every other level (Manager / BPS Admin / BPS DH) those
+      // suggestions use the generic review block instead, so the level must be
+      // checked too, not just the type. Otherwise a BPS Admin's comments and
+      // attachments on an SSS/SFC suggestion would be silently dropped.
       const isSSS = selected.type === "Simple Suggestion Scheme";
       const isSFC = selected.type === "Shop Floor CIP";
-      const auditComments = isSSS ? sssComments : isSFC ? sfcComments : undefined;
-      const auditAttachments = isSSS
+      const isSSSFLM = isSSS && currentLevel === "FLM";
+      const isSFCFLM = isSFC && currentLevel === "FLM";
+      const auditComments = isSSSFLM ? sssComments : isSFCFLM ? sfcComments : (reviewComments.trim() || undefined);
+      const auditAttachments = isSSSFLM
         ? sssAttachFiles.map(f => ({ name: f.name, type: f.type, url: f.url }))
-        : isSFC
+        : isSFCFLM
         ? sfcAttachFiles.map(f => ({ name: f.name, type: f.type, url: f.url }))
-        : undefined;
-      const auditMetadata: Record<string, any> | undefined = isSSS
+        : reviewAttachFiles.map(f => ({ name: f.name, type: f.type, url: f.url }));
+      const auditMetadata: Record<string, any> | undefined = isSSSFLM
         ? {
             evaluationType: "SSS",
             selections: sssSelections,
@@ -344,7 +499,7 @@ const MyApprovals = () => {
             calculatedAmount: sssCalculatedAmount,
             forwardTo: sssForwardTo,
           }
-        : isSFC
+        : isSFCFLM
         ? {
             evaluationType: "SFC",
             selectedMonth: sfcSelectedMonth,
@@ -398,20 +553,23 @@ const MyApprovals = () => {
       }
 
       // Resolve the display name for the forwarded-to person
-      const forwardedToName = isSSS
+      const forwardedToName = isSSSFLM
         ? (sssApprovers.find(a => a.employee_no === sssForwardTo)?.name || sssForwardTo || undefined)
-        : isSFC
+        : isSFCFLM
         ? (sssApprovers.find(a => a.employee_no === sfcForwardTo)?.name || sfcForwardTo || undefined)
         : forwardTo
         ? (sssApprovers.find(a => a.employee_no === forwardTo)?.name || forwardTo)
         : undefined;
 
+      // For CTF self-implementation, act as "Implementation" level in the pipeline
+      const buildLevel: ApprovalLevel = isSelfImpl ? "Implementation" : (currentLevel as ApprovalLevel);
       updates = buildApprovalUpdate(
         selected,
-        currentLevel,
+        buildLevel,
         user.employeeNo,
         user.name,
-        currentLevel === "FLM" ? amount : undefined,
+        // FLM/CTG set the award amount — other levels preserve the existing value
+        (buildLevel === "FLM" || buildLevel === "CTG") ? amount : undefined,
         {
           comments: auditComments,
           department: user.department,
@@ -474,12 +632,30 @@ const MyApprovals = () => {
   // All approval roles can send back (FLM sends to Employee, others to prior levels)
   const canSendBack = !!(selected && currentLevel);
 
+  // Only BPS Admin / BPS DH can reroute — they can redirect a suggestion to
+  // ANY specific person at ANY pipeline level (e.g. if the wrong FLM
+  // evaluated it), unlike send-back which only targets a previous LEVEL
+  // generically for revision.
+  const canReroute = !!(selected && currentLevel) &&
+    (user?.bidpRole === "bps_admin" || user?.bidpRole === "bps_dh");
+
   // Derive whether the Evaluate/Approve button should be enabled
   const canApprove = useMemo(() => {
-    if (!selected || !currentLevel) return false;
+    if (!selected) return false;
+    // CTF self-implementation for users without an approval level (e.g. "employee" role)
+    if (
+      !currentLevel &&
+      selected.type === "Cash The Flash" &&
+      selected.status === "Pending Implementation" &&
+      selected.employeeNo === user?.employeeNo &&
+      user?.bidpRole !== "bps_admin" &&
+      user?.bidpRole !== "bps_dh"
+    ) return !!reviewComments.trim();
+    if (!currentLevel) return false;
     const isSSSFLM = currentLevel === "FLM" && selected.type === "Simple Suggestion Scheme";
     const isSFCFLM = currentLevel === "FLM" && selected.type === "Shop Floor CIP";
     const isMIC = selected.type === "My Idea Card";
+    const isCTF = selected.type === "Cash The Flash";
     if (isSSSFLM) {
       return (
         sssSelections.every(s => s !== null) &&
@@ -491,11 +667,27 @@ const MyApprovals = () => {
     if (isSFCFLM) {
       return sfcFinalPoints !== null && !!sfcComments.trim();
     }
+    // CTF at FLM: no evaluation needed — just forward (always enabled)
+    if (currentLevel === "FLM" && isCTF) {
+      return true;
+    }
+    // CTF at CTG: needs net savings entered + comment
+    if (currentLevel === "CTG" && isCTF) {
+      return !!awardAmount.trim() && parseFloat(awardAmount) > 0 && !!reviewComments.trim();
+    }
+    // CTF at FLM: needs comment
+    if (currentLevel === "FLM" && isCTF) {
+      return !!reviewComments.trim();
+    }
+    // CTF at Implementation: needs comment
+    if (currentLevel === "Implementation" && isCTF) {
+      return !!reviewComments.trim();
+    }
     if (currentLevel === "FLM" && !isMIC) {
       return !!awardAmount.trim();
     }
     return true;
-  }, [selected, currentLevel, sssSelections, sssWeightage, sssCalculatedAmount, sssComments, awardAmount, sfcFinalPoints, sfcComments]);
+  }, [selected, currentLevel, sssSelections, sssWeightage, sssCalculatedAmount, sssComments, awardAmount, sfcFinalPoints, sfcComments, reviewComments]);
 
   const openSendBack = () => {
     setSendBackReason("");
@@ -600,6 +792,73 @@ const MyApprovals = () => {
       "warning"
     );
     setSendBackOpen(false);
+    setDialogOpen(false);
+    setSelected(null);
+  };
+
+  // Every pipeline level applicable to this suggestion's type/amount — the
+  // reroute target can be ANY of these, not just previous/next ones.
+  const rerouteLevelOptions = useMemo(() => {
+    if (!selected) return [] as ApprovalLevel[];
+    const amount = selected.awardAmount ?? 0;
+    return getPipeline(selected.type, amount).map(s => s.level);
+  }, [selected]);
+
+  // People available at the currently-chosen reroute level — unfiltered by
+  // department, since BPS explicitly wants to pick ANY person at that level.
+  // The original suggester is always excluded — suggester and approver must
+  // never be the same person.
+  const rerouteTargetOptions = useMemo(() => {
+    if (!rerouteLevel) return [];
+    return sssApprovers.filter(a => a.role === rerouteLevel && a.employee_no !== selected?.employeeNo);
+  }, [rerouteLevel, sssApprovers, selected]);
+
+  const openReroute = () => {
+    setRerouteLevel("");
+    setRerouteTargetEmpNo("");
+    setRerouteReason("");
+    setRerouteOpen(true);
+  };
+
+  const handleReroute = () => {
+    if (!selected || !user || !currentLevel) return;
+    if (!rerouteLevel) {
+      toast.error("Please select a level to reroute to");
+      return;
+    }
+    if (!rerouteTargetEmpNo) {
+      toast.error("Please select a person to reroute to");
+      return;
+    }
+    if (!rerouteReason.trim()) {
+      toast.error("Please provide a reason for rerouting");
+      return;
+    }
+    const target = sssApprovers.find(a => a.employee_no === rerouteTargetEmpNo);
+    if (!target) {
+      toast.error("Selected person not found");
+      return;
+    }
+    const updates = buildRerouteUpdate(
+      selected,
+      user.employeeNo,
+      user.name,
+      rerouteLevel as ApprovalLevel,
+      target.employee_no,
+      target.name,
+      rerouteReason.trim(),
+      { department: user.department, fromLevel: currentLevel },
+    );
+    updateSuggestion(selected.id, updates);
+    toast.success("Suggestion rerouted successfully", {
+      description: `${selected.suggestionNo} has been rerouted to ${target.name} (${rerouteLevel}).`,
+      duration: 5000,
+    });
+    addNotification(
+      `${selected.suggestionNo} rerouted by ${user.name} (${currentLevel}) to ${target.name} (${rerouteLevel}) — Reason: ${rerouteReason.trim()}`,
+      "warning"
+    );
+    setRerouteOpen(false);
     setDialogOpen(false);
     setSelected(null);
   };
@@ -716,7 +975,7 @@ const MyApprovals = () => {
           <Row label="Category" value={stf.category || suggestion.category} />
           <Row label="Date of Implementation" value={fmtDate(stf.dateOfImplementation)} />
           <Row label="Moderator(s)" value={mods.length ? mods.join(", ") : undefined} />
-          <Row label="Horizontal Deployment" value={stf.horizontalDeployment} />
+          <Row label="How many places this kaizen is deployed horizontally" value={stf.horizontalDeployment} />
           <div className="py-2 space-y-2">
             <Block label="Problem / Present Status" value={stf.problemStatus || suggestion.presentMethod} />
             <Block label="Before Improvement" value={stf.beforeImprovement} />
@@ -793,7 +1052,7 @@ const MyApprovals = () => {
     if (type === "Daily CIP") return (
       <div className="rounded-lg border bg-muted/10 px-3 py-2 space-y-0">
         <Row label="Date of Implementation" value={fmtDate(stf.dateOfImplementation)} />
-        <Row label="Workshop" value={stf.workshop} />
+        <Row label="Category" value={stf.category || suggestion.category} />
         <Row label="Machine No / Area" value={stf.machineNoArea || suggestion.subject} />
         <div className="py-2 space-y-2">
           <Block label="Suggestion Description" value={stf.suggestionDescription || suggestion.presentMethod} />
@@ -1158,7 +1417,7 @@ const MyApprovals = () => {
                 {(() => {
                   let displayAmount: number;
                   if (selected.type === "My Idea Card") {
-                    // MIC: always fixed ₹200
+                    // MIC: always fixed ₹250
                     displayAmount = MIC_FIXED_AMOUNT;
                   } else if (currentLevel === "FLM" && selected.type === "Simple Suggestion Scheme") {
                     // SSS: amount is the calculated monetary award (sssWeightage × totalPoints)
@@ -1372,7 +1631,7 @@ const MyApprovals = () => {
                   const trail = selected.auditTrail || [];
                   // Show entries from prior approvers that have comments or attachments
                   const priorEntries = trail.filter(e =>
-                    (e.action === "Approved" || e.action === "Evaluated" || e.action === "Sent Back" || e.action === "Submitted") &&
+                    (e.action === "Approved" || e.action === "Evaluated" || e.action === "Sent Back" || e.action === "Rerouted" || e.action === "Submitted") &&
                     (!!e.comments?.trim() || (e.attachments && e.attachments.length > 0))
                   );
                   // Also include send-back entries (may already be in auditTrail, but also in sendBackHistory)
@@ -1385,17 +1644,22 @@ const MyApprovals = () => {
                       <div className="space-y-2.5">
                         {priorEntries.map((entry) => {
                           const isSendBack = entry.action === "Sent Back";
+                          const isRerouted = entry.action === "Rerouted";
                           return (
                             <div key={entry.id}
                               className={`rounded-lg border px-3 py-3 space-y-2 ${
-                                isSendBack
+                                isRerouted
+                                  ? "border-violet-200 bg-violet-50/60 dark:border-violet-800 dark:bg-violet-950/20"
+                                  : isSendBack
                                   ? "border-amber-200 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20"
                                   : "border-blue-200 bg-blue-50/60 dark:border-blue-800 dark:bg-blue-950/20"
                               }`}>
                               {/* Header */}
                               <div className="flex items-center justify-between flex-wrap gap-1.5">
                                 <div className="flex items-center gap-2">
-                                  {isSendBack
+                                  {isRerouted
+                                    ? <ArrowRightLeft className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                                    : isSendBack
                                     ? <Undo2 className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
                                     : <CheckCircle2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />}
                                   <span className="text-xs font-semibold">
@@ -1403,7 +1667,9 @@ const MyApprovals = () => {
                                   </span>
                                   {entry.role && (
                                     <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium border ${
-                                      isSendBack
+                                      isRerouted
+                                        ? "bg-violet-100 border-violet-300 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+                                        : isSendBack
                                         ? "bg-amber-100 border-amber-300 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
                                         : "bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
                                     }`}>
@@ -1411,7 +1677,7 @@ const MyApprovals = () => {
                                     </span>
                                   )}
                                   <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                    isSendBack ? "text-amber-600 dark:text-amber-400" : "text-blue-600 dark:text-blue-400"
+                                    isRerouted ? "text-violet-600 dark:text-violet-400" : isSendBack ? "text-amber-600 dark:text-amber-400" : "text-blue-600 dark:text-blue-400"
                                   }`}>
                                     {entry.action}
                                   </span>
@@ -1807,7 +2073,7 @@ const MyApprovals = () => {
                                   type="radio"
                                   name="sfc-month"
                                   checked={sfcSelectedMonth === idx}
-                                  onChange={() => { setSfcSelectedMonth(idx); setSfcKaizenPoints(null); setSfcFinalPoints(null); }}
+                                  onChange={() => setSfcSelectedMonth(idx)}
                                   className="accent-primary h-3 w-3"
                                 />
                                 <span className="text-[9px] font-bold">{month}</span>
@@ -1827,7 +2093,7 @@ const MyApprovals = () => {
                                   type="radio"
                                   name="sfc-weightage"
                                   checked={sfcSelectedWeightage === idx}
-                                  onChange={() => { setSfcSelectedWeightage(idx); setSfcKaizenPoints(null); setSfcFinalPoints(null); }}
+                                  onChange={() => setSfcSelectedWeightage(idx)}
                                   className="accent-primary h-3.5 w-3.5"
                                 />
                                 <span className="text-[10px] font-bold">{opt.label}</span>
@@ -1837,24 +2103,12 @@ const MyApprovals = () => {
                           </div>
                         </div>
 
-                        {/* Calculate Kaizen Points */}
+                        {/* Kaizen Points — computed automatically once month + weightage are selected */}
                         <div className="flex items-center gap-3 pt-1">
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-9 gap-1.5"
-                            onClick={() => {
-                              if (sfcSelectedMonth === null) { toast.error("Select a Kaizen Project month"); return; }
-                              if (sfcSelectedWeightage === null) { toast.error("Select a Weightage Factor"); return; }
-                              const pts = SFC_MONTH_POINTS[sfcSelectedMonth] * SFC_WEIGHTAGE_OPTIONS[sfcSelectedWeightage].value;
-                              setSfcKaizenPoints(parseFloat(pts.toFixed(2)));
-                              setSfcFinalPoints(null);
-                            }}>
-                            <Calculator className="h-3.5 w-3.5" /> Kaizen Project Points
-                          </Button>
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase">Kaizen Project Points</span>
                           <div className="flex items-center gap-2 h-9 px-4 rounded-lg border bg-muted/20 min-w-[100px]">
                             <span className={`text-sm font-black ${sfcKaizenPoints !== null ? "text-primary" : "text-muted-foreground/40"}`}>
-                              {sfcKaizenPoints !== null ? sfcKaizenPoints : "0"}
+                              {sfcKaizenPoints !== null ? sfcKaizenPoints : "—"}
                             </span>
                           </div>
                         </div>
@@ -1895,8 +2149,6 @@ const MyApprovals = () => {
                                       const next = [...sfcGembaSelections];
                                       next[i] = opt.pts;
                                       setSfcGembaSelections(next);
-                                      setSfcGembaTotal(null);
-                                      setSfcFinalPoints(null);
                                     }}
                                     className="accent-primary h-3 w-3 shrink-0"
                                   />
@@ -1917,30 +2169,18 @@ const MyApprovals = () => {
                       ))}
                     </div>
 
-                    {/* Calculate buttons */}
+                    {/* GEMBA total (auto) + Final Points */}
                     <div className="rounded-xl border bg-muted/5 p-4 space-y-3">
                       <div className="flex flex-wrap items-center gap-3">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-9 gap-1.5"
-                          onClick={() => {
-                            if (sfcGembaSelections.some(s => s === null)) {
-                              toast.error("Please select criteria for all 6 GEMBA rows");
-                              return;
-                            }
-                            const total = sfcGembaSelections.reduce<number>((s, v) => s + (v ?? 0), 0);
-                            setSfcGembaTotal(total);
-                            setSfcFinalPoints(null);
-                          }}>
-                          <Calculator className="h-3.5 w-3.5" /> Calculate GEMBA
-                        </Button>
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase">GEMBA Total</span>
                         <div className="flex items-center gap-1.5 h-9 px-3 rounded-lg border bg-muted/20 min-w-[80px]">
                           <span className={`text-sm font-black ${sfcGembaTotal !== null ? "text-primary" : "text-muted-foreground/40"}`}>
-                            {sfcGembaTotal !== null ? sfcGembaTotal : "0"}
+                            {sfcGembaTotal !== null ? sfcGembaTotal : "—"}
                           </span>
                         </div>
+                        {sfcGembaTotal === null && (
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400">Select criteria for all 6 rows above</span>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-3">
@@ -1948,9 +2188,10 @@ const MyApprovals = () => {
                           type="button"
                           size="sm"
                           className="h-9 gap-1.5"
+                          disabled={sfcKaizenPoints === null || sfcGembaTotal === null}
                           onClick={() => {
-                            if (sfcKaizenPoints === null) { toast.error("Calculate Kaizen Project Points first"); return; }
-                            if (sfcGembaTotal === null) { toast.error("Calculate GEMBA Evaluation first"); return; }
+                            if (sfcKaizenPoints === null) { toast.error("Select Kaizen Project month and weightage first"); return; }
+                            if (sfcGembaTotal === null) { toast.error("Please select criteria for all 6 GEMBA rows first"); return; }
                             setSfcFinalPoints(parseFloat(((sfcKaizenPoints + sfcGembaTotal) * 20).toFixed(2)));
                           }}>
                           <Calculator className="h-3.5 w-3.5" /> Calculate Final Points
@@ -2086,7 +2327,90 @@ const MyApprovals = () => {
                 ) : (
                   /* Non-SSS/SFC or non-FLM: award amount + forward to next level */
                   <div className="space-y-4">
-                    {selected.type !== "My Idea Card" && (
+                    {/* CTF at CTG: net savings input with auto-calculated award */}
+                    {selected.type === "Cash The Flash" && currentLevel === "CTG" && (
+                      <div className="rounded-xl border shadow-sm overflow-hidden">
+                        {/* Header */}
+                        <div className="bg-primary text-primary-foreground px-4 py-2.5 flex items-center gap-2">
+                          <Calculator className="h-4 w-4 shrink-0" />
+                          <span className="text-xs font-semibold uppercase tracking-wide">CTG Evaluation — Net Savings</span>
+                        </div>
+                        <div className="p-4 space-y-4 bg-card">
+                          <div className="space-y-2">
+                            <Label className="text-xs font-semibold flex items-center gap-1.5">
+                              <IndianRupee className="h-3.5 w-3.5 text-primary" />
+                              Net Saving in INR / year
+                              <span className="text-destructive ml-0.5">*</span>
+                            </Label>
+                            <p className="text-[10px] text-muted-foreground">Enter the total net annual savings achieved by implementing this suggestion.</p>
+                            <div className="relative max-w-sm">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground select-none">₹</span>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={1}
+                                placeholder="0"
+                                value={awardAmount}
+                                onChange={e => setAwardAmount(e.target.value)}
+                                className={`pl-7 h-10 text-base font-semibold ${
+                                  !awardAmount.trim() ? "border-amber-400 dark:border-amber-500 focus-visible:ring-amber-400" : "border-primary/50 focus-visible:ring-primary"
+                                }`}
+                              />
+                            </div>
+                            {!awardAmount.trim() && (
+                              <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                <span className="font-semibold">Required</span> — enter net savings to calculate award
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Calculated Award */}
+                          {awardAmount.trim() && parseFloat(awardAmount) > 0 ? (
+                            <div className="rounded-lg border-2 border-emerald-300 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 flex items-center justify-between gap-4">
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Calculated Award Amount</p>
+                                <p className="text-2xl font-black text-emerald-700 dark:text-emerald-300 mt-0.5">
+                                  ₹{calculateCtfAward(parseFloat(awardAmount)).toLocaleString('en-IN')}
+                                </p>
+                              </div>
+                              <div className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold border ${
+                                calculateCtfAward(parseFloat(awardAmount)) > 5000
+                                  ? "bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-950/30 dark:border-orange-600 dark:text-orange-400"
+                                  : "bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/30 dark:border-blue-600 dark:text-blue-400"
+                              }`}>
+                                <ChevronRight className="h-3 w-3" />
+                                {calculateCtfAward(parseFloat(awardAmount)) > 5000
+                                  ? "→ VS RC → BPS DH"
+                                  : "→ BPS DH directly"}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/20 px-4 py-3 flex items-center gap-2">
+                              <Calculator className="h-4 w-4 text-muted-foreground/40" />
+                              <span className="text-xs text-muted-foreground/60 italic">Award will be calculated once you enter net savings above</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* CTF at FLM (not the suggester): no evaluation needed, auto-routes to suggester */}
+                    {selected.type === "Cash The Flash" && currentLevel === "FLM" && !(selected.status === "Pending Implementation" && selected.employeeNo === user?.employeeNo) && (
+                      <div className="flex items-center gap-2 text-[11px] px-3 py-2 rounded-lg border bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-400">
+                        <Info className="h-3.5 w-3.5 shrink-0" />
+                        <span>CTF suggestions do not require FLM evaluation — forward to suggester for implementation.</span>
+                      </div>
+                    )}
+                    {/* CTF self-implementation: suggester is their own implementer */}
+                    {selected.type === "Cash The Flash" && selected.status === "Pending Implementation" && selected.employeeNo === user?.employeeNo && user?.bidpRole !== "bps_admin" && user?.bidpRole !== "bps_dh" && (
+                      <div className="flex items-center gap-2 text-[11px] px-3 py-2 rounded-lg border bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-700 dark:text-amber-400">
+                        <Info className="h-3.5 w-3.5 shrink-0" />
+                        <span>You are the implementer — add your implementation details and forward to BPS Admin.</span>
+                      </div>
+                    )}
+
+                    {/* Non-CTF award amount input */}
+                    {selected.type !== "My Idea Card" && selected.type !== "Cash The Flash" && (
                       <div className="space-y-2">
                         <Label className="text-xs font-medium flex items-center gap-1">
                           <IndianRupee className="h-3 w-3" />
@@ -2136,6 +2460,12 @@ const MyApprovals = () => {
                           <span className="text-xs text-muted-foreground/60 italic">Enter award amount first to determine approval route</span>
                         </div>
                       </div>
+                    ) : selected.type === "Cash The Flash" && nextApprovalLevel === "Implementation" ? (
+                      // CTF at FLM — implementation goes to the suggester automatically
+                      <div className="flex items-center gap-2 text-[11px] px-3 py-2 rounded-lg border bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/30 dark:border-indigo-700 dark:text-indigo-400">
+                        <Info className="h-3.5 w-3.5 shrink-0" />
+                        <span>Will be sent to the <strong>suggester</strong> for implementation — no manual selection needed.</span>
+                      </div>
                     ) : nextApprovalLevel ? (
                       <div className="space-y-1.5">
                         <Label className="text-xs font-medium flex items-center gap-2">
@@ -2169,6 +2499,81 @@ const MyApprovals = () => {
                         <span>This is the final approval step — suggestion will be <strong>Approved & Closed</strong> after your action.</span>
                       </div>
                     )}
+
+                    {/* Attachments — Manager / BPS Admin / BPS DH review (and MIC/CTF at FLM level) */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium flex items-center gap-1">
+                        <Paperclip className="h-3 w-3 text-muted-foreground" />
+                        Attachments
+                        <span className="text-[10px] text-muted-foreground font-normal">(Max 5 · &lt;4 MB each)</span>
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <label className="inline-flex items-center gap-1.5 px-3 py-2 text-xs border rounded-lg bg-background hover:bg-muted transition-colors cursor-pointer shadow-sm">
+                          <Upload className="h-3.5 w-3.5" />
+                          Choose Files
+                          <input
+                            ref={reviewFileInputRef}
+                            type="file"
+                            multiple
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv"
+                            className="hidden"
+                            onChange={e => {
+                              const files = Array.from(e.target.files || []);
+                              const combined = reviewAttachFiles.length + files.length;
+                              if (combined > 5) {
+                                toast.error(`Max 5 files total. You can add ${5 - reviewAttachFiles.length} more.`);
+                                e.target.value = "";
+                                return;
+                              }
+                              const oversized = files.filter(f => f.size > 4 * 1024 * 1024);
+                              if (oversized.length > 0) {
+                                toast.error(`File(s) exceed 4 MB: ${oversized.map(f => f.name).join(", ")}`);
+                                e.target.value = "";
+                                return;
+                              }
+                              setReviewAttachFiles(prev => [...prev, ...filesToAttachmentItems(files)]);
+                              toast.success(`${files.length} file(s) attached`);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                        <span className="text-[10px] text-muted-foreground">{reviewAttachFiles.length}/5</span>
+                      </div>
+                      {reviewAttachFiles.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {reviewAttachFiles.map((f, i) => (
+                            <span key={f.id} className="inline-flex items-center gap-1 text-[10px] bg-muted border px-2 py-1 rounded-md max-w-[160px]">
+                              <Paperclip className="h-2.5 w-2.5 shrink-0" />
+                              <span className="truncate">{f.name}</span>
+                              <button type="button" onClick={() => setReviewAttachFiles(prev => prev.filter((_, j) => j !== i))} className="ml-1 p-0.5 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0">
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Comments — Manager / BPS Admin / BPS DH review (and MIC/CTF at all levels) */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">
+                        Comments <span className="text-[10px] text-muted-foreground font-normal">/ ಕಮೆಂಟ್ ಬರೆಯಿರಿ</span>
+                        {selected.type === "Cash The Flash" && <span className="text-destructive ml-1">*</span>}
+                      </Label>
+                      <Textarea
+                        placeholder={selected.type === "Cash The Flash" ? "Enter your evaluation comments (required)..." : "Enter your review comments..."}
+                        value={reviewComments}
+                        onChange={e => setReviewComments(e.target.value)}
+                        className={`text-xs min-h-[72px] resize-none ${
+                          selected.type === "Cash The Flash" && !reviewComments.trim()
+                            ? "border-amber-300 dark:border-amber-600"
+                            : ""
+                        }`}
+                      />
+                      {selected.type === "Cash The Flash" && !reviewComments.trim() && (
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400">Comments are required for CTF suggestions</p>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -2235,6 +2640,17 @@ const MyApprovals = () => {
                   >
                     <Undo2 className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-x-0.5 group-hover:-rotate-12" />
                     <span className="font-semibold">Send Back</span>
+                  </Button>
+                )}
+                {canReroute && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 h-9 relative overflow-hidden border-violet-400/60 bg-gradient-to-r from-violet-50 to-purple-50 text-violet-700 shadow-sm hover:shadow-md hover:from-violet-100 hover:to-purple-100 hover:border-violet-500 dark:from-violet-950/40 dark:to-purple-950/30 dark:text-violet-300 dark:border-violet-600/50 dark:hover:from-violet-950/60 dark:hover:to-purple-950/50 dark:hover:border-violet-500 transition-all duration-200 group"
+                    onClick={openReroute}
+                  >
+                    <ArrowRightLeft className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+                    <span className="font-semibold">Reroute</span>
                   </Button>
                 )}
                 <Button
@@ -2434,6 +2850,153 @@ const MyApprovals = () => {
             >
               <Undo2 className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-x-0.5 group-hover:-rotate-12" />
               <span className="font-semibold">Confirm Send Back</span>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reroute Dialog (BPS Admin / BPS DH only) ── */}
+      <Dialog open={rerouteOpen} onOpenChange={setRerouteOpen}>
+        <DialogContent className="max-w-md p-0 overflow-hidden rounded-xl">
+          {/* Header with gradient */}
+          <div className="bg-gradient-to-r from-violet-500 to-purple-500 px-5 py-4 text-white">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <ArrowRightLeft className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold">Reroute to Another Person</h3>
+                <p className="text-[11px] opacity-80 mt-0.5">{selected?.suggestionNo}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-5 py-4 space-y-4">
+            {/* Compact info strip */}
+            <div className="grid grid-cols-3 gap-3 rounded-lg border bg-muted/20 px-3 py-2.5">
+              <div className="space-y-0.5">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">Subject</p>
+                <p className="text-[11px] font-medium text-foreground truncate" title={selected?.subject}>{selected?.subject}</p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">Employee</p>
+                <p className="text-[11px] font-medium text-foreground">{selected?.employeeName}</p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">Your Level</p>
+                <Badge variant="outline" className="text-[10px] h-5 font-semibold">{currentLevel}</Badge>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-muted-foreground leading-relaxed bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 rounded-md px-2.5 py-2">
+              Use this if the wrong person evaluated/approved this suggestion. Reroute directly assigns it to a
+              different specific person at any stage — it does not require the employee to revise anything.
+            </p>
+
+            {/* Level selector */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                Reroute to Level
+                <span className="text-destructive">*</span>
+              </Label>
+              <Select value={rerouteLevel} onValueChange={(v) => { setRerouteLevel(v); setRerouteTargetEmpNo(""); }}>
+                <SelectTrigger className={`h-10 text-xs ${!rerouteLevel ? "border-violet-300 dark:border-violet-600 bg-violet-50/30 dark:bg-violet-950/10" : "border-emerald-300 dark:border-emerald-600"}`}>
+                  <SelectValue placeholder="Select pipeline level" />
+                </SelectTrigger>
+                <SelectContent>
+                  {rerouteLevelOptions.map(level => (
+                    <SelectItem key={level} value={level} className="text-xs">{level}</SelectItem>
+                  ))}
+                  {rerouteLevelOptions.length === 0 && (
+                    <SelectItem value="_none" disabled className="text-xs text-muted-foreground">
+                      No levels available
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Person selector */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                Reroute to Person
+                <span className="text-destructive">*</span>
+              </Label>
+              <Select value={rerouteTargetEmpNo} onValueChange={setRerouteTargetEmpNo} disabled={!rerouteLevel}>
+                <SelectTrigger className={`h-10 text-xs ${!rerouteTargetEmpNo ? "border-violet-300 dark:border-violet-600 bg-violet-50/30 dark:bg-violet-950/10" : "border-emerald-300 dark:border-emerald-600"}`}>
+                  <SelectValue placeholder={rerouteLevel ? "Select person" : "Select a level first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {rerouteTargetOptions.map(a => (
+                    <SelectItem key={a.employee_no} value={a.employee_no} className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{a.name}</span>
+                        <span className="text-muted-foreground text-[10px]">({a.employee_no}) {a.department}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                  {rerouteLevel && rerouteTargetOptions.length === 0 && (
+                    <SelectItem value="_none" disabled className="text-xs text-muted-foreground">
+                      No one found at this level
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              {rerouteTargetEmpNo && (
+                <div className="flex items-center gap-1.5 text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 px-2.5 py-1.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                  <ChevronRight className="h-3 w-3" />
+                  <span>Will be rerouted to <strong>{rerouteTargetOptions.find(a => a.employee_no === rerouteTargetEmpNo)?.name}</strong> ({rerouteLevel})</span>
+                </div>
+              )}
+            </div>
+
+            {/* Reason */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                Reason
+                <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                placeholder="Why is this being rerouted? (e.g. wrong FLM evaluated it)"
+                value={rerouteReason}
+                onChange={e => setRerouteReason(e.target.value)}
+                rows={3}
+                className={`text-sm resize-none ${!rerouteReason.trim() ? "border-violet-300 dark:border-violet-600 bg-violet-50/30 dark:bg-violet-950/10" : ""}`}
+              />
+            </div>
+
+            {/* Previous reroute history (if any) */}
+            {selected?.rerouteHistory && selected.rerouteHistory.length > 0 && (
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                  <Clock className="h-2.5 w-2.5" /> Previous Reroutes ({selected.rerouteHistory.length})
+                </p>
+                {selected.rerouteHistory.map((rr, idx) => (
+                  <div key={idx} className="text-[11px] text-muted-foreground pl-2 border-l-2 border-violet-300 dark:border-violet-600 space-y-0.5">
+                    <div>
+                      <span className="font-medium text-foreground">{rr.reroutedByName}</span>
+                      <span className="mx-1">→</span>
+                      <span className="font-medium text-foreground">{rr.toName}</span>
+                      <span className="text-[10px] ml-1.5 opacity-60">({rr.toLevel}, {rr.date})</span>
+                    </div>
+                    {rr.reason && <p className="italic text-[10px]">"{rr.reason}"</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="border-t px-5 py-3 flex justify-end gap-2 bg-muted/10">
+            <Button variant="outline" size="sm" onClick={() => setRerouteOpen(false)} className="hover:bg-muted/60">Cancel</Button>
+            <Button
+              size="sm"
+              className="gap-1.5 relative overflow-hidden bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 text-white shadow-md hover:shadow-lg transition-all duration-200 group disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleReroute}
+              disabled={!rerouteReason.trim() || !rerouteLevel || !rerouteTargetEmpNo}
+            >
+              <ArrowRightLeft className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+              <span className="font-semibold">Confirm Reroute</span>
             </Button>
           </div>
         </DialogContent>

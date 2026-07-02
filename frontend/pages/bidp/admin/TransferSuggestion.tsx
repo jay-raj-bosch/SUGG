@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { statusColors } from "@/lib/mockData";
+import { statusColors, mockEmployees } from "@/lib/mockData";
 import type { Suggestion } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
 import { useSuggestions } from "@/contexts/SuggestionContext";
@@ -37,7 +37,7 @@ interface TransferRecord {
 const TransferSuggestion = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
-  const { plantPrefix } = usePlant();
+  const { plant, plantPrefix } = usePlant();
   const { addNotification } = useNotifications();
   const { suggestions, updateSuggestion } = useSuggestions();
   const { user } = useAuth();
@@ -53,8 +53,10 @@ const TransferSuggestion = () => {
 
   // Load employees from backend on mount
   useEffect(() => {
-    apiService.fetchEmployees().then(setAllEmployees).catch(() => {});
-  }, []);
+    apiService.fetchEmployees(plant as "bidp" | "jap").then(setAllEmployees).catch(() => {
+      setAllEmployees(mockEmployees.filter(e => e.plantCode === "PLT-01").map(e => ({ employee_no: e.employeeNo, name: e.name, department: e.department, area: "", plant_code: e.plantCode, role: "employee" as const, ntid: e.ntid, email: e.email })));
+    });
+  }, [plant]);
 
   const transferableSuggestions = suggestions.filter(s =>
     ["Submitted", "Under Evaluation", "Pending FLM", "Pending Manager", "Pending BPS Admin", "Pending BPS DH"].includes(s.status)

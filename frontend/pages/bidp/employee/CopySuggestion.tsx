@@ -35,7 +35,7 @@ const TYPE_FIELDS: Record<string, { key: string; label: string }[]> = {
     { key: "rootCause", label: "Root Cause" },
     { key: "ideaToEliminate", label: "Idea to Eliminate Root Cause" },
     { key: "actionTaken", label: "Action Taken" },
-    { key: "horizontalDeployment", label: "Horizontal Deployment Count" },
+    { key: "horizontalDeployment", label: "How many places this kaizen is deployed horizontally" },
   ],
   "My Idea Card": [
     { key: "subject", label: "Subject" },
@@ -64,13 +64,13 @@ const CopySuggestion = () => {
   const { suggestions } = useSuggestions();
   const { t } = useLanguage();
   const navigate = useNavigate();
-  const { plantPrefix } = usePlant();
+  const { plant, plantPrefix } = usePlant();
 
   useEffect(() => {
-    apiService.fetchSuggestions({ limit: 5000 })
+    apiService.fetchSuggestions(plant as "bidp" | "jap", { limit: 5000 })
       .then(r => setAllSuggestionsApi(r.data))
       .catch(() => {});
-  }, []);
+  }, [plant]);
 
   /** Get a field value — checks formData.typeFields first, then top-level suggestion, then formData root */
   const getFieldValue = (s: Suggestion, key: string): string => {

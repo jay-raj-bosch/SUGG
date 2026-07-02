@@ -3,10 +3,10 @@
 
 import type { Suggestion, AuditEntry } from "@/lib/mockData";
 
-/** My Idea Card has a fixed award of ₹200 — no FLM evaluation needed */
-export const MIC_FIXED_AMOUNT = 200;
+/** My Idea Card has a fixed award of ₹250 — no FLM evaluation needed */
+export const MIC_FIXED_AMOUNT = 250;
 
-export type ApprovalLevel = "FLM" | "Manager" | "BPS Admin" | "BPS DH";
+export type ApprovalLevel = "FLM" | "Manager" | "BPS Admin" | "BPS DH" | "Implementation" | "CTG" | "VS RC";
 
 interface PipelineStep {
   level: ApprovalLevel;
@@ -15,12 +15,30 @@ interface PipelineStep {
 }
 
 /**
+ * Calculate CTF award amount from net savings using the defined slab table.
+ */
+export function calculateCtfAward(netSavings: number): number {
+  if (netSavings <= 0) return 0;
+  if (netSavings <= 20_000) return Math.round(0.3 * netSavings);
+  if (netSavings <= 40_000) return Math.round(6_000 + 0.25 * (netSavings - 20_000));
+  if (netSavings <= 80_000) return Math.round(11_000 + 0.20 * (netSavings - 40_000));
+  if (netSavings <= 1_60_000) return Math.round(19_000 + 0.10 * (netSavings - 80_000));
+  if (netSavings <= 3_20_000) return Math.round(27_000 + 0.05 * (netSavings - 1_60_000));
+  if (netSavings <= 6_40_000) return Math.round(35_400 + 0.03 * (netSavings - 3_20_000));
+  if (netSavings <= 12_80_000) return Math.round(45_000 + 0.015 * (netSavings - 6_40_000));
+  if (netSavings <= 20_00_000) return Math.round(54_600 + 0.0075 * (netSavings - 12_80_000));
+  return 60_000;
+}
+
+/**
  * Get the full approval pipeline for a suggestion type & award amount.
  *
  * MIC:                     emp → FLM → BPS Admin → Close
- * SSS/SFC/CTF (≤ 500):    emp → FLM → BPS Admin → Close
- * SSS/SFC/CTF (> 500):    emp → FLM → Manager → BPS Admin → BPS DH → Close
- * DCIP:                    emp → Close (no approvals)
+ * SSS/SFC (≤ 500):        emp → FLM → BPS Admin → Close
+ * SSS/SFC (> 500):        emp → FLM → Manager → BPS Admin → BPS DH → Close
+ * CTF (≤ 5000):           emp → FLM → Implementation → BPS Admin → CTG → BPS DH → Close
+ * CTF (> 5000):           emp → FLM → Implementation → BPS Admin → CTG → VS RC → BPS DH → Close
+ * DCIP:                   emp → Close (no approvals)
  */
 export function getPipeline(type: string, awardAmount: number): PipelineStep[] {
   if (type === "Daily CIP") return []; // auto-close on submit
@@ -32,7 +50,29 @@ export function getPipeline(type: string, awardAmount: number): PipelineStep[] {
     ];
   }
 
-  // SSS, SFC, CTF — same flow, branched by amount
+  // CTF — unique pipeline: FLM forwards for implementation (no evaluation),
+  // CTG evaluates with net savings, VS RC involved for >5000
+  if (type === "Cash The Flash") {
+    if (awardAmount > 5000) {
+      return [
+        { level: "FLM", status: "Submitted", pendingWith: "FLM" },
+        { level: "Implementation", status: "Pending Implementation", pendingWith: "Implementation" },
+        { level: "BPS Admin", status: "Pending BPS Admin", pendingWith: "BPS Admin" },
+        { level: "CTG", status: "Pending CTG", pendingWith: "CTG" },
+        { level: "VS RC", status: "Pending VS RC", pendingWith: "VS RC" },
+        { level: "BPS DH", status: "Pending BPS DH", pendingWith: "BPS DH" },
+      ];
+    }
+    return [
+      { level: "FLM", status: "Submitted", pendingWith: "FLM" },
+      { level: "Implementation", status: "Pending Implementation", pendingWith: "Implementation" },
+      { level: "BPS Admin", status: "Pending BPS Admin", pendingWith: "BPS Admin" },
+      { level: "CTG", status: "Pending CTG", pendingWith: "CTG" },
+      { level: "BPS DH", status: "Pending BPS DH", pendingWith: "BPS DH" },
+    ];
+  }
+
+  // SSS, SFC — same flow, branched by amount
   if (awardAmount > 500) {
     return [
       { level: "FLM", status: "Submitted", pendingWith: "FLM" },
@@ -102,6 +142,21 @@ export function buildApprovalUpdate(
     if (awardAmount !== undefined) {
       base.awardAmount = awardAmount;
     }
+  } else if (currentLevel === "Implementation") {
+    (base as any).implementedBy = approverEmpNo;
+    (base as any).implementedByName = approverName;
+    (base as any).implementedOn = now;
+  } else if (currentLevel === "CTG") {
+    (base as any).ctgEvaluatedBy = approverEmpNo;
+    (base as any).ctgEvaluatedByName = approverName;
+    (base as any).ctgEvaluatedOn = now;
+    if (awardAmount !== undefined) {
+      base.awardAmount = awardAmount;
+    }
+  } else if (currentLevel === "VS RC") {
+    (base as any).approvedByVsRc = approverEmpNo;
+    (base as any).approvedByVsRcName = approverName;
+    (base as any).approvedByVsRcOn = now;
   } else if (currentLevel === "Manager") {
     base.approvedByManager = approverEmpNo;
     base.approvedByManagerName = approverName;
@@ -201,8 +256,11 @@ export function buildRejectionUpdate(
 export function roleToApprovalLevel(bidpRole: string): ApprovalLevel | null {
   switch (bidpRole) {
     case "flm": return "FLM";
+    case "implementation": return "Implementation";
     case "manager": return "Manager";
     case "bps_admin": return "BPS Admin";
+    case "ctg": return "CTG";
+    case "vs_rc": return "VS RC";
     case "bps_dh": return "BPS DH";
     default: return null;
   }
@@ -214,8 +272,11 @@ export function roleToApprovalLevel(bidpRole: string): ApprovalLevel | null {
 export function getStatusesForLevel(level: ApprovalLevel): string[] {
   switch (level) {
     case "FLM": return ["Submitted", "Pending FLM"];
+    case "Implementation": return ["Pending Implementation"];
     case "Manager": return ["Pending Manager"];
     case "BPS Admin": return ["Pending BPS Admin"];
+    case "CTG": return ["Pending CTG"];
+    case "VS RC": return ["Pending VS RC"];
     case "BPS DH": return ["Pending BPS DH"];
   }
 }
@@ -330,6 +391,109 @@ export function buildSendBackUpdate(
 }
 
 /**
+ * Build the reroute update — lets BPS Admin/BPS DH redirect a suggestion to
+ * ANY specific person at ANY pipeline level (e.g. if the wrong FLM evaluated
+ * it, or it needs a different Manager's attention). Unlike send-back, this
+ * does NOT imply revision is required from the employee — it simply
+ * reassigns who currently needs to act, resetting that level's own stamp so
+ * the newly-assigned person can act on it fresh.
+ */
+export function buildRerouteUpdate(
+  suggestion: Suggestion,
+  reroutedByEmpNo: string,
+  reroutedByName: string,
+  targetLevel: ApprovalLevel,
+  targetEmpNo: string,
+  targetName: string,
+  reason: string,
+  options?: { department?: string; fromLevel?: ApprovalLevel | string },
+): Partial<Suggestion> {
+  const now = new Date().toISOString().split("T")[0];
+
+  const statusForLevel: Record<ApprovalLevel, string> = {
+    FLM: "Submitted",
+    Implementation: "Pending Implementation",
+    Manager: "Pending Manager",
+    "BPS Admin": "Pending BPS Admin",
+    CTG: "Pending CTG",
+    "VS RC": "Pending VS RC",
+    "BPS DH": "Pending BPS DH",
+  };
+
+  const base: Partial<Suggestion> = {
+    status: statusForLevel[targetLevel],
+    pendingWith: `${targetLevel} - ${targetName}`,
+    approvalLevel: targetLevel,
+    daysPending: 0,
+    pendingSince: now,
+    rerouteTargetEmpNo: targetEmpNo,
+    rerouteTargetName: targetName,
+  };
+
+  // Reassign the pointer field used to filter "my approvals" for that level,
+  // and clear any existing stamp so the new person can act on it afresh.
+  if (targetLevel === "FLM") {
+    base.assignedFlm = targetEmpNo;
+    base.evaluatedBy = undefined;
+    base.evaluatedByName = undefined;
+    base.evaluatedOn = undefined;
+  } else if (targetLevel === "Implementation") {
+    (base as any).implementedBy = undefined;
+    (base as any).implementedByName = undefined;
+    (base as any).implementedOn = undefined;
+  } else if (targetLevel === "CTG") {
+    (base as any).ctgEvaluatedBy = undefined;
+    (base as any).ctgEvaluatedByName = undefined;
+    (base as any).ctgEvaluatedOn = undefined;
+  } else if (targetLevel === "VS RC") {
+    (base as any).approvedByVsRc = undefined;
+    (base as any).approvedByVsRcName = undefined;
+    (base as any).approvedByVsRcOn = undefined;
+  } else if (targetLevel === "Manager") {
+    base.approvedByManager = undefined;
+    base.approvedByManagerName = undefined;
+    base.approvedByManagerOn = undefined;
+  } else if (targetLevel === "BPS Admin") {
+    base.approvedByBpsAdmin = undefined;
+    base.approvedByBpsAdminName = undefined;
+    base.approvedByBpsAdminOn = undefined;
+  } else if (targetLevel === "BPS DH") {
+    base.approvedByBpsDh = undefined;
+    base.approvedByBpsDhName = undefined;
+    base.approvedByBpsDhOn = undefined;
+  }
+
+  const rerouteEntry = {
+    fromLevel: (options?.fromLevel || suggestion.approvalLevel || "FLM") as string,
+    toLevel: targetLevel,
+    toEmpNo: targetEmpNo,
+    toName: targetName,
+    reason,
+    date: now,
+    reroutedBy: reroutedByEmpNo,
+    reroutedByName,
+  };
+  base.rerouteHistory = [...(suggestion.rerouteHistory || []), rerouteEntry];
+
+  const auditEntry: AuditEntry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    action: "Rerouted",
+    performedBy: reroutedByEmpNo,
+    performedByName: reroutedByName,
+    performedByDept: options?.department,
+    role: (options?.fromLevel || suggestion.approvalLevel) as string | undefined,
+    date: new Date().toISOString(),
+    fromStatus: suggestion.status,
+    toStatus: base.status,
+    comments: reason,
+    forwardedTo: `${targetLevel} - ${targetName}`,
+  };
+  base.auditTrail = [...(suggestion.auditTrail || []), auditEntry];
+
+  return base;
+}
+
+/**
  * Calculate the actual days pending for a suggestion based on pendingSince or date.
  * Returns 0 for closed/rejected/draft items.
  */
@@ -369,10 +533,13 @@ export function calculateDaysPending(suggestion: Suggestion): number {
  * server-side rejections that look like "success then error" to the user.
  */
 export const APPROVAL_LIMITS: Record<ApprovalLevel, number> = {
-  "FLM":        500,
-  "Manager":    5_000,
-  "BPS Admin":  25_000,
-  "BPS DH":     100_000,
+  "FLM":            500,
+  "Implementation": 0,
+  "Manager":        5_000,
+  "BPS Admin":      25_000,
+  "CTG":            100_000,
+  "VS RC":          100_000,
+  "BPS DH":         100_000,
 };
 
 export function getMaxAwardForLevel(level: ApprovalLevel | null | undefined): number {

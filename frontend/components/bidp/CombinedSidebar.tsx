@@ -2,7 +2,7 @@
 // Shows Employee module always; Admin module only for non-employee roles.
 import {
   Home, FilePlus, Copy, FolderOpen, Trophy, BookOpen,
-  Shield, Search, DollarSign, BarChart3, Building,
+  Shield, Search, DollarSign, FileSpreadsheet, BarChart3, Building,
   Tag, ArrowRightLeft, RotateCcw, Award, ArrowLeft, CheckSquare,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
@@ -14,6 +14,7 @@ import { usePlant } from "@/contexts/PlantContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { roleToApprovalLevel, getStatusesForLevel } from "@/lib/bidp/approvalPipeline";
+import { bidpRoleHasAdminAccess, bidpRoleCanAccessAdminPath } from "@/lib/bidp/roles";
 
 interface Props { onClose?: () => void; }
 
@@ -24,8 +25,8 @@ const BidPCombinedSidebarContent = ({ onClose }: Props) => {
   const { user } = useAuth();
   const { suggestions } = useSuggestions();
 
-  // Only show admin section for non-employee roles
-  const showAdmin = user?.bidpRole && user.bidpRole !== "employee";
+  // Only show admin section for roles with admin module access (BPS Admin / BPS DH)
+  const showAdmin = bidpRoleHasAdminAccess(user?.bidpRole);
 
   // Count of pending approvals for the current user's role
   const approvalsCount = useMemo(() => {
@@ -42,7 +43,6 @@ const BidPCombinedSidebarContent = ({ onClose }: Props) => {
   const employeeItems = [
     { title: "Home",               translationKey: "Home",               url: `${plantPrefix}/employee`,                    icon: Home,        end: true },
     { title: "New Suggestion",     translationKey: "New Suggestion",     url: `${plantPrefix}/employee/new-suggestion`,     icon: FilePlus,    end: false },
-    { title: "Copy Suggestion",    translationKey: "Copy Suggestion",    url: `${plantPrefix}/employee/copy-suggestion`,    icon: Copy },
     { title: "My Suggestions",     translationKey: "My Suggestions",     url: `${plantPrefix}/employee/my-suggestions`,     icon: FolderOpen },
     { title: "My Approvals",       translationKey: "My Approvals",       url: `${plantPrefix}/employee/my-approvals`,       icon: CheckSquare, badge: approvalsCount },
     { title: "My Awards",          translationKey: "My Awards",          url: `${plantPrefix}/employee/my-awards`,          icon: Trophy },
@@ -50,15 +50,16 @@ const BidPCombinedSidebarContent = ({ onClose }: Props) => {
   ];
 
   const adminItems = [
-    { title: "General Enquiry",     translationKey: "General Enquiry",            url: `${plantPrefix}/admin/general-enquiry`,     icon: Search },
-    { title: "NEFT/MIS Report",     translationKey: "NEFT / MIS Report",          url: `${plantPrefix}/admin/neft-report`,         icon: DollarSign },
-    { title: "MIS Graphical",       translationKey: "MIS Graphical Report",       url: `${plantPrefix}/admin/mis-graphical`,       icon: BarChart3 },
-    { title: "Dept Mapping",        translationKey: "Add Department Mapping",     url: `${plantPrefix}/admin/dept-mapping`,        icon: Building },
-    { title: "Category Master",     translationKey: "Category Master",            url: `${plantPrefix}/admin/category-master`,     icon: Tag },
-    { title: "Transfer Suggestion", translationKey: "Transfer Suggestion",        url: `${plantPrefix}/admin/transfer-suggestion`, icon: ArrowRightLeft },
-    { title: "Reopen Suggestion",   translationKey: "Reopen Rejected Suggestion", url: `${plantPrefix}/admin/reopen-suggestion`,   icon: RotateCcw },
-    { title: "Award Letter",        translationKey: "Award Letter",               url: `${plantPrefix}/admin/award-letter`,        icon: Award },
-  ];
+    { title: "General Enquiry",     translationKey: "General Enquiry",            url: `${plantPrefix}/admin/general-enquiry`,     icon: Search,          path: "general-enquiry" },
+    { title: "NEFT Report",         translationKey: "NEFT Report",                 url: `${plantPrefix}/admin/neft-report`,         icon: DollarSign,      path: "neft-report" },
+    { title: "MIS Report",          translationKey: "MIS Report",                  url: `${plantPrefix}/admin/mis-report`,          icon: FileSpreadsheet, path: "mis-report" },
+    { title: "MIS Graphical",       translationKey: "MIS Graphical Report",       url: `${plantPrefix}/admin/mis-graphical`,       icon: BarChart3,       path: "mis-graphical" },
+    { title: "Dept Mapping",        translationKey: "Add Department Mapping",     url: `${plantPrefix}/admin/dept-mapping`,        icon: Building,        path: "dept-mapping" },
+    { title: "Category Master",     translationKey: "Category Master",            url: `${plantPrefix}/admin/category-master`,     icon: Tag,             path: "category-master" },
+    { title: "Transfer Suggestion", translationKey: "Transfer Suggestion",        url: `${plantPrefix}/admin/transfer-suggestion`, icon: ArrowRightLeft,  path: "transfer-suggestion" },
+    { title: "Reopen Suggestion",   translationKey: "Reopen Rejected Suggestion", url: `${plantPrefix}/admin/reopen-suggestion`,   icon: RotateCcw,       path: "reopen-suggestion" },
+    { title: "Award Letter",        translationKey: "Award Letter",               url: `${plantPrefix}/admin/award-letter`,        icon: Award,           path: "award-letter" },
+  ].filter(item => bidpRoleCanAccessAdminPath(user?.bidpRole, item.path));
 
   const renderMenuItems = (items: typeof employeeItems) =>
     items.map((item) => (
@@ -100,7 +101,7 @@ const BidPCombinedSidebarContent = ({ onClose }: Props) => {
           {renderMenuItems(employeeItems)}
         </nav>
 
-        {/* Admin Section — only for FLM, Manager, BPS Admin, BPS DH */}
+        {/* Admin Section — only for roles with admin module access (BPS Admin, BPS DH) */}
         {showAdmin && (
           <>
             <div className="px-3 py-3 border-b border-t border-sidebar-border">

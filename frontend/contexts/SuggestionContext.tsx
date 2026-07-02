@@ -29,7 +29,7 @@ interface SuggestionContextType {
 const SuggestionContext = createContext<SuggestionContextType | undefined>(undefined);
 
 // Bump this version whenever mock data structure changes to force a fresh seed.
-const MOCK_DATA_VERSION = "v12";
+const MOCK_DATA_VERSION = "v13";
 
 // ── Stale-cache eviction ─────────────────────────────────────────────────────
 // Scans all suggestion DB cache keys; removes any whose version tag is stale.
@@ -210,6 +210,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
         benefits: suggestion.benefits,
         assignedFlm: suggestion.assignedFlm,
         approvalLevel: suggestion.approvalLevel,
+        suggestionDepartment: (suggestion as any).suggestionDepartment,
         plantCode: plant,
         ...((suggestion as any).formData ?? {}),
       });
@@ -217,8 +218,16 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
     } catch {
       const id = String(Date.now());
       const prefix = { "Simple Suggestion Scheme": "SSS", "Shop Floor CIP": "SFC", "My Idea Card": "MIC", "Daily CIP": "DCP", "Cash The Flash": "CTF", "Improvement Suggestion": "JAP" }[suggestion.type] ?? "SUG";
-      const year = new Date().getFullYear();
-      const suggestionNo = suggestion.suggestionNo || `${prefix}-${year}-${String(Math.floor(Math.random() * 999)).padStart(3, "0")}`;
+      const yy = String(new Date().getFullYear()).slice(-2);
+      // Extract dept suffix: "BIDP1/TEF" → "TEF"; fallback to "GEN"
+      const rawDept: string = suggestion.department ?? "";
+      const deptSuffix = (rawDept.includes("/") ? rawDept.split("/").pop() : rawDept).trim().toUpperCase() || "GEN";
+      // Sequential number: count existing suggestions with same prefix+dept+year
+      const existingCount = suggestionsRef.current.filter(s =>
+        s.suggestionNo?.startsWith(`${prefix}_${deptSuffix}_${yy}_`)
+      ).length;
+      const seq = String(existingCount + 1).padStart(2, "0");
+      const suggestionNo = suggestion.suggestionNo || `${prefix}_${deptSuffix}_${yy}_${seq}`;
       newEntry = { ...suggestionWithAudit, plantCode: suggestion.plantCode ?? plant ?? "", id, suggestionNo };
     }
     setSuggestions(prev => {
@@ -230,8 +239,13 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
   }, [plant, persist]);
 
   const updateSuggestion = useCallback(async (id: string, updates: Partial<Suggestion>) => {
-    // Snapshot previous state for potential rollback
-    const previous = suggestionsRef.current;
+    // sessionStorage is our "database" (see persist() above) — the optimistic
+    // local update below is the source of truth for the UI. The backend call
+    // is best-effort sync only: if it fails (backend restarted mid-session,
+    // record not found there, momentarily unreachable, etc.) we keep the local
+    // change instead of rolling back, so an approval/forward action never
+    // fails for the user just because the in-memory backend is out of sync.
+    // This mirrors the resilience already used by addSuggestion().
     setSuggestions(prev => {
       const updated = prev.map(s => s.id === id ? { ...s, ...updates } : s);
       suggestionsRef.current = updated;
@@ -241,14 +255,9 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
     try {
       await apiService.updateSuggestion(plant as "bidp" | "jap", id, updates as Record<string, unknown>);
     } catch (err) {
-      // Rollback the optimistic update so the UI does not drift from the server
-      console.error("[SuggestionContext] updateSuggestion failed, rolling back:", err);
-      setSuggestions(previous);
-      suggestionsRef.current = previous;
-      persist(previous);
-      throw err;
+      console.error("[SuggestionContext] updateSuggestion backend sync failed (keeping local change):", err);
     }
-  }, [persist]);
+  }, [plant, persist]);
 
   const deleteSuggestion = useCallback((id: string) => {
     setSuggestions(prev => {

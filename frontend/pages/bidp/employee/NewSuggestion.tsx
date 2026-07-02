@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { suggestionTypes, categories } from "@/lib/mockData";
 import { schemaMap } from "@/lib/bidp/suggestionSchemas";
-import { flmOptions, moderatorOptions, kaizenThemes, workshopOptions } from "@/lib/bidp/suggestionConstants";
+import { flmOptions, moderatorOptions, kaizenThemes } from "@/lib/bidp/suggestionConstants";
+import SuggestionCombobox from "@/components/SuggestionCombobox";
 import { useVoiceEngine } from "@/hooks/useVoiceEngine";
 import VoiceHighlight from "@/components/VoiceHighlight";
 import { useSuggestions } from "@/contexts/SuggestionContext";
@@ -105,7 +106,7 @@ const SFCIP_VOICE_FIELDS: VoiceField[] = [
   { key: "rootCause",               label: "Root Cause",                      type: "textarea", hint: "State the root cause" },
   { key: "ideaToEliminate",         label: "Idea to Eliminate Root Cause",    type: "textarea", hint: "How will you eliminate the root cause?" },
   { key: "actionTaken",             label: "Action Taken",                    type: "textarea", hint: "Describe actions already taken" },
-  { key: "horizontalDeployment",    label: "Horizontal Deployment Count",     type: "number",   hint: "Say a number, e.g. 'three'" },
+  { key: "horizontalDeployment",    label: "How many places this kaizen is deployed horizontally",     type: "number",   hint: "Say a number, e.g. 'three'" },
   ...OTHER_INFO_NO_FLM,
 ];
 const MIC_VOICE_FIELDS: VoiceField[] = [
@@ -154,6 +155,8 @@ interface FormState {
   mainSuggestor: string;
   teamMembers: string[];
   teamMemberShares: Record<string, string>;
+  suggestionDepartment: string;
+  sameAsMyDepartment: boolean;
 }
 
 const emptyState: FormState = {
@@ -166,6 +169,8 @@ const emptyState: FormState = {
   mainSuggestor: "",
   teamMembers: [],
   teamMemberShares: {},
+  suggestionDepartment: "",
+  sameAsMyDepartment: true,
 };
 
 // Determine group suggestion default for a given type
@@ -315,12 +320,6 @@ const NewSuggestion = () => {
       if (match) { setTypeFields(prev => ({ ...prev, kaizenTheme: match })); voiceEngine.setStatus({ text: `✓ Theme: "${match}"`, ok: true }); }
       else voiceEngine.setStatus({ text: `⚠ No theme matched "${text}" — say e.g. 'Quality Improvement'`, ok: false });
       stopAfterFill();
-    } else if (field.key === "workshop") {
-      const lc = text.toLowerCase();
-      const match = workshopOptions.find(w => w.toLowerCase().includes(lc) || lc.includes(w.toLowerCase()));
-      if (match) { setTypeFields(prev => ({ ...prev, workshop: match })); voiceEngine.setStatus({ text: `✓ Workshop: "${match}"`, ok: true }); }
-      else voiceEngine.setStatus({ text: `⚠ No workshop matched "${text}" — say e.g. 'Workshop A'`, ok: false });
-      stopAfterFill();
     } else if (field.type === "number") {
       const words: Record<string, number> = {
         zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9,
@@ -381,6 +380,8 @@ const NewSuggestion = () => {
   const onActivateVoice = startVoiceForField;
   const [teamMembers, setTeamMembers] = useState<string[]>(saved.teamMembers || []);
   const [teamMemberShares, setTeamMemberShares] = useState<Record<string, string>>(saved.teamMemberShares || {});
+  const [sameAsMyDepartment, setSameAsMyDepartment] = useState(saved.sameAsMyDepartment ?? true);
+  const [suggestionDepartment, setSuggestionDepartment] = useState(saved.suggestionDepartment || "");
 
   const { addSuggestion, updateSuggestion, suggestions, refreshSuggestions, getSuggestionsSnapshot } = useSuggestions();
   const { user } = useAuth();
@@ -390,12 +391,20 @@ const NewSuggestion = () => {
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
 
   // Derive range automatically from logged-in user's department via DeptMapping
-  const { mapDept } = useDeptMappings();
+  const { mapDept, uniqueDepartments } = useDeptMappings();
   const derivedRange = useMemo(() => {
     const dept = user?.department || "";
     const mapped = mapDept(dept);
     return mapped === "—" ? dept.trim() : mapped;
   }, [user?.department, mapDept]);
+
+  // Keep suggestionDepartment synced to the employee's own department while
+  // "Same as my department" is checked (and once user data becomes available).
+  useEffect(() => {
+    if (sameAsMyDepartment && user?.department) {
+      setSuggestionDepartment(user.department);
+    }
+  }, [sameAsMyDepartment, user?.department]);
 
   // Clean up pending submission store on mount/unmount
   useEffect(() => {
@@ -431,6 +440,8 @@ const NewSuggestion = () => {
     setTeamMemberShares({});
     setTypeFields(type === "Cash The Flash" ? { suggestorName: user?.name || "" } : {});
     setErrors({});
+    setSameAsMyDepartment(true);
+    setSuggestionDepartment(user?.department || "");
     // Stop any active voice listening when switching form types
     voiceEngine.stopListening();
     setListeningField(null);
@@ -447,6 +458,8 @@ const NewSuggestion = () => {
     attachments: attachmentItems,
     mainSuggestor,
     teamMembers,
+    suggestionDepartment,
+    sameAsMyDepartment,
     ...typeFields,
   });
 
@@ -497,6 +510,8 @@ const NewSuggestion = () => {
     setTeamMemberShares({});
     setEditingId(null);
     setIsClone(false);
+    setSameAsMyDepartment(true);
+    setSuggestionDepartment(user?.department || "");
   };
 
   // Build serializable form state (AttachmentItem objects are plain JSON — no File objects)
@@ -504,7 +519,7 @@ const NewSuggestion = () => {
     const serializableTypeFields = Object.fromEntries(
       Object.entries(typeFields).filter(([, v]) => !(Array.isArray(v) && v.length > 0 && v[0] instanceof File))
     );
-    return { suggestionType, range, suggestionFor, groupSuggestion, otherInfo, mainSuggestor, teamMembers, teamMemberShares, typeFields: serializableTypeFields, attachmentItems };
+    return { suggestionType, range, suggestionFor, groupSuggestion, otherInfo, mainSuggestor, teamMembers, teamMemberShares, suggestionDepartment, sameAsMyDepartment, typeFields: serializableTypeFields, attachmentItems };
   };
 
   const handleSave = () => {
@@ -521,6 +536,8 @@ const NewSuggestion = () => {
       date: today,
       employeeNo: user?.employeeNo,
       employeeName: user?.name,
+      department: user?.department,
+      suggestionDepartment: suggestionDepartment || user?.department,
       range: derivedRange,
       presentMethod: typeFields.presentMethod || typeFields.problemStatus || typeFields.beforeImprovement,
       proposedMethod: typeFields.proposedMethod || typeFields.afterImprovement || typeFields.descriptionImprovement,
@@ -657,6 +674,8 @@ const NewSuggestion = () => {
         pendingSince: isDCIP ? undefined : today,
         employeeNo: user?.employeeNo,
         employeeName: user?.name,
+        department: user?.department,
+        suggestionDepartment: suggestionDepartment || user?.department,
         range: derivedRange,
         presentMethod: typeFields.presentMethod || typeFields.problemStatus || typeFields.beforeImprovement,
         proposedMethod: typeFields.proposedMethod || typeFields.afterImprovement || typeFields.descriptionImprovement,
@@ -883,6 +902,11 @@ const NewSuggestion = () => {
                 }}
                 teamMemberShares={teamMemberShares}
                 setTeamMemberShares={(v) => { setTeamMemberShares(v); setErrors(prev => { const n = {...prev}; delete n.teamMemberShares; return n; }); }}
+                suggestionDepartment={suggestionDepartment}
+                setSuggestionDepartment={(v) => { setSuggestionDepartment(v); setErrors(prev => { const n = {...prev}; delete n.suggestionDepartment; return n; }); }}
+                sameAsMyDepartment={sameAsMyDepartment}
+                setSameAsMyDepartment={setSameAsMyDepartment}
+                allDepartments={uniqueDepartments}
               />
 
               {/* Dynamic Type-Specific Fields */}
@@ -957,18 +981,17 @@ const NewSuggestion = () => {
                     )}
                   </div>
 
-                  {/* Select FLM — only for applicable form types */}
+                  {/* Select Approver (FLM) — only for applicable form types */}
                   {["Simple Suggestion Scheme", "My Idea Card", "Cash The Flash", "Shop Floor CIP"].includes(suggestionType) && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Select FLM <span className="text-destructive">*</span> <span className="text-[10px] text-muted-foreground font-normal">/ {t("Select FLM")}</span></Label>
-                      <Select value={typeFields.flm || ""} onValueChange={v => handleTypeFieldChange("flm", v)}>
-                        <SelectTrigger className={errors.flm ? "border-destructive" : ""}>
-                          <SelectValue placeholder="Select FLM" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {flmOptions.map(f => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      <Label className="text-xs">Select Approver <span className="text-destructive">*</span> <span className="text-[10px] text-muted-foreground font-normal">/ {t("Select Approver")}</span></Label>
+                      <SuggestionCombobox
+                        options={flmOptions.filter(f => f.value !== user?.employeeNo).map(f => ({ value: f.value, label: f.label }))}
+                        value={typeFields.flm || ""}
+                        onChange={v => handleTypeFieldChange("flm", v)}
+                        placeholder="Search by name or emp no..."
+                        className={errors.flm ? "[&_input]:border-destructive" : ""}
+                      />
                       {errors.flm && <p className="text-xs text-destructive">{errors.flm}</p>}
                     </div>
                   )}

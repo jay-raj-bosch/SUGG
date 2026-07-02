@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { statusColors, Suggestion } from "@/lib/mockData";
-import { CheckCircle2, Clock, FileText, Send, UserCheck, Award, AlertCircle, XCircle, IndianRupee, ChevronRight, Undo2, Timer } from "lucide-react";
+import { CheckCircle2, Clock, FileText, Send, UserCheck, Award, AlertCircle, XCircle, IndianRupee, ChevronRight, Undo2, Timer, ArrowRightLeft } from "lucide-react";
 import { getPipeline } from "@/lib/bidp/approvalPipeline";
 import { flmOptions, teamMemberOptions } from "@/lib/bidp/suggestionConstants";
 
@@ -41,7 +41,7 @@ interface TimelineEvent {
   date: string;
   detail: string;
   icon: React.ReactNode;
-  state: "completed" | "active" | "pending" | "rejected" | "sentBack";
+  state: "completed" | "active" | "pending" | "rejected" | "sentBack" | "rerouted";
   daysTaken?: number;  // days between this step and the previous one
 }
 
@@ -131,6 +131,17 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
   // Which level performed the send-back
   const sentBackFrom = isSentBack && latestSendBack ? latestSendBack.from : null;
 
+  // Reroute events — BPS Admin/BPS DH redirecting to a specific person at any
+  // level. Shown inline (chronologically approximate) wherever relevant.
+  const rerouteEvents = (s.rerouteHistory || []).map(rr => ({
+    label: `Rerouted to ${rr.toLevel}`,
+    date: rr.date,
+    detail: `By ${withEmpNo(rr.reroutedByName, rr.reroutedBy)} → ${withEmpNo(rr.toName, rr.toEmpNo)}${rr.reason ? ": " + rr.reason : ""}`,
+    icon: <ArrowRightLeft className={ic} />,
+    state: "rerouted" as const,
+    daysTaken: rr.date ? daysBetween(s.date, rr.date) : undefined,
+  }));
+
   // ── FLM Evaluation (always shown) ──
   const flmIsActive = !isSentBack && !isRejected && s.status === "Submitted" && !flmDone;
   const pendingWithDetail = (() => {
@@ -178,6 +189,7 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
         });
       }
     }
+    events.push(...rerouteEvents);
     events.push({
       label: "Rejected",
       date: s.rejectedOn || "—",
@@ -262,6 +274,9 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
       });
     }
 
+    // 2b. Show any reroute events inline for context
+    events.push(...rerouteEvents);
+
     // 3. Show the re-entry point — "Awaiting Revision" at the target level
     const targetLabel = sentBackTarget === "Employee"
       ? `Revision required by ${withEmpNo(s.employeeName, s.employeeNo)}`
@@ -323,6 +338,9 @@ const getTimeline = (s: Suggestion): TimelineEvent[] => {
     }
   }
 
+  // Show any reroute events inline for context
+  events.push(...rerouteEvents);
+
   // ── Final: Closed ──
   const isClosed = s.status === "Approved & Closed" || s.status === "Closed";
   events.push({
@@ -372,6 +390,11 @@ const stateStyles = {
     dot: "bg-amber-500 border-amber-500 text-white",
     line: "bg-amber-300",
     label: "text-amber-700 dark:text-amber-400",
+  },
+  rerouted: {
+    dot: "bg-violet-500 border-violet-500 text-white",
+    line: "bg-violet-300",
+    label: "text-violet-700 dark:text-violet-400",
   },
 };
 

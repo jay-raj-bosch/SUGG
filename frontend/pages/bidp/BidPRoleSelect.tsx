@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Building2, ArrowRight, User, Shield, Users, ClipboardCheck, UserCog, Monitor } from "lucide-react";
+import { Building2, ArrowRight, User, Shield, Users, ClipboardCheck, UserCog, Monitor, Briefcase, Landmark, Globe2, Calculator } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth, BidpRole } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { BIDP_ROLE_DEFINITIONS, type BidpRole } from "@/lib/bidp/roles";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 /**
  * BidP Role selection — fake role-based login.
  * Each role maps to a mock employee with relevant access.
+ * Role tiles are generated dynamically from BIDP_ROLE_DEFINITIONS —
+ * add a new role there and it automatically appears here.
  */
 
 interface RoleOption {
@@ -21,58 +24,23 @@ interface RoleOption {
   description: string;
 }
 
-const ROLE_OPTIONS: RoleOption[] = [
-  {
-    role: "employee",
-    label: "Employee",
-    sublabel: "ಉದ್ಯೋಗಿ",
-    name: "Karthik",
-    employeeNo: "30698665",
-    department: "BIDP1/TEF",
-    icon: User,
-    description: "Submit suggestions, view status & awards",
-  },
-  {
-    role: "flm",
-    label: "FLM",
-    sublabel: "First Line Manager",
-    name: "Suresh M",
-    employeeNo: "30698710",
-    department: "BIDP2/QAL",
-    icon: UserCog,
-    description: "Review & evaluate suggestions from team",
-  },
-  {
-    role: "manager",
-    label: "Manager",
-    sublabel: "ವ್ಯವಸ್ಥಾಪಕ",
-    name: "Anita Sharma",
-    employeeNo: "30698702",
-    department: "BIDP1/MNT",
-    icon: Users,
-    description: "Manage department suggestions & approvals",
-  },
-  {
-    role: "bps_admin",
-    label: "BPS Admin",
-    sublabel: "BPS Administrator",
-    name: "Vijay Sharma",
-    employeeNo: "30698720",
-    department: "BIDP1/ADM",
-    icon: Shield,
-    description: "Full admin access — assign authority, reports, awards",
-  },
-  {
-    role: "bps_dh",
-    label: "BPS DH",
-    sublabel: "Dept Head",
-    name: "Priya Devi",
-    employeeNo: "30698704",
-    department: "BIDP1/SAF",
-    icon: ClipboardCheck,
-    description: "Department head approvals & oversight",
-  },
-];
+/** UI-only icon mapping — kept separate from the role definitions so roles.ts stays framework-agnostic. */
+const ROLE_ICONS: Record<BidpRole, typeof User> = {
+  employee: User,
+  flm: UserCog,
+  manager: Users,
+  dept_general_manager: Briefcase,
+  general_manager: Landmark,
+  bps_admin: Shield,
+  bps_dh: ClipboardCheck,
+  vs_rc: Globe2,
+  ctg: Calculator,
+};
+
+const ROLE_OPTIONS: RoleOption[] = BIDP_ROLE_DEFINITIONS.map(def => ({
+  ...def,
+  icon: ROLE_ICONS[def.role],
+}));
 
 const BidPRoleSelect = () => {
   const navigate = useNavigate();

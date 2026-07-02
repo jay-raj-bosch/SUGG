@@ -34,7 +34,7 @@ const BidPUnifiedLayout = () => {
   if (!user) return null;
 
   return (
-    <div className="flex flex-col overflow-hidden" style={{ zoom: 0.85, height: 'calc(100vh / 0.85)', width: 'calc(100vw / 0.85)' }}>
+    <div className="flex flex-col overflow-hidden" style={{ zoom: 0.90, height: 'calc(100vh / 0.90)', width: 'calc(100vw / 0.90)' }}>
       <AppHeader
         isAdmin
         onMenuToggle={() => setMobileOpen(o => !o)}

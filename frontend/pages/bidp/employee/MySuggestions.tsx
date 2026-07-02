@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { statusColors, Suggestion } from "@/lib/mockData";
+import { statusColors, Suggestion, mockEmployees } from "@/lib/mockData";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import * as apiService from "@/lib/apiService";
 import { Eye, Edit, Clock, Trash2, ChevronLeft, ChevronRight, Timer, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -30,7 +31,26 @@ const MySuggestions = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
-  const { plantPrefix } = usePlant();
+  const { plant, plantPrefix } = usePlant();
+
+  // Authority list — used to resolve Pending With details dynamically
+  const [authorities, setAuthorities] = useState<apiService.AuthorityAssignment[]>([]);
+  useEffect(() => {
+    apiService.fetchAuthority(plant as "bidp" | "jap").then(setAuthorities).catch(() => {
+      // fallback: seed BidP authority list
+      setAuthorities([
+        { id: 110, plant_code: "PLT-01", employee_no: "30698710", name: "Suresh M",     department: "BIDP1/TEF", role: "FLM",       type: "Internal", email: "", ntid: "" },
+        { id: 111, plant_code: "PLT-01", employee_no: "30698711", name: "Ganesh R",     department: "BIDP2/QAL", role: "FLM",       type: "Internal", email: "", ntid: "" },
+        { id: 112, plant_code: "PLT-01", employee_no: "30698712", name: "Priya S",      department: "BIDP1/HRD", role: "FLM",       type: "Internal", email: "", ntid: "" },
+        { id: 113, plant_code: "PLT-01", employee_no: "30698702", name: "Anita Sharma", department: "BIDP1/MNT", role: "Manager",   type: "Internal", email: "", ntid: "" },
+        { id: 114, plant_code: "PLT-01", employee_no: "30698720", name: "Vijay Sharma", department: "BIDP1/ADM", role: "BPS Admin", type: "Internal", email: "", ntid: "" },
+        { id: 115, plant_code: "PLT-01", employee_no: "30698704", name: "Priya Devi",   department: "BIDP1/SAF", role: "BPS DH",    type: "Internal", email: "", ntid: "" },
+        { id: 116, plant_code: "PLT-01", employee_no: "30698730", name: "Ramesh Iyer",  department: "BIDP1/MNT", role: "Dept General Manager", type: "Internal", email: "", ntid: "" },
+        { id: 117, plant_code: "PLT-01", employee_no: "30698731", name: "Lakshmi Rao",  department: "BIDP1/ADM", role: "General Manager",      type: "Internal", email: "", ntid: "" },
+        { id: 118, plant_code: "PLT-01", employee_no: "30698740", name: "Deepak Verma", department: "BIDP1/ADM", role: "VS RC",               type: "Internal", email: "", ntid: "" },
+      ]);
+    });
+  }, [plant]);
   const [selectedSuggestion, setSelectedSuggestion] = useState<Suggestion | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [timelineSuggestion, setTimelineSuggestion] = useState<Suggestion | null>(null);
@@ -54,24 +74,61 @@ const MySuggestions = () => {
   const allDrafts = getDraftSuggestions().filter(s => s.employeeNo === empNo);
 
   const CLOSED_STATUSES = new Set(["Approved & Closed", "Implemented", "Rejected", "Closed"]);
+  const BPS_ROLES = ["BPS Admin", "BPS DH"];
 
-  // emp-no lookup from flmOptions + moderatorOptions for Pending With display
-  const PENDING_EMP_LOOKUP: Record<string, string> = {
-    "Suresh M":  "30698710",
-    "Ganesh R":  "30698711",
-    "Karthik M": "30698730",
-    "Lakshmi P": "30698731",
-    "Rajesh V":  "30698732",
-  };
+  // Build a fast lookup: empNo → { name, dept, role } from authorities + mockEmployees
+  const empLookup = useMemo(() => {
+    const m: Record<string, { name: string; dept: string; role: string }> = {};
+    for (const a of authorities) {
+      m[a.employee_no] = { name: a.name, dept: a.department || "", role: a.role };
+    }
+    for (const e of mockEmployees.filter(emp => emp.plantCode === "PLT-01")) {
+      if (!m[e.employeeNo]) m[e.employeeNo] = { name: e.name, dept: e.department, role: "Employee" };
+    }
+    return m;
+  }, [authorities]);
 
-  const formatPendingWith = (s: Suggestion): { role: string; name: string; empNo: string } => {
-    if (CLOSED_STATUSES.has(s.status)) return { role: "Closed", name: "", empNo: "" };
-    if (!s.pendingWith) return { role: "\u2014", name: "", empNo: "" };
+  const formatPendingWith = (s: Suggestion): { role: string; name: string; empNo: string; dept: string } => {
+    if (CLOSED_STATUSES.has(s.status)) return { role: "Closed", name: "", empNo: "", dept: "" };
+    if (!s.pendingWith) return { role: "\u2014", name: "", empNo: "", dept: "" };
+
     const dash = s.pendingWith.indexOf(" - ");
     const role = dash !== -1 ? s.pendingWith.slice(0, dash).trim() : s.pendingWith;
-    const name = dash !== -1 ? s.pendingWith.slice(dash + 3).trim() : "";
-    const empNo = PENDING_EMP_LOOKUP[name] || (s.assignedFlm || "");
-    return { role, name, empNo };
+    const nameFromPW = dash !== -1 ? s.pendingWith.slice(dash + 3).trim() : "";
+    // "Revision"/"Revision Required" suffixes (used on send-back) aren't real names
+    const cleanNameFromPW = nameFromPW && nameFromPW !== "Revision" && nameFromPW !== "Revision Required" ? nameFromPW : "";
+
+    // Resolve empNo: prefer direct suggestion fields over string parsing
+    let resolvedEmpNo = "";
+    if (role === "FLM" && s.assignedFlm) resolvedEmpNo = s.assignedFlm;
+
+    // If not found from fields, try matching by name in the lookup — covers
+    // reroutes and the initial "FLM - Name" assignment, both of which carry
+    // a real person's name in pendingWith.
+    if (!resolvedEmpNo && cleanNameFromPW) {
+      const found = Object.entries(empLookup).find(([, v]) => v.name === cleanNameFromPW);
+      if (found) resolvedEmpNo = found[0];
+    }
+
+    // Manager/BPS Admin/BPS DH (and other authority roles) are routed by
+    // department rather than a single assigned person, so pendingWith for
+    // those stages is just the bare role label with no name attached. Resolve
+    // the authority who actually covers this suggestion's department, falling
+    // back to any authority holding that role — mirrors the routing logic
+    // used to decide who sees the suggestion in "My Approvals".
+    if (!resolvedEmpNo && role !== "FLM" && role !== "Employee") {
+      const suggDept = s.suggestionDepartment || s.department;
+      const atRole = authorities.filter(a => a.role === role);
+      const deptMatch = atRole.find(a => a.department === s.department || a.department === suggDept);
+      const chosen = deptMatch || atRole[0];
+      if (chosen) resolvedEmpNo = chosen.employee_no;
+    }
+
+    const entry = resolvedEmpNo ? empLookup[resolvedEmpNo] : undefined;
+    const name = entry?.name || cleanNameFromPW;
+    const dept = entry?.dept || "";
+
+    return { role, name, empNo: resolvedEmpNo, dept };
   };
 
   const applyFilters = (list: Suggestion[]) => {
@@ -85,6 +142,9 @@ const MySuggestions = () => {
     if (pendingFilter !== "all") {
       r = r.filter(s => {
         const pw = formatPendingWith(s);
+        if (pendingFilter === "BPS") {
+          return BPS_ROLES.includes(pw.role);
+        }
         return pw.role.toLowerCase().includes(pendingFilter.toLowerCase());
       });
     }
@@ -97,15 +157,15 @@ const MySuggestions = () => {
   const drafts = applyFilters(allDrafts);
   const anyFilter = typeFilter !== "all" || statusFilter !== "all" || pendingFilter !== "all" || searchQuery.trim() !== "" || dateFrom !== "" || dateTo !== "";
 
-  // Collect unique pending-with roles dynamically from data
+  // Collect unique pending-with roles dynamically from data (BPS roles grouped under "BPS")
   const pendingRoles = useMemo(() => {
     const roles = new Set<string>();
     allSubs.forEach(s => {
       const pw = formatPendingWith(s);
-      if (pw.role && pw.role !== "—") roles.add(pw.role);
+      if (pw.role && pw.role !== "—" && pw.role !== "Closed" && !BPS_ROLES.includes(pw.role)) roles.add(pw.role);
     });
     return Array.from(roles).sort();
-  }, [allSubs]);
+  }, [allSubs, BPS_ROLES, authorities, empLookup]);
 
   // Reset to page 1 whenever filters change
   useEffect(() => { setCurrentPageSubs(1); setCurrentPageDrafts(1); }, [typeFilter, statusFilter, pendingFilter, searchQuery, dateFrom, dateTo]);
@@ -159,7 +219,7 @@ const MySuggestions = () => {
 
   /** Clean status for display — strip role names since they're in the Pending With column */
   const displayStatus = (status: string): string => {
-    if (status === "Pending Manager" || status === "Pending BPS Admin" || status === "Pending BPS DH" || status === "Pending FLM") {
+    if (status === "Pending Manager" || status === "Pending BPS Admin" || status === "Pending BPS DH" || status === "Pending FLM" || status === "Pending Implementation" || status === "Pending CTG" || status === "Pending VS RC") {
       return "Under Review";
     }
     return status;
@@ -227,6 +287,7 @@ const MySuggestions = () => {
                   <span className="font-semibold text-primary/70">{pw.role}</span>
                   {pw.name && <><span>–</span><span className="font-medium text-foreground/70">{pw.name}</span></>}
                   {pw.empNo && <span className="font-mono text-[10px]">({pw.empNo})</span>}
+                  {pw.dept && <span className="text-[10px]">{pw.dept}</span>}
                   <span>·</span>
                   <span>{s.date}</span>
                 </div>
@@ -281,11 +342,12 @@ const MySuggestions = () => {
                         {isClosed ? (
                           <span className="text-muted-foreground">Closed</span>
                         ) : pw.name ? (
-                          <span className="flex flex-col leading-tight">
-                            <span className="font-medium text-foreground/80">{pw.name}</span>
-                            <span className="text-[10px] text-muted-foreground">
+                          <span className="flex flex-col leading-tight gap-0.5">
+                            <span className="font-medium text-foreground/90">{pw.name}</span>
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-1 flex-wrap">
                               <span className="font-semibold text-primary/70">{pw.role}</span>
-                              {pw.empNo && <span className="font-mono"> · {pw.empNo}</span>}
+                              {pw.empNo && <span className="font-mono">{pw.empNo}</span>}
+                              {pw.dept && <><span className="opacity-40">·</span><span>{pw.dept}</span></>}
                             </span>
                           </span>
                         ) : (
@@ -402,7 +464,6 @@ const MySuggestions = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Draft">Draft</SelectItem>
                 <SelectItem value="Submitted">Submitted</SelectItem>
                 <SelectItem value="Under Evaluation">Under Evaluation</SelectItem>
                 <SelectItem value="Approved &amp; Closed">Approved &amp; Closed</SelectItem>
@@ -425,6 +486,7 @@ const MySuggestions = () => {
                 {pendingRoles.map(role => (
                   <SelectItem key={role} value={role}>{role}</SelectItem>
                 ))}
+                <SelectItem value="BPS">BPS (DH / Admin)</SelectItem>
               </SelectContent>
             </Select>
           </div>

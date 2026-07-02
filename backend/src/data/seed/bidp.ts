@@ -34,8 +34,38 @@ export const bidpEmployees: SeedEmployee[] = [
   { employee_no: "30698710", name: "Suresh M",     department: "BIDP1/TEF", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "ssuresh",  email: "suresh@company.com",        is_active: true },
   { employee_no: "30698711", name: "Ganesh R",     department: "BIDP2/QAL", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "rganesh",  email: "ganesh@company.com",        is_active: true },
   { employee_no: "30698712", name: "Priya S",      department: "BIDP1/HRD", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "spriya",   email: "priya@company.com",         is_active: true },
+  { employee_no: "30698730", name: "Ramesh Iyer",  department: "BIDP1/MNT", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "riyer",    email: "ramesh.iyer@company.com",   is_active: true },
+  { employee_no: "30698731", name: "Lakshmi Rao",  department: "BIDP1/ADM", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "lrao",     email: "lakshmi.rao@company.com",   is_active: true },
   // Admin
   { employee_no: "30698720", name: "Vijay Sharma", department: "BIDP1/ADM", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "admin",    ntid: "vsharma",  email: "vijay.sharma@company.com",  is_active: true },
+  { employee_no: "30698740", name: "Deepak Verma", department: "BIDP1/ADM", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "admin",    ntid: "dverma",   email: "deepak.verma@company.com", is_active: true },
+  // Additional manpower — a few regular employees added to every department
+  // so the employee directory (Assign Authority lookup, General Enquiry
+  // search, team-member/co-suggestor pickers) has staff across all depts.
+  { employee_no: "30698741", name: "Manoj Kumar",     department: "BIDP1/TEF", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "mkumar",     email: "manoj.kumar@company.com",     is_active: true },
+  { employee_no: "30698742", name: "Divya Reddy",     department: "BIDP1/TEF", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "dreddy",     email: "divya.reddy@company.com",     is_active: true },
+  { employee_no: "30698743", name: "Arun Prasad",     department: "BIDP2/QAL", area: "RBIN/BIDP2", plant_code: "PLT-01", role: "employee", ntid: "aprasad",    email: "arun.prasad@company.com",     is_active: true },
+  { employee_no: "30698744", name: "Meera Krishnan",  department: "BIDP2/QAL", area: "RBIN/BIDP2", plant_code: "PLT-01", role: "employee", ntid: "mkrishnan",  email: "meera.krishnan@company.com",  is_active: true },
+  { employee_no: "30698745", name: "Sanjay Gupta",    department: "BIDP1/MNT", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "sgupta",     email: "sanjay.gupta@company.com",    is_active: true },
+  { employee_no: "30698746", name: "Pooja Mehta",     department: "BIDP1/MNT", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "pmehta",     email: "pooja.mehta@company.com",     is_active: true },
+  { employee_no: "30698747", name: "Vikas Singh",     department: "BIDP1/SAF", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "vsingh",     email: "vikas.singh@company.com",     is_active: true },
+  { employee_no: "30698748", name: "Nandini Rao",     department: "BIDP1/SAF", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "nrao",       email: "nandini.rao@company.com",     is_active: true },
+  { employee_no: "30698749", name: "Rahul Joshi",     department: "BIDP1/HRD", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "rjoshi",     email: "rahul.joshi@company.com",     is_active: true },
+  { employee_no: "30698750", name: "Swathi Menon",    department: "BIDP1/HRD", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "smenon",     email: "swathi.menon@company.com",    is_active: true },
+  { employee_no: "30698751", name: "Ashok Pillai",    department: "BIDP1/ADM", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "apillai",    email: "ashok.pillai@company.com",    is_active: true },
+  { employee_no: "30698752", name: "Geeta Bansal",    department: "BIDP1/ADM", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "gbansal",    email: "geeta.bansal@company.com",    is_active: true },
+  { employee_no: "30698753", name: "Naveen Kumar",    department: "BIDP3/LOG", area: "RBIN/BIDP3", plant_code: "PLT-01", role: "employee", ntid: "nkumar",     email: "naveen.kumar@company.com",    is_active: true },
+  { employee_no: "30698754", name: "Shalini Devi",    department: "BIDP3/LOG", area: "RBIN/BIDP3", plant_code: "PLT-01", role: "employee", ntid: "sdevi",      email: "shalini.devi@company.com",    is_active: true },
+  { employee_no: "30698755", name: "Rajiv Menon",     department: "BIDP3/LOG", area: "RBIN/BIDP3", plant_code: "PLT-01", role: "employee", ntid: "rmenon",     email: "rajiv.menon@company.com",     is_active: true },
+  { employee_no: "30698756", name: "Abhishek Rao",    department: "BIDP2/RND", area: "RBIN/BIDP2", plant_code: "PLT-01", role: "employee", ntid: "arao",       email: "abhishek.rao@company.com",    is_active: true },
+  { employee_no: "30698757", name: "Kavya Iyer",      department: "BIDP2/RND", area: "RBIN/BIDP2", plant_code: "PLT-01", role: "employee", ntid: "kiyer",      email: "kavya.iyer@company.com",      is_active: true },
+  { employee_no: "30698758", name: "Siddharth Nair",  department: "BIDP2/RND", area: "RBIN/BIDP2", plant_code: "PLT-01", role: "employee", ntid: "snair",      email: "siddharth.nair@company.com",  is_active: true },
+  { employee_no: "30698759", name: "Neha Kapoor",     department: "BIDP1/FIN", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "nkapoor",    email: "neha.kapoor@company.com",     is_active: true },
+  { employee_no: "30698760", name: "Vinod Shetty",    department: "BIDP1/FIN", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "vshetty",    email: "vinod.shetty@company.com",    is_active: true },
+  { employee_no: "30698761", name: "Anjali Verma",    department: "BIDP1/FIN", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "averma",     email: "anjali.verma@company.com",    is_active: true },
+  { employee_no: "30698762", name: "Rohit Malhotra",  department: "BIDP1/ITS", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "rmalhotra",  email: "rohit.malhotra@company.com",  is_active: true },
+  { employee_no: "30698763", name: "Sneha Pillai",    department: "BIDP1/ITS", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "spillai",    email: "sneha.pillai@company.com",    is_active: true },
+  { employee_no: "30698764", name: "Karan Bhatt",     department: "BIDP1/ITS", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "kbhatt",     email: "karan.bhatt@company.com",     is_active: true },
 ];
 
 // ─── Suggestion seed ──────────────────────────────────────────────────────────
@@ -106,4 +136,7 @@ export const bidpAuthorityAssignments = [
   { id: 113, plant_code: "PLT-01", employee_no: "30698702", name: "Anita Sharma", department: "BIDP1/MNT", role: "Manager",   type: "Internal", email: "anita.sharma@company.com", ntid: "asharma"  },
   { id: 114, plant_code: "PLT-01", employee_no: "30698720", name: "Vijay Sharma", department: "BIDP1/ADM", role: "BPS Admin", type: "Internal", email: "vijay.sharma@company.com", ntid: "vsharma"  },
   { id: 115, plant_code: "PLT-01", employee_no: "30698704", name: "Priya Devi",   department: "BIDP1/SAF", role: "BPS DH",    type: "Internal", email: "priya.devi@company.com",   ntid: "pdevi"    },
+  { id: 116, plant_code: "PLT-01", employee_no: "30698730", name: "Ramesh Iyer",  department: "BIDP1/MNT", role: "Dept General Manager", type: "Internal", email: "ramesh.iyer@company.com", ntid: "riyer" },
+  { id: 117, plant_code: "PLT-01", employee_no: "30698731", name: "Lakshmi Rao",  department: "BIDP1/ADM", role: "General Manager",      type: "Internal", email: "lakshmi.rao@company.com", ntid: "lrao"  },
+  { id: 118, plant_code: "PLT-01", employee_no: "30698740", name: "Deepak Verma", department: "BIDP1/ADM", role: "VS RC",               type: "Internal", email: "deepak.verma@company.com", ntid: "dverma" },
 ];

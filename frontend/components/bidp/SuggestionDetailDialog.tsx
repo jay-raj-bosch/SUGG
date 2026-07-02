@@ -206,7 +206,7 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
           <Row label="Category" value={tf.category || suggestion.category} />
           <Row label="Date of Implementation" value={fmtDate(tf.dateOfImplementation)} />
           <Row label="Moderator(s)" value={mods.length ? mods.map(m => resolveEmpDisplay(m)).join(" | ") : undefined} />
-          <Row label="Horizontal Deployment" value={tf.horizontalDeployment} />
+          <Row label="How many places this kaizen is deployed horizontally" value={tf.horizontalDeployment} />
           <div className="py-2 space-y-3 border-b border-border/40">
             <Block label="Problem / Present Status" value={tf.problemStatus || suggestion.presentMethod} />
             <Block label="Before Improvement" value={tf.beforeImprovement} />
@@ -242,7 +242,7 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
       return (
         <div className="rounded-lg border bg-muted/10 px-3 py-2 space-y-0">
           <Row label="Date of Implementation" value={fmtDate(tf.dateOfImplementation)} />
-          <Row label="Workshop" value={tf.workshop} />
+          <Row label="Category" value={tf.category || suggestion.category} />
           <Row label="Machine No / Area" value={tf.machineNoArea || suggestion.subject} />
           <div className="py-2 space-y-3 border-b border-border/40">
             <Block label="Suggestion Description" value={tf.suggestionDescription || suggestion.presentMethod} />
@@ -421,16 +421,23 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
               <Row label="Suggestion No" value={suggestion.suggestionNo} />
               <Row label="Suggestion Date" value={fmtDate(suggestion.date)} />
               <Row label="Type of Suggestion" value={suggestion.type} />
-              <Row label="Category" value={suggestion.category} />
               <Row label="Range" value={suggestion.range} />
             </div>
 
             {/* ② Employee / Submission Info */}
             <SectionHead icon={User} title="Employee & Submission" />
             <div className="rounded-lg border bg-muted/10 px-3 py-2 space-y-0">
-              <Row label="Employee Name" value={suggestion.employeeName || "—"} />
-              <Row label="Employee No" value={suggestion.employeeNo} />
-              <Row label="Department" value={suggestion.department || optByEmpNo[suggestion.employeeNo || ""]?.dept || "—"} />
+              {/* Employee — single line: Name (EmpNo) · Dept */}
+              <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                <span className="text-xs text-muted-foreground w-44 shrink-0 leading-relaxed">Employee</span>
+                <span className="text-xs text-foreground font-medium flex-1 leading-relaxed">
+                  {suggestion.employeeName || "—"}
+                  {suggestion.employeeNo && <span className="font-mono font-normal"> ({suggestion.employeeNo})</span>}
+                  {(suggestion.department || optByEmpNo[suggestion.employeeNo || ""]?.dept) && (
+                    <span className="font-normal text-muted-foreground"> · {suggestion.department || optByEmpNo[suggestion.employeeNo || ""]?.dept}</span>
+                  )}
+                </span>
+              </div>
               <Row label="Suggestion For"
                 value={fd.suggestionFor === "behalf" ? "On Behalf" : fd.suggestionFor === "self" ? "Self" : suggestion.suggestionFor as string | undefined} />
               <Row label="Group Suggestion"

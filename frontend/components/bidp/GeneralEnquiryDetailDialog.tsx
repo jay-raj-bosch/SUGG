@@ -127,7 +127,7 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
               <InfoItem label="Category" value={typeFields.category || suggestion.category} />
               <InfoItem label="Moderator" value={resolveEmpName(typeFields.moderator)} />
               <InfoItem label="Date of Implementation" value={formatDate(typeFields.dateOfImplementation)} />
-              <InfoItem label="Horizontal Deployment" value={typeFields.horizontalDeployment} />
+              <InfoItem label="How many places this kaizen is deployed horizontally" value={typeFields.horizontalDeployment} />
             </div>
             <TextBlock label="Problem / Present Status" value={typeFields.problemStatus || suggestion.presentMethod} />
             <TextBlock label="Before Improvement" value={typeFields.beforeImprovement} />
@@ -158,7 +158,6 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
         return (
           <div className="space-y-3">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 rounded-lg border bg-muted/10 px-4 py-3">
-              <InfoItem label="Workshop" value={typeFields.workshop} />
               <InfoItem label="Machine No / Area" value={typeFields.machineNoArea || suggestion.subject} />
               <InfoItem label="Category" value={typeFields.category || suggestion.category} />
               <InfoItem label="Date of Implementation" value={formatDate(typeFields.dateOfImplementation)} />
@@ -269,6 +268,7 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
       case "Sent Back": return <Undo2 className="h-3.5 w-3.5 text-amber-600" />;
       case "Reopened": return <RotateCcw className="h-3.5 w-3.5 text-blue-500" />;
       case "Transferred": return <ArrowRightLeft className="h-3.5 w-3.5 text-indigo-500" />;
+      case "Rerouted": return <RotateCcw className="h-3.5 w-3.5 text-violet-500" />;
       case "Closed": return <ShieldCheck className="h-3.5 w-3.5 text-emerald-700" />;
       default: return <Clock className="h-3.5 w-3.5 text-muted-foreground" />;
     }
@@ -284,6 +284,7 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
       case "Closed": return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700";
       case "Rejected": return "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700";
       case "Sent Back": return "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700";
+      case "Rerouted": return "bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700";
       case "Reopened": return "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-700";
       case "Transferred": return "bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700";
       default: return "bg-muted text-muted-foreground border-border";
@@ -403,6 +404,22 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
       });
     }
 
+    // 7b. Reroute history
+    if (suggestion.rerouteHistory) {
+      suggestion.rerouteHistory.forEach((rr, idx) => {
+        trail.push({
+          id: `syn-rr-${idx}`,
+          action: "Rerouted",
+          performedBy: "",
+          performedByName: rr.reroutedByName,
+          role: rr.fromLevel,
+          date: rr.date ? new Date(rr.date).toISOString() : "",
+          comments: rr.reason,
+          forwardedTo: `${rr.toName} (${rr.toLevel})`,
+        });
+      });
+    }
+
     // 8. Transfer history
     if (suggestion.transferHistory) {
       suggestion.transferHistory.forEach((tr, idx) => {
@@ -464,6 +481,7 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
       if (action === "Approved" || action === "Evaluated" || action === "Closed") return "bg-emerald-500 border-emerald-200 dark:border-emerald-800";
       if (action === "Rejected") return "bg-red-500 border-red-200 dark:border-red-800";
       if (action === "Sent Back") return "bg-amber-500 border-amber-200 dark:border-amber-800";
+      if (action === "Rerouted") return "bg-violet-500 border-violet-200 dark:border-violet-800";
       if (action === "Submitted") return "bg-blue-500 border-blue-200 dark:border-blue-800";
       if (action === "Transferred") return "bg-indigo-500 border-indigo-200 dark:border-indigo-800";
       if (action === "Pending") return "bg-slate-400 border-slate-200 dark:border-slate-800";

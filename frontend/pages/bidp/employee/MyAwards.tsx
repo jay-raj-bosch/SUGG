@@ -136,7 +136,7 @@ const MyAwards = () => {
       {/* Table */}
       <Card className="card-shadow">
         <CardContent className="pt-4">
-          <div className="overflow-auto rounded-md border" style={{ maxHeight: "calc(100vh - 280px)" }}>
+          <div className="overflow-auto rounded-md border" style={{ maxHeight: "calc(100vh - 180px)" }}>
             <table className="min-w-[900px] w-full text-xs">
               <thead className="sticky top-0 z-20">
                 <tr className="border-b text-left bg-muted">

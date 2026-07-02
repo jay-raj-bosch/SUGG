@@ -1,4 +1,4 @@
-import { Toaster } from "@/components/ui/toaster";
+﻿import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import { PlantProvider } from "@/contexts/PlantContext";
 import { CategoryProvider } from "@/contexts/CategoryContext";
 import { DeptMappingProvider } from "@/contexts/DeptMappingContext";
 import PlantGuard from "@/components/PlantGuard";
+import BidPAdminGuard from "@/components/bidp/BidPAdminGuard";
 
 // â”€â”€ Landing pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import Index from "./pages/Index";
@@ -36,6 +37,7 @@ import BidPProcedure         from "./pages/bidp/employee/Procedure";
 // â”€â”€ BidP â€” Admin pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import BidPGeneralEnquiry     from "./pages/bidp/admin/GeneralEnquiry";
 import BidPNeftReport         from "./pages/bidp/admin/NeftReport";
+import BidPMisReport          from "./pages/bidp/admin/MisReport";
 import BidPMisGraphical       from "./pages/bidp/admin/MisGraphical";
 import BidPDeptMapping        from "./pages/bidp/admin/DeptMapping";
 import BidPCategoryMaster     from "./pages/bidp/admin/CategoryMaster";
@@ -118,22 +120,26 @@ const App = () => (
                       {/* Employee pages */}
                       <Route path="employee"                     element={<BidPEmployeeHome />} />
                       <Route path="employee/new-suggestion"       element={<BidPNewSuggestion />} />
-                      <Route path="employee/copy-suggestion"      element={<BidPCopySuggestion />} />
+                      {/* Copy Suggestion disabled — redirect to home */}
+                      <Route path="employee/copy-suggestion"      element={<Navigate to="/bidp/employee" replace />} />
 
                       <Route path="employee/my-suggestions"       element={<BidPMySuggestions />} />
                       <Route path="employee/my-approvals"         element={<BidPMyApprovals />} />
                       <Route path="employee/my-awards"            element={<BidPMyAwards />} />
                       <Route path="employee/procedure"            element={<BidPProcedure />} />
 
-                      {/* Admin pages */}
-                      <Route path="admin/general-enquiry"     element={<BidPGeneralEnquiry />} />
-                      <Route path="admin/neft-report"         element={<BidPNeftReport />} />
-                      <Route path="admin/mis-graphical"       element={<BidPMisGraphical />} />
-                      <Route path="admin/dept-mapping"        element={<BidPDeptMapping />} />
-                      <Route path="admin/category-master"     element={<BidPCategoryMaster />} />
-                      <Route path="admin/transfer-suggestion" element={<BidPTransferSuggestion />} />
-                      <Route path="admin/reopen-suggestion"   element={<BidPReopenSuggestion />} />
-                      <Route path="admin/award-letter"        element={<BidPAwardLetter />} />
+                      {/* Admin pages — restricted to roles with admin module access (BPS Admin, BPS DH) */}
+                      <Route element={<BidPAdminGuard />}>
+                        <Route path="admin/general-enquiry"     element={<BidPGeneralEnquiry />} />
+                        <Route path="admin/neft-report"         element={<BidPNeftReport />} />
+                        <Route path="admin/mis-report"          element={<BidPMisReport />} />
+                        <Route path="admin/mis-graphical"       element={<BidPMisGraphical />} />
+                        <Route path="admin/dept-mapping"        element={<BidPDeptMapping />} />
+                        <Route path="admin/category-master"     element={<BidPCategoryMaster />} />
+                        <Route path="admin/transfer-suggestion" element={<BidPTransferSuggestion />} />
+                        <Route path="admin/reopen-suggestion"   element={<BidPReopenSuggestion />} />
+                        <Route path="admin/award-letter"        element={<BidPAwardLetter />} />
+                      </Route>
                     </Route>
 
                     {/* BidP Kiosk — Employee self-service kiosk with login */}
@@ -146,10 +152,7 @@ const App = () => (
                       <Route path="change-password" element={<KioskChangePassword />} />
                     </Route>
 
-                    {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-                        JaP â€” Jaipur Plant
-                        Add new pages here as JaP workflow is defined.
-                        â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+                    
                     {/* JaP role selection */}
                     <Route path="/jap/select-role" element={<JaPRoleSelect />} />
 

@@ -3,9 +3,10 @@ import * as apiService from "@/lib/apiService";
 import { clearToken } from "@/lib/api";
 import type { JapRole } from "@/lib/jap/workflowPipeline";
 import { PLANT_CODE_BIDP } from "@/lib/constants";
+import { bidpRoleHasAdminAccess } from "@/lib/bidp/roles";
+import type { BidpRole } from "@/lib/bidp/roles";
 export type { JapRole };
-
-export type BidpRole = "employee" | "flm" | "manager" | "bps_admin" | "bps_dh";
+export type { BidpRole };
 
 export interface AuthUser {
   employeeNo: string;
@@ -83,7 +84,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
         if (savedBidpRole && savedBidpData) {
           const extra = JSON.parse(savedBidpData) as Partial<AuthUser>;
-          return { ...baseUser, ...extra, role: savedBidpRole === "employee" ? "employee" : "admin", bidpRole: savedBidpRole, japRole: undefined };
+          return { ...baseUser, ...extra, role: bidpRoleHasAdminAccess(savedBidpRole) ? "admin" : "employee", bidpRole: savedBidpRole, japRole: undefined };
         }
         return baseUser;
       };
@@ -134,7 +135,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const setBidpRole = useCallback((bidpRole: BidpRole, userData: Partial<AuthUser>) => {
-    const baseRole = bidpRole === "employee" ? "employee" : "admin";
+    const baseRole = bidpRoleHasAdminAccess(bidpRole) ? "admin" : "employee";
     sessionStorage.setItem("bidpRole", bidpRole);
     sessionStorage.setItem("bidpUserData", JSON.stringify(userData));
     // Clear JaP session when entering BidP

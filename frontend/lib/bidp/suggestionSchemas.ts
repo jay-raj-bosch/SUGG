@@ -56,6 +56,8 @@ export const globalFieldsSchema = z.object({
   mainSuggestor: z.string().optional(),
   teamMembers: z.array(z.string()).optional(),
   attachments: fileArraySchema,
+  suggestionDepartment: z.string().min(1, "Suggestion department is required"),
+  sameAsMyDepartment: z.boolean().optional(),
 });
 
 // ─── 1. Simple Suggestion Scheme ───
@@ -100,7 +102,7 @@ export const myIdeaCardSchema = globalFieldsSchema.extend({
 // ─── 4. Daily CIP ───
 export const dailyCIPSchema = globalFieldsSchema.extend({
   dateOfImplementation: z.string().min(1, "Date of implementation is required"),
-  workshop: z.string().optional(),
+  category: z.string().min(1, "Category is mandatory"),
   machineNoArea: z.string().trim().min(1, "Machine No / Area is mandatory"),
   suggestionDescription: z.string().trim().min(1, "Suggestion Description is mandatory"),
   photosBefore: imageFileSchema,
@@ -117,6 +119,8 @@ export const cashTheFlashSchema = globalFieldsSchema.extend({
   benefits: z.string().trim().min(1, "Benefits is mandatory"),
   suggestorName: z.string(),
   sharePercent: sharePercentSchema,
+  // Date of implementation may be in the future for CTF (planned implementation)
+  dateOfImplementation: z.string().min(1, "Date of Implementation is required"),
   flm: z.string().trim().min(1, "FLM is mandatory"),
 });
 

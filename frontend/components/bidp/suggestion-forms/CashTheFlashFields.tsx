@@ -33,6 +33,21 @@ const CashTheFlashFields = ({ values, onChange, errors, activeVoiceField, voiceM
 
   return (
     <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label className="text-xs">
+          Date of Implementation <span className="text-destructive">*</span>{" "}
+          <span className="text-[10px] text-muted-foreground font-normal">/ {t("Date of Implementation")}</span>{" "}
+          <span className="text-[10px] text-primary font-normal">(future dates allowed)</span>
+        </Label>
+        <Input
+          type="date"
+          value={values.dateOfImplementation || ""}
+          onChange={e => onChange("dateOfImplementation", e.target.value)}
+          className={errors.dateOfImplementation ? "border-destructive" : ""}
+        />
+        {errors.dateOfImplementation && <p className="text-xs text-destructive">{errors.dateOfImplementation}</p>}
+      </div>
+
       <VoiceHighlight active={hi("subject")} {...va("subject")}>
         <div className="space-y-1.5">
           <Label className="text-xs">Suggestion Subject <span className="text-destructive">*</span> <span className="text-[10px] text-muted-foreground font-normal">/ {t("Suggestion Subject")}</span></Label>

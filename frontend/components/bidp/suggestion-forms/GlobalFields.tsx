@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import { mockEmployees } from "@/lib/mockData";
 import { teamMemberOptions } from "@/lib/bidp/suggestionConstants";
 import { X, Search, Plus } from "lucide-react";
@@ -31,6 +32,12 @@ interface GlobalFieldsProps {
   setTeamMembers?: (v: string[]) => void;
   teamMemberShares?: Record<string, string>;
   setTeamMemberShares?: (v: Record<string, string>) => void;
+  // Suggestion department — the department the suggestion is actually about
+  suggestionDepartment?: string;
+  setSuggestionDepartment?: (v: string) => void;
+  sameAsMyDepartment?: boolean;
+  setSameAsMyDepartment?: (v: boolean) => void;
+  allDepartments?: string[];
 }
 
 // Employee options for searchable dropdown
@@ -58,6 +65,9 @@ const GlobalFields = ({
   mainSuggestor, setMainSuggestor,
   teamMembers, setTeamMembers,
   teamMemberShares, setTeamMemberShares,
+  suggestionDepartment, setSuggestionDepartment,
+  sameAsMyDepartment, setSameAsMyDepartment,
+  allDepartments,
 }: GlobalFieldsProps) => {
   const today = new Date().toISOString().split("T")[0];
   const { t } = useLanguage();
@@ -209,6 +219,41 @@ const GlobalFields = ({
             </RadioGroup>
           )}
         </div>
+
+        {setSuggestionDepartment && (
+          <div className="space-y-1.5">
+            <Label className="text-xs">Suggestion Department <span className="text-destructive">*</span> <span className="text-[10px] text-muted-foreground font-normal">/ {t("Suggestion Department")}</span></Label>
+            <Select
+              value={suggestionDepartment || ""}
+              onValueChange={setSuggestionDepartment}
+              disabled={!!sameAsMyDepartment}
+            >
+              <SelectTrigger className={`h-9 ${errors.suggestionDepartment ? "border-destructive" : ""}`}>
+                <SelectValue placeholder="Select department..." />
+              </SelectTrigger>
+              <SelectContent>
+                {(allDepartments || []).map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {setSameAsMyDepartment && (
+              <div className="flex items-center gap-1.5 pt-0.5">
+                <Checkbox
+                  id="same-as-my-dept"
+                  checked={!!sameAsMyDepartment}
+                  onCheckedChange={(checked) => {
+                    const isChecked = checked === true;
+                    setSameAsMyDepartment(isChecked);
+                    if (isChecked && department) setSuggestionDepartment(department);
+                  }}
+                />
+                <Label htmlFor="same-as-my-dept" className="text-xs cursor-pointer font-normal text-muted-foreground">
+                  Same as my department <span className="text-[10px]">/ {t("Same as my department")}</span>
+                </Label>
+              </div>
+            )}
+            {errors.suggestionDepartment && <p className="text-xs text-destructive">{errors.suggestionDepartment}</p>}
+          </div>
+        )}
       </div>
 
       {/* Main Suggestor - shown when On Behalf is selected */}

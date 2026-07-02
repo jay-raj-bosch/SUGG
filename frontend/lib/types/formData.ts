@@ -123,7 +123,6 @@ export interface BidpFormData {
   actionTaken?: string;
   photosBefore?: string[];    // file URLs
   photosAfter?: string[];
-  workshop?: string;
 
   // MIC specific
   dateOfImplementation?: string;

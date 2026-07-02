@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Plus, Search, Trash2 } from "lucide-react";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { useCategories } from "@/contexts/CategoryContext";
+import { categories as defaultCategories } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
 import { usePlant } from "@/contexts/PlantContext";
@@ -51,7 +52,7 @@ const CategoryMaster = () => {
     try { sessionStorage.setItem(CATLIST_KEY, JSON.stringify(catList)); } catch { /* */ }
   }, [catList]);
 
-  // Load categories from backend on mount and merge with session data
+  // Load categories from backend on mount — re-run if plant changes
   useEffect(() => {
     apiService.fetchCategories(plant as "bidp" | "jap").then(cats => {
       const backendEntries = cats.map(c => ({ id: String(c.id), plant: c.plant_code, name: c.name, desc: c.description || "" }));
@@ -61,8 +62,10 @@ const CategoryMaster = () => {
         const sessionOnly = prev.filter(p => !backendNames.has(p.name.toLowerCase()));
         return [...backendEntries, ...sessionOnly];
       });
-    }).catch(() => {});
-  }, []);
+    }).catch(() => {
+      setCatList(prev => prev.length > 0 ? prev : defaultCategories.map((name, i) => ({ id: String(i + 1), plant: "PLT-01", name, desc: "" })));
+    });
+  }, [plant]);
 
   const filtered = catList.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||

@@ -1,30 +1,25 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { suggestionTypes } from "@/lib/mockData";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useDeptMappings } from "@/contexts/DeptMappingContext";
 import { toast } from "sonner";
-import { Send, Save, RotateCcw, Upload, X, Paperclip, Info } from "lucide-react";
+import { Send, Save, RotateCcw } from "lucide-react";
 import { schemaMap } from "@/lib/bidp/suggestionSchemas";
 import { ZodError } from "zod";
 import { useNavigate } from "react-router-dom";
-import { flmOptions } from "@/lib/bidp/suggestionConstants";
-import { AttachmentItem, filesToAttachmentItems } from "@/lib/attachmentUtils";
 import { validateFiles } from "@/lib/fileSecurityUtils";
-
 import GlobalFields from "@/components/bidp/suggestion-forms/GlobalFields";
 import SimpleSuggestionFields from "@/components/bidp/suggestion-forms/SimpleSuggestionFields";
 import ShopFloorCIPFields from "@/components/bidp/suggestion-forms/ShopFloorCIPFields";
 import MyIdeaCardFields from "@/components/bidp/suggestion-forms/MyIdeaCardFields";
 import DailyCIPFields from "@/components/bidp/suggestion-forms/DailyCIPFields";
 import CashTheFlashFields from "@/components/bidp/suggestion-forms/CashTheFlashFields";
-
+import { AttachmentItem, filesToAttachmentItems } from "@/lib/attachmentUtils";
 const getGroupDefault = (type: string): string => {
   if (type === "Shop Floor CIP") return "yes";
   if (type === "My Idea Card" || type === "Daily CIP") return "no";
@@ -42,12 +37,12 @@ const KioskNewSuggestion = () => {
   const [mainSuggestor, setMainSuggestor] = useState("");
   const [teamMembers, setTeamMembers] = useState<string[]>([]);
   const [teamMemberShares, setTeamMemberShares] = useState<Record<string, string>>({});
-  const [typeFields, setTypeFields] = useState<Record<string, any>>({});
-  const [otherInfo, setOtherInfo] = useState("");
-  const [attachmentItems, setAttachmentItems] = useState<AttachmentItem[]>([]);
+  const [typeFields, setTypeFields] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-
+  const [sameAsMyDepartment, setSameAsMyDepartment] = useState(true);
+  const [suggestionDepartment, setSuggestionDepartment] = useState("");
+ const [attachmentItems, setAttachmentItems] = useState<AttachmentItem[]>([]);
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files || []);
     if (selected.length + attachmentItems.length > 5) {
@@ -69,12 +64,18 @@ const KioskNewSuggestion = () => {
     setAttachmentItems(prev => prev.filter((_, i) => i !== index));
   };
 
-  const { mapDept } = useDeptMappings();
+  const { mapDept, uniqueDepartments } = useDeptMappings();
   const derivedRange = useMemo(() => {
     const dept = user?.department || "";
     const mapped = mapDept(dept);
     return mapped === "—" ? "" : mapped;
   }, [user?.department, mapDept]);
+
+  useEffect(() => {
+    if (sameAsMyDepartment && user?.department) {
+      setSuggestionDepartment(user.department);
+    }
+  }, [sameAsMyDepartment, user?.department]);
 
   const handleTypeChange = (t: string) => {
     setSuggestionType(t);
@@ -90,30 +91,15 @@ const KioskNewSuggestion = () => {
 
   const handleReset = () => {
     setSuggestionType(""); setSuggestionFor("self"); setGroupSuggestion("no");
-    setMainSuggestor(""); setTeamMembers([]); setTeamMemberShares({});
-    setTypeFields({}); setOtherInfo(""); setAttachmentItems([]); setErrors({});
+    setMainSuggestor(""); setTeamMembers([]); setTeamMemberShares({}); setTypeFields({}); setErrors({});
+    setSameAsMyDepartment(true); setSuggestionDepartment(user?.department || "");
   };
-
-  const today = new Date().toISOString().split("T")[0];
-
-  const buildPayload = () => ({
-    suggestionType,
-    suggestionDate: today,
-    range: derivedRange,
-    suggestionFor,
-    groupSuggestion,
-    otherInfo,
-    attachments: attachmentItems,
-    mainSuggestor,
-    teamMembers,
-    ...typeFields,
-  });
 
   const handleSubmit = async (asDraft = false) => {
     if (!suggestionType) { toast.error("Please select a suggestion type"); return; }
     const schema = !asDraft ? schemaMap[suggestionType] : null;
     if (schema) {
-      try { schema.parse(buildPayload()); }
+      try { schema.parse(typeFields); }
       catch (e) {
         if (e instanceof ZodError) {
           const errs: Record<string, string> = {};
@@ -125,18 +111,15 @@ const KioskNewSuggestion = () => {
       }
     }
     setIsSubmitting(true);
-    const isDCIP = suggestionType === "Daily CIP";
-    const selectedFlm = flmOptions.find(f => f.value === typeFields.flm);
-    const flmDisplayName = selectedFlm?.name || "Pending Review";
     try {
       // await addSuggestion so the context state is updated BEFORE we reset
       // the form. This prevents back-to-back submissions from colliding.
       await addSuggestion({
         suggestionNo: "",
-        date: today,
-        subject: typeFields.subject || typeFields.kaizenTheme || typeFields.machineNoArea || "(no subject)",
-        presentMethod: typeFields.presentMethod || typeFields.problemStatus || typeFields.beforeImprovement || typeFields.suggestionDescription || typeFields.descriptionProblem || "",
-        proposedMethod: typeFields.proposedMethod || typeFields.afterImprovement || typeFields.descriptionImprovement || "",
+        date: new Date().toISOString().split("T")[0],
+        subject: typeFields.subject || typeFields.machineNoArea || "(no subject)",
+        presentMethod: typeFields.presentMethod || typeFields.suggestionDescription || typeFields.descriptionProblem || "",
+        proposedMethod: typeFields.proposedMethod || typeFields.afterImprovement || "",
         type: suggestionType,
         category: typeFields.category || "General",
         range: derivedRange || "BIDP1",
@@ -144,13 +127,9 @@ const KioskNewSuggestion = () => {
         employeeName: user?.name || "",
         employeeNo: user?.employeeNo || "",
         department: user?.department || "",
-        status: asDraft ? "Draft" : isDCIP ? "Approved & Closed" : "Submitted",
-        pendingWith: asDraft || isDCIP ? undefined : `FLM - ${flmDisplayName}`,
-        assignedFlm: asDraft || isDCIP ? undefined : (typeFields.flm || ""),
-        approvalLevel: asDraft || isDCIP ? undefined : "FLM",
-        daysPending: asDraft || isDCIP ? undefined : 0,
-        pendingSince: asDraft || isDCIP ? undefined : today,
-        formData: { suggestionType, range: derivedRange, suggestionFor, groupSuggestion, otherInfo, mainSuggestor, teamMembers, teamMemberShares, typeFields, attachmentItems },
+        suggestionDepartment: suggestionDepartment || user?.department || "",
+        status: asDraft ? "Draft" : "Submitted",
+        formData: { suggestionType, range: derivedRange, suggestionFor, groupSuggestion, otherInfo: typeFields.otherInfo || "", mainSuggestor, teamMembers, typeFields, suggestionDepartment: suggestionDepartment || user?.department || "", sameAsMyDepartment },
       });
       toast.success(asDraft ? "Draft saved!" : "Suggestion submitted successfully!");
       handleReset();
@@ -226,82 +205,13 @@ const KioskNewSuggestion = () => {
                 setTeamMembers={setTeamMembers}
                 teamMemberShares={teamMemberShares}
                 setTeamMemberShares={setTeamMemberShares}
+                suggestionDepartment={suggestionDepartment}
+                setSuggestionDepartment={(v) => { setSuggestionDepartment(v); setErrors(prev => { const n = {...prev}; delete n.suggestionDepartment; return n; }); }}
+                sameAsMyDepartment={sameAsMyDepartment}
+                setSameAsMyDepartment={setSameAsMyDepartment}
+                allDepartments={uniqueDepartments}
               />
-
-              <Separator />
-
               {renderTypeFields()}
-
-              {/* ── Other Information ─────────────────────────────────── */}
-              <Separator />
-              <div className="rounded-xl border bg-gradient-to-br from-sky-50/50 via-background to-indigo-50/30 dark:from-sky-950/20 dark:via-background dark:to-indigo-950/10 p-5 space-y-4 shadow-sm">
-                <div className="flex items-center gap-3 pb-3 border-b border-border/40">
-                  <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 shadow-sm">
-                    <Info className="h-4.5 w-4.5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold leading-none">Other Information</h3>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">/ ಇತರ ಮಾಹಿತಿ &nbsp;·&nbsp; Attachments &amp; submission details</p>
-                  </div>
-                </div>
-
-                {/* Other Info textarea */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Other Info <span className="text-[10px] text-muted-foreground">(Optional)</span></Label>
-                  <Textarea
-                    value={otherInfo}
-                    onChange={e => setOtherInfo(e.target.value)}
-                    placeholder="Any additional information…"
-                    rows={2}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                  {/* Attachments */}
-                  <div className="space-y-2">
-                    <Label className="text-xs flex items-center gap-1.5">
-                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
-                      Attachments <span className="text-[10px] text-muted-foreground">(Max 5 · &lt;4MB each)</span>
-                    </Label>
-                    <label className="flex w-fit items-center gap-1.5 px-3 py-2 text-xs border rounded-lg bg-background hover:bg-muted transition-colors cursor-pointer shadow-sm">
-                      <Upload className="h-3.5 w-3.5" />
-                      Choose Files
-                      <input type="file" className="hidden" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv,.mp4,.mp3" onChange={handleFileChange} />
-                    </label>
-                    <p className="text-[10px] text-muted-foreground">{attachmentItems.length} / 5 files attached</p>
-                    {errors.attachments && <p className="text-xs text-destructive">{errors.attachments}</p>}
-                    {attachmentItems.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {attachmentItems.map((f, i) => (
-                          <span key={f.id} className="inline-flex items-center gap-1 text-xs bg-muted border px-2 py-1 rounded-md">
-                            <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />
-                            <span className="max-w-[140px] truncate">{f.name}</span>
-                            <button type="button" onClick={() => removeFile(i)} className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors">
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* FLM selector for applicable form types */}
-                  {["Simple Suggestion Scheme", "My Idea Card", "Cash The Flash", "Shop Floor CIP"].includes(suggestionType) && (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Select FLM <span className="text-destructive">*</span></Label>
-                      <Select value={typeFields.flm || ""} onValueChange={v => handleFieldChange("flm", v)}>
-                        <SelectTrigger className={errors.flm ? "border-destructive" : ""}>
-                          <SelectValue placeholder="Select FLM" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {flmOptions.map(f => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      {errors.flm && <p className="text-xs text-destructive">{errors.flm}</p>}
-                    </div>
-                  )}
-                </div>
-              </div>
             </>
           )}
         </CardContent>

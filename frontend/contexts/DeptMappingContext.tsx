@@ -23,6 +23,8 @@ const FALLBACK_MAPPINGS: Record<string, string> = {
   "BIDP2/QAL": "QAL",
   "BIDP1/HRD": "HRD",
   "BIDP1/MNT": "MNT",
+  "BIDP1/SAF": "SAF",
+  "BIDP1/ADM": "ADM",
   "BIDP3/LOG": "LOG",
   "BIDP2/RND": "RND",
   "BIDP1/FIN": "FIN",
@@ -42,6 +44,8 @@ interface DeptMappingContextType {
   deptMap: Record<string, string>;
   /** Unique sorted list of all mapped department names (replaces hardcoded ranges) */
   uniqueRanges: string[];
+  /** Unique sorted list of all raw department names (e.g. "BIDP1/TEF") — used for the Suggestion Department picker */
+  uniqueDepartments: string[];
   /** Resolve a raw department name to its mapped short form */
   mapDept: (rawDept: string | undefined) => string;
   /** Full refresh from API */
@@ -98,6 +102,12 @@ export const DeptMappingProvider = ({ children }: { children: ReactNode }) => {
     return Array.from(unique).sort();
   }, [entries]);
 
+  /** Unique sorted list of all raw department names — used for the Suggestion Department picker */
+  const uniqueDepartments = useMemo(() => {
+    const unique = new Set(entries.map(e => e.dept));
+    return Array.from(unique).sort();
+  }, [entries]);
+
   const mapDept = useCallback(
     (rawDept: string | undefined): string => {
       if (!rawDept) return "—";
@@ -120,8 +130,8 @@ export const DeptMappingProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const value = useMemo<DeptMappingContextType>(
-    () => ({ entries, deptMap, uniqueRanges, mapDept, refresh, addEntry, updateEntry, removeEntry }),
-    [entries, deptMap, uniqueRanges, mapDept, refresh, addEntry, updateEntry, removeEntry],
+    () => ({ entries, deptMap, uniqueRanges, uniqueDepartments, mapDept, refresh, addEntry, updateEntry, removeEntry }),
+    [entries, deptMap, uniqueRanges, uniqueDepartments, mapDept, refresh, addEntry, updateEntry, removeEntry],
   );
 
   return <DeptMappingContext.Provider value={value}>{children}</DeptMappingContext.Provider>;

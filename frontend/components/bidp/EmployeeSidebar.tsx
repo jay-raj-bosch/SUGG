@@ -17,7 +17,6 @@ const BidPEmployeeSidebarContent = ({ onClose }: Props) => {
   const menuItems = [
     { title: "Home",               translationKey: "Home",               url: `${plantPrefix}/employee`,                    icon: Home,        end: true },
     { title: "New Suggestion",     translationKey: "New Suggestion",     url: `${plantPrefix}/employee/new-suggestion`,     icon: FilePlus,    end: false },
-    { title: "Copy Suggestion",    translationKey: "Copy Suggestion",    url: `${plantPrefix}/employee/copy-suggestion`,    icon: Copy },
     { title: "My Suggestions",     translationKey: "My Suggestions",     url: `${plantPrefix}/employee/my-suggestions`,     icon: FolderOpen },
     { title: "My Awards",          translationKey: "My Awards",          url: `${plantPrefix}/employee/my-awards`,          icon: Trophy },
     { title: "Procedure",          translationKey: "Procedure",          url: `${plantPrefix}/employee/procedure`,          icon: BookOpen },

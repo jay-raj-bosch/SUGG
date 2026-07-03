@@ -36,6 +36,17 @@ import {
 import { toast } from "sonner";
 import { teamMemberOptions } from "@/lib/jap/suggestionConstants";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
+import { ApiError } from "@/lib/api";
+
+/** Turn a caught update error into a human-readable reason (status + message). */
+function describeUpdateError(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return "session expired — please re-select your role and try again";
+    if (err.status === 403) return `not permitted (${err.message})`;
+    return `${err.message} (HTTP ${err.status})`;
+  }
+  return err instanceof Error ? err.message : "network error";
+}
 
 // ─── Role display helpers ────────────────────────────────────────────────────
 
@@ -99,7 +110,7 @@ function SuggDetail({ s }: { s: Suggestion }) {
 
 const WorkflowInbox = () => {
   const { user } = useAuth();
-  const { suggestions, updateSuggestion } = useSuggestions();
+  const { suggestions, updateSuggestion, refreshSuggestions } = useSuggestions();
   const { addNotification } = useNotifications();
   const { plantPrefix } = usePlant();
   const navigate = useNavigate();
@@ -107,6 +118,15 @@ const WorkflowInbox = () => {
   const japRole = user?.japRole as JapRole | undefined;
   const empNo = user?.employeeNo ?? "";
   const empName = user?.name ?? "";
+
+  // Always pull the latest suggestions from the backend when this inbox is opened.
+  // Without this, a role viewed in a separate tab/session (e.g. Superior approves,
+  // then you switch to Planner) would keep showing stale locally-cached data
+  // until a full page reload, making approved items look like they "never arrive".
+  useEffect(() => {
+    refreshSuggestions();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Inbox statuses for this role
   const inboxStatuses = useMemo(
@@ -194,19 +214,24 @@ const WorkflowInbox = () => {
     return match?.label.split(" – ")[0] ?? routeReviewerEmpNo;
   }, [routeReviewerEmpNo]);
 
-  const handleRoute = () => {
+  const handleRoute = async () => {
     if (!selected || !routeReviewerEmpNo.trim()) return;
-    updateSuggestion(selected.id, {
-      formData: {
-        ...(selected.formData ?? {}),
-        routedToReviewer: routeReviewerName,
-        routedToReviewerEmpNo: routeReviewerEmpNo,
-        routedToReviewerDept: routeReviewerDept,
-        routeComment: routeComment.trim(),
-        routedOn: new Date().toISOString().split("T")[0],
-        routedBy: empName,
-      },
-    });
+    try {
+      await updateSuggestion(selected.id, {
+        formData: {
+          ...(selected.formData ?? {}),
+          routedToReviewer: routeReviewerName,
+          routedToReviewerEmpNo: routeReviewerEmpNo,
+          routedToReviewerDept: routeReviewerDept,
+          routeComment: routeComment.trim(),
+          routedOn: new Date().toISOString().split("T")[0],
+          routedBy: empName,
+        },
+      });
+    } catch (err) {
+      toast.error(`Failed to route ${selected.suggestionNo}: ${describeUpdateError(err)}`);
+      return;
+    }
     addNotification(
       `${selected.suggestionNo} routed to ${routeReviewerName} (${routeReviewerDept}) for additional opinion`,
       "info",
@@ -231,7 +256,7 @@ const WorkflowInbox = () => {
     );
   }, [visibleItems, activeTab, search]);
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (!selected || !empNo) return;
 
     const extra: Record<string, unknown> = {};
@@ -241,15 +266,20 @@ const WorkflowInbox = () => {
     if (selected.status === JAP_STATUSES.IN_EVALUATION) {
       // Tag evaluationType on formData and navigate to the eval form
       const evalType = evaluationType;
-      updateSuggestion(selected.id, {
-        formData: {
-          ...(selected.formData ?? {}),
-          evaluationType: evalType,
-          classifiedBy: empNo,
-          classifiedByName: empName,
-          classifiedOn: new Date().toISOString().split("T")[0],
-        },
-      });
+      try {
+        await updateSuggestion(selected.id, {
+          formData: {
+            ...(selected.formData ?? {}),
+            evaluationType: evalType,
+            classifiedBy: empNo,
+            classifiedByName: empName,
+            classifiedOn: new Date().toISOString().split("T")[0],
+          },
+        });
+      } catch (err) {
+        toast.error(`Failed to classify ${selected.suggestionNo}: ${describeUpdateError(err)}`);
+        return;
+      }
       toast.success(`${selected.suggestionNo} classified as ${evalType} — opening evaluation form`);
       addNotification(`${selected.suggestionNo} classified: ${evalType}`, "info");
       setApproveOpen(false);
@@ -264,13 +294,19 @@ const WorkflowInbox = () => {
     }
 
     const update = buildJapApprovalUpdate(selected.status, empNo, empName, extra);
-    updateSuggestion(selected.id, {
+    const finalUpdate: Record<string, unknown> = {
       ...update,
       formData: { ...(selected.formData ?? {}), ...(update.formData as Record<string, unknown> ?? {}) },
-    });
-
+    };
     if (selected.status === JAP_STATUSES.IN_AWARD && awardAmount) {
-      updateSuggestion(selected.id, { awardAmount: Number(awardAmount) });
+      finalUpdate.awardAmount = Number(awardAmount);
+    }
+
+    try {
+      await updateSuggestion(selected.id, finalUpdate);
+    } catch (err) {
+      toast.error(`Failed to advance ${selected.suggestionNo}: ${describeUpdateError(err)}`);
+      return;
     }
 
     const nextPhase = update.status ? (STATUS_TO_PHASE[update.status] || update.status) : "next phase";
@@ -293,10 +329,15 @@ const WorkflowInbox = () => {
     setRecommendedScore("");
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!selected || !rejectReason.trim() || !empNo) return;
     const update = buildJapRejectionUpdate(empNo, empName, rejectReason.trim());
-    updateSuggestion(selected.id, update);
+    try {
+      await updateSuggestion(selected.id, update);
+    } catch (err) {
+      toast.error(`Failed to reject ${selected.suggestionNo}: ${describeUpdateError(err)}`);
+      return;
+    }
     toast.success(`${selected.suggestionNo} rejected`);
     addNotification(
       `${selected.suggestionNo} was rejected by ${empName}: "${rejectReason.trim()}"`,

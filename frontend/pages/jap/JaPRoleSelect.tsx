@@ -111,12 +111,12 @@ const JaPRoleSelect = () => {
   const [leaving, setLeaving] = useState(false);
   const [selected, setSelected] = useState<JapRole | null>(null);
 
-  const handleSelect = (option: RoleOption) => {
+  const handleSelect = async (option: RoleOption) => {
     if (leaving) return;
     setSelected(option.role);
     setLeaving(true);
 
-    setJapRole(option.role, {
+    await setJapRole(option.role, {
       employeeNo: option.employeeNo,
       name: option.name,
       department: option.department,

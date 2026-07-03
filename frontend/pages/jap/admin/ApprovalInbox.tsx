@@ -5,7 +5,7 @@
 //
 // WorkflowInbox focuses on phase-tab browsing; ApprovalInbox focuses on a
 // flat "items YOU must act on right now" list, sorted by urgency.
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -121,10 +121,17 @@ function SuggDetail({ s }: { s: Suggestion }) {
 
 const ApprovalInbox = () => {
   const { user } = useAuth();
-  const { suggestions, updateSuggestion } = useSuggestions();
+  const { suggestions, updateSuggestion, refreshSuggestions } = useSuggestions();
   const { addNotification } = useNotifications();
   const { plantPrefix } = usePlant();
   const navigate = useNavigate();
+
+  // Pull the latest suggestions from the backend when this inbox is opened, so
+  // a role viewed in a separate tab/session picks up changes made by another role.
+  useEffect(() => {
+    refreshSuggestions();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const japRole = user?.japRole as JapRole | undefined;
   const empNo = user?.employeeNo ?? "";
@@ -220,7 +227,7 @@ const ApprovalInbox = () => {
 
   // ─── Actions ───────────────────────────────────────────────────────────
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (!selected || !empNo) return;
 
     const extra: Record<string, unknown> = {};
@@ -230,15 +237,20 @@ const ApprovalInbox = () => {
     if (selected.status === JAP_STATUSES.IN_EVALUATION) {
       // Tag evaluationType on formData and navigate to the eval form
       const evalType = evaluationType;
-      updateSuggestion(selected.id, {
-        formData: {
-          ...(selected.formData ?? {}),
-          evaluationType: evalType,
-          classifiedBy: empNo,
-          classifiedByName: empName,
-          classifiedOn: new Date().toISOString().split("T")[0],
-        },
-      });
+      try {
+        await updateSuggestion(selected.id, {
+          formData: {
+            ...(selected.formData ?? {}),
+            evaluationType: evalType,
+            classifiedBy: empNo,
+            classifiedByName: empName,
+            classifiedOn: new Date().toISOString().split("T")[0],
+          },
+        });
+      } catch {
+        toast.error(`Failed to classify ${selected.suggestionNo} — please try again`);
+        return;
+      }
       toast.success(`${selected.suggestionNo} classified as ${evalType} — opening evaluation form`);
       addNotification(`${selected.suggestionNo} classified: ${evalType}`, "info");
       setApproveOpen(false);
@@ -253,16 +265,20 @@ const ApprovalInbox = () => {
     }
 
     const update = buildJapApprovalUpdate(selected.status, empNo, empName, extra);
-    updateSuggestion(selected.id, {
+    const finalUpdate: Record<string, unknown> = {
       ...update,
       formData: { ...(selected.formData ?? {}), ...(update.formData as Record<string, unknown> ?? {}) },
-    });
-
+    };
     if (selected.status === JAP_STATUSES.IN_AWARD && awardAmount) {
-      updateSuggestion(selected.id, {
-        awardAmount: Number(awardAmount),
-        awardCategory: Number(awardAmount) >= 5000 ? "Gold" : Number(awardAmount) >= 3000 ? "Silver" : "Bronze",
-      });
+      finalUpdate.awardAmount = Number(awardAmount);
+      finalUpdate.awardCategory = Number(awardAmount) >= 5000 ? "Gold" : Number(awardAmount) >= 3000 ? "Silver" : "Bronze";
+    }
+
+    try {
+      await updateSuggestion(selected.id, finalUpdate);
+    } catch {
+      toast.error(`Failed to advance ${selected.suggestionNo} — please try again`);
+      return;
     }
 
     const nextPhase = STATUS_TO_PHASE[update.status as string] ?? update.status;
@@ -277,10 +293,15 @@ const ApprovalInbox = () => {
     resetForms();
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!selected || !rejectReason.trim() || !empNo) return;
     const update = buildJapRejectionUpdate(empNo, empName, rejectReason.trim());
-    updateSuggestion(selected.id, update);
+    try {
+      await updateSuggestion(selected.id, update);
+    } catch {
+      toast.error(`Failed to reject ${selected.suggestionNo} — please try again`);
+      return;
+    }
     toast.success(`${selected.suggestionNo} rejected`);
     addNotification(
       `${selected.suggestionNo} rejected by ${empName}: "${rejectReason.trim()}"`,

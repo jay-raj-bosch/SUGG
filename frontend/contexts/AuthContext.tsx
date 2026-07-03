@@ -52,7 +52,7 @@ interface AuthContextType {
   /** Demo/fallback only — sets a placeholder role when no real auth is present. */
   setRole: (role: "employee" | "admin") => void;
   setBidpRole: (bidpRole: BidpRole, userData: Partial<AuthUser>) => void;
-  setJapRole: (japRole: JapRole, userData: Partial<AuthUser>) => void;
+  setJapRole: (japRole: JapRole, userData: Partial<AuthUser>) => Promise<void>;
   login: (employeeNo: string, password: string, requiredRole: "employee" | "admin") => Promise<string | null>;
   /** SSO login — pass the access token received from the SSO provider redirect. */
   loginWithSsoToken: (ssoAccessToken: string) => Promise<string | null>;
@@ -150,21 +150,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } as AuthUser));
   }, []);
 
-  const setJapRole = useCallback((japRole: JapRole, userData: Partial<AuthUser>) => {
+  // Demo password matches backend/src/data/store.ts DEFAULT_HASH for all seeded employees.
+  // JaPRoleSelect uses this to log in as the picked workflow-role employee so a real JWT
+  // is issued — without it, every authenticated write (approve/reject/etc.) is silently
+  // rejected with 401 and rolled back client-side, making the workflow look stuck.
+  const JAP_DEMO_PASSWORD = "password123";
+
+  const setJapRole = useCallback(async (japRole: JapRole, userData: Partial<AuthUser>) => {
     const baseRole = japRole === "employee" ? "employee" : "admin";
-    sessionStorage.setItem("japRole", japRole);
-    sessionStorage.setItem("japUserData", JSON.stringify(userData));
     // Clear BidP session when entering JaP
     sessionStorage.removeItem("bidpRole");
     sessionStorage.removeItem("bidpUserData");
-    setUser(prev => ({
-      ...(prev || { employeeNo: "", name: "", department: "", area: "", plantCode: "", ntid: "", email: "" }),
-      ...userData,
-      role: baseRole,
-      japRole,
-      bidpRole: undefined,
-    } as AuthUser));
-  }, []);
+
+    let resolvedUser: AuthUser | null = null;
+    if (userData.employeeNo) {
+      try {
+        const res = await apiService.login(userData.employeeNo, JAP_DEMO_PASSWORD, baseRole);
+        resolvedUser = { ...res.user, japRole, bidpRole: undefined };
+      } catch (err) {
+        console.error("[AuthContext] JaP demo login failed — continuing without a JWT (writes will fail):", err);
+      }
+    }
+
+    if (!resolvedUser) {
+      resolvedUser = {
+        ...(user || { employeeNo: "", name: "", department: "", area: "", plantCode: "", ntid: "", email: "" }),
+        ...userData,
+        role: baseRole,
+        japRole,
+        bidpRole: undefined,
+      } as AuthUser;
+    }
+
+    sessionStorage.setItem("japRole", japRole);
+    sessionStorage.setItem("japUserData", JSON.stringify(resolvedUser));
+    setUser(resolvedUser);
+  }, [user]);
 
   const logout = useCallback(() => {
     clearToken();

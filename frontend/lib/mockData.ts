@@ -140,6 +140,13 @@ export interface Suggestion {
   approvedByBpsDh?: string;
   approvedByBpsDhName?: string;
   approvedByBpsDhOn?: string;
+  implementedBy?: string;
+  implementedByName?: string;
+  ctgEvaluatedBy?: string;
+  ctgEvaluatedByName?: string;
+  approvedByVsRc?: string;
+  approvedByVsRcName?: string;
+  approvedByVsRcOn?: string;
   // Send-back history
   sendBackHistory?: Array<{
     from: string;        // level that sent back (e.g. "Manager")

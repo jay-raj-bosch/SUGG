@@ -37,6 +37,24 @@ import {
   type ApprovalLevel,
 } from "@/lib/bidp/approvalPipeline";
 
+// ── SFC Evaluation constants (moved to module scope) ──────────────────────
+const SFC_MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"] as const;
+const SFC_MONTH_POINTS = [25, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2] as const;
+const SFC_WEIGHTAGE_OPTIONS = [
+  { label: "x1 (1st Kaizen)",  value: 1 },
+  { label: "x1.25 (2nd Kaizen)", value: 1.25 },
+  { label: "x1.5 (3rd Kaizen)",  value: 1.5 },
+  { label: "x1.75 (4th Kaizen)", value: 1.75 },
+] as const;
+const SFC_GEMBA_ROWS = [
+  { label: "Importance of the project to the value stream", max: 30, options: [{ label: "Directly linked to business case", pts: 30 }, { label: "Safety / Department objectives", pts: 20 }, { label: "No Relation", pts: 10 }] },
+  { label: "Sustenance of actions", max: 5, options: [{ label: "Long term", pts: 5 }, { label: "Mid term", pts: 3 }, { label: "Short term", pts: 2 }, { label: "Nil", pts: 0 }] },
+  { label: "Horizontal Deployment", max: 5, options: [{ label: "Implemented", pts: 5 }, { label: "Implementation initiated", pts: 3 }, { label: "Implementation initiated", pts: 2 }, { label: "None", pts: 0 }] },
+  { label: "Evaluation of project / Kaizen Sheet", max: 30, options: [{ label: "Exemplary", pts: 30 }, { label: "Good", pts: 20 }, { label: "Average", pts: 10 }, { label: "Not done", pts: 0 }] },
+  { label: "Standardization", max: 15, options: [{ label: "100% adherence", pts: 15 }, { label: "0.5", pts: 5 }, { label: "0.25", pts: 3 }, { label: "Nil", pts: 0 }] },
+  { label: "Presentation of project to RC/RH", max: 15, options: [{ label: "Presented", pts: 15 }, { label: "Presentation slot finalized", pts: 3 }, { label: "Not ready", pts: 2 }, { label: "Nil", pts: 0 }] },
+] as const;
+
 const MyApprovals = () => {
   const { t } = useLanguage();
   const { user } = useAuth();
@@ -132,23 +150,6 @@ const MyApprovals = () => {
   };
 
   // ── SFC Evaluation form state (FLM only, Shop Floor CIP) ──────────────────
-  const SFC_MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"] as const;
-  const SFC_MONTH_POINTS = [25, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2] as const;
-  const SFC_WEIGHTAGE_OPTIONS = [
-    { label: "x1 (1st Kaizen)",  value: 1 },
-    { label: "x1.25 (2nd Kaizen)", value: 1.25 },
-    { label: "x1.5 (3rd Kaizen)",  value: 1.5 },
-    { label: "x1.75 (4th Kaizen)", value: 1.75 },
-  ] as const;
-  const SFC_GEMBA_ROWS = [
-    { label: "Importance of the project to the value stream", max: 30, options: [{ label: "Directly linked to business case", pts: 30 }, { label: "Safety / Department objectives", pts: 20 }, { label: "No Relation", pts: 10 }] },
-    { label: "Sustenance of actions", max: 5, options: [{ label: "Long term", pts: 5 }, { label: "Mid term", pts: 3 }, { label: "Short term", pts: 2 }, { label: "Nil", pts: 0 }] },
-    { label: "Horizontal Deployment", max: 5, options: [{ label: "Implemented", pts: 5 }, { label: "Implementation initiated", pts: 3 }, { label: "Implementation initiated", pts: 2 }, { label: "None", pts: 0 }] },
-    { label: "Evaluation of project / Kaizen Sheet", max: 30, options: [{ label: "Exemplary", pts: 30 }, { label: "Good", pts: 20 }, { label: "Average", pts: 10 }, { label: "Not done", pts: 0 }] },
-    { label: "Standardization", max: 15, options: [{ label: "100% adherence", pts: 15 }, { label: "0.5", pts: 5 }, { label: "0.25", pts: 3 }, { label: "Nil", pts: 0 }] },
-    { label: "Presentation of project to RC/RH", max: 15, options: [{ label: "Presented", pts: 15 }, { label: "Presentation slot finalized", pts: 3 }, { label: "Not ready", pts: 2 }, { label: "Nil", pts: 0 }] },
-  ] as const;
-
   const [sfcSelectedMonth, setSfcSelectedMonth] = useState<number | null>(null); // index 0-11
   const [sfcSelectedWeightage, setSfcSelectedWeightage] = useState<number | null>(null); // index 0-3
   const [sfcGembaSelections, setSfcGembaSelections] = useState<(number | null)[]>(Array(6).fill(null)); // points scored per row
@@ -273,7 +274,7 @@ const MyApprovals = () => {
     // Resolve suggestion department from top-level OR formData (some suggestions
     // only store it inside formData, e.g. when loaded from backend seed data)
     const suggDept = selected.suggestionDepartment
-      || (selected.formData as Record<string, any> | undefined)?.suggestionDepartment;
+      || (selected.formData as Record<string, string | undefined> | undefined)?.suggestionDepartment;
     const relevantDepts = [selected.department, suggDept].filter(Boolean) as string[];
     if (relevantDepts.length === 0) return atLevel;
     const deptMatched = atLevel.filter(a => relevantDepts.includes(a.department!));
@@ -323,7 +324,7 @@ const MyApprovals = () => {
       // chose them, overriding the normal department-based routing).
       if (validStatuses.includes(s.status) && s.rerouteTargetEmpNo === user.employeeNo) return true;
       const suggDept = s.suggestionDepartment
-        || (s.formData as Record<string, any> | undefined)?.suggestionDepartment;
+        || (s.formData as Record<string, string | undefined> | undefined)?.suggestionDepartment;
       const deptMatches = !!user.department &&
         (s.department === user.department || suggDept === user.department);
       if (!deptMatches) {
@@ -361,18 +362,18 @@ const MyApprovals = () => {
     if (!user?.employeeNo) return [];
     if (!currentLevel) {
       // Employee role (no approval level): show CTF self-implementation history
-      return suggestions.filter(s => (s as any).implementedBy === user.employeeNo);
+      return suggestions.filter(s => s.implementedBy === user.employeeNo);
     }
     // Show items this user has already acted on
     return suggestions.filter(s => {
       if (currentLevel === "FLM") return s.evaluatedBy === user.employeeNo;
       if (currentLevel === "Manager") return s.approvedByManager === user.employeeNo;
       if (currentLevel === "BPS Admin") return s.approvedByBpsAdmin === user.employeeNo;
-      if (currentLevel === "CTG") return (s as any).ctgEvaluatedBy === user.employeeNo;
-      if (currentLevel === "VS RC") return (s as any).approvedByVsRc === user.employeeNo;
+      if (currentLevel === "CTG") return s.ctgEvaluatedBy === user.employeeNo;
+      if (currentLevel === "VS RC") return s.approvedByVsRc === user.employeeNo;
       if (currentLevel === "BPS DH") return s.approvedByBpsDh === user.employeeNo;
       // CTF self-implemented (any non-BPS role can be the implementer)
-      if ((s as any).implementedBy === user.employeeNo) return true;
+      if (s.implementedBy === user.employeeNo) return true;
       return false;
     });
   }, [suggestions, user, currentLevel]);
@@ -490,7 +491,7 @@ const MyApprovals = () => {
         : isSFCFLM
         ? sfcAttachFiles.map(f => ({ name: f.name, type: f.type, url: f.url }))
         : reviewAttachFiles.map(f => ({ name: f.name, type: f.type, url: f.url }));
-      const auditMetadata: Record<string, any> | undefined = isSSSFLM
+      const auditMetadata: Record<string, unknown> | undefined = isSSSFLM
         ? {
             evaluationType: "SSS",
             selections: sssSelections,
@@ -517,7 +518,12 @@ const MyApprovals = () => {
       // ── Build award distribution breakdown for audit trail ──
       // Rules: on-behalf → mainSuggestor + team; self → registering employee + team
       if (currentLevel === "FLM" && amount > 0) {
-        const fd: Record<string, any> = selected.formData || {};
+        const fd = (selected.formData || {}) as {
+          suggestionFor?: string;
+          mainSuggestor?: string;
+          groupSuggestion?: string;
+          teamMembers?: string[];
+        };
         const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;
         const isGroup = fd.groupSuggestion === "yes";
         const teamMembers: string[] = fd.teamMembers || [];
@@ -687,7 +693,7 @@ const MyApprovals = () => {
       return !!awardAmount.trim();
     }
     return true;
-  }, [selected, currentLevel, sssSelections, sssWeightage, sssCalculatedAmount, sssComments, awardAmount, sfcFinalPoints, sfcComments, reviewComments]);
+  }, [selected, currentLevel, sssSelections, sssWeightage, sssCalculatedAmount, sssComments, awardAmount, sfcFinalPoints, sfcComments, reviewComments, user]);
 
   const openSendBack = () => {
     setSendBackReason("");

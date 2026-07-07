@@ -10,7 +10,6 @@
 //   - reopen_audit_log (id, suggestionNo, remark, date)
 //   - notifications (id, userId, message, type, read, timestamp)
 //   - memo_reports (generated views, not a table)
-import { User } from "lucide-react";
 import type { AttachmentItem } from "./attachmentUtils";
 
 export const suggestionTypes = [
@@ -184,7 +183,6 @@ export interface Suggestion {
   }>;
   originalEmployeeNo?: string;         // original suggestor before first transfer
   originalEmployeeName?: string;
-  plantCode?: string;
   // Audit trail — complete lifecycle log for compliance
   auditTrail?: AuditEntry[];
 }

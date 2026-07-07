@@ -1,13 +1,12 @@
 // MyAwards — uses SuggestionContext (which fetches from backend)
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Trophy, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useMemo } from "react";
 
 const MyAwards = () => {
@@ -20,14 +19,8 @@ const MyAwards = () => {
   const [suggNoFilter, setSuggNoFilter] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
-
-  const categories = useMemo(() => {
-    const cats = new Set(allAwards.map(a => a.awardCategory).filter(Boolean) as string[]);
-    return Array.from(cats).sort();
-  }, [allAwards]);
 
   const awards = useMemo(() => {
     return allAwards.filter(a => {
@@ -37,10 +30,9 @@ const MyAwards = () => {
       const awardDate = a.awardDate || a.date || "";
       if (fromDate && awardDate < fromDate) return false;
       if (toDate && awardDate > toDate) return false;
-      if (categoryFilter !== "all" && a.awardCategory !== categoryFilter) return false;
       return true;
     });
-  }, [allAwards, nameFilter, empNoFilter, suggNoFilter, fromDate, toDate, categoryFilter]);
+  }, [allAwards, nameFilter, empNoFilter, suggNoFilter, fromDate, toDate]);
 
   // Reset page when filters change
   const totalPages = Math.max(1, Math.ceil(awards.length / rowsPerPage));
@@ -48,11 +40,11 @@ const MyAwards = () => {
   const pageRows = awards.slice((safePage - 1) * rowsPerPage, safePage * rowsPerPage);
 
   const handleReset = () => {
-    setNameFilter(""); setEmpNoFilter(""); setSuggNoFilter(""); setFromDate(""); setToDate(""); setCategoryFilter("all");
+    setNameFilter(""); setEmpNoFilter(""); setSuggNoFilter(""); setFromDate(""); setToDate("");
     setCurrentPage(1);
   };
 
-  const hasFilter = nameFilter || empNoFilter || suggNoFilter || fromDate || toDate || categoryFilter !== "all";
+  const hasFilter = nameFilter || empNoFilter || suggNoFilter || fromDate || toDate;
 
   return (
     <div className="flex flex-col h-full space-y-3">
@@ -63,7 +55,7 @@ const MyAwards = () => {
       {/* Filters */}
       <Card className="card-shadow">
         <CardContent className="pt-4 pb-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Name <span className="text-[9px] opacity-70">/ {t("Name")}</span></Label>
               <Input
@@ -111,16 +103,6 @@ const MyAwards = () => {
                 onChange={e => { setToDate(e.target.value); setCurrentPage(1); }}
               />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Award Category <span className="text-[9px] opacity-70">/ {t("Award Category")}</span></Label>
-              <Select value={categoryFilter} onValueChange={v => { setCategoryFilter(v); setCurrentPage(1); }}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="All" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
           {hasFilter && (
             <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/40">
@@ -137,7 +119,7 @@ const MyAwards = () => {
       <Card className="card-shadow">
         <CardContent className="pt-4">
           <div className="overflow-auto rounded-md border" style={{ maxHeight: "calc(100vh - 180px)" }}>
-            <table className="min-w-[900px] w-full text-xs">
+            <table className="min-w-[700px] w-full text-xs">
               <thead className="sticky top-0 z-20">
                 <tr className="border-b text-left bg-muted">
                   <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap w-12">Sl No</th>
@@ -159,15 +141,12 @@ const MyAwards = () => {
                   <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">
                     Received Date <span className="text-[9px] opacity-70">/ {t("Award Date")}</span>
                   </th>
-                  <th className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">
-                    Award Category <span className="text-[9px] opacity-70">/ {t("Award Category")}</span>
-                  </th>
                 </tr>
               </thead>
               <tbody>
                 {pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-10 text-center text-muted-foreground">
+                    <td colSpan={7} className="py-10 text-center text-muted-foreground">
                       {hasFilter ? "No awards match your filters." : `No awards yet / ${t("No awards yet")}`}
                     </td>
                   </tr>
@@ -184,13 +163,6 @@ const MyAwards = () => {
                         ₹{a.awardAmount?.toLocaleString() || "—"}
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap">{a.awardDate || a.date || "—"}</td>
-                      <td className="py-2.5 px-3">
-                        {a.awardCategory ? (
-                          <Badge variant="outline" className="text-[10px] gap-1">
-                            <Trophy className="h-3 w-3 text-accent" />{a.awardCategory}
-                          </Badge>
-                        ) : "—"}
-                      </td>
                     </tr>
                   );
                 })}

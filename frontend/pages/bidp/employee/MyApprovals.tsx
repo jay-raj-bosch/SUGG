@@ -1474,8 +1474,8 @@ const MyApprovals = () => {
                       <Row label="Suggestion No" value={selected.suggestionNo} />
                       <Row label="Date" value={fmtDate(selected.date)} />
                       <Row label="Type" value={selected.type} />
-                      <Row label="Category" value={selected.category} />
                       <Row label="Range" value={selected.range} />
+                      <Row label="Suggestion Dept" value={selected.suggestionDepartment || "—"} />
                       <Row label="Days Pending" value={String(calculateDaysPending(selected))} />
                     </div>
                   </div>

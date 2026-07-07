@@ -74,9 +74,11 @@ const CopySuggestion = () => {
 
   /** Get a field value — checks formData.typeFields first, then top-level suggestion, then formData root */
   const getFieldValue = (s: Suggestion, key: string): string => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fd: Record<string, any> = s.formData || {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tf: Record<string, any> = fd.typeFields || {};
-    return tf[key] || (s as any)[key] || fd[key] || "";
+    return tf[key] || (s as unknown as Record<string, string>)[key] || fd[key] || "";
   };
 
   const handleSearch = () => {
@@ -98,10 +100,12 @@ const CopySuggestion = () => {
   const handleClone = () => {
     if (!found) return;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fd: Record<string, any> = found.formData || {};
 
     // Build complete typeFields by merging all sources
     const typeFieldDefs = TYPE_FIELDS[found.type || ""] || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const mergedTypeFields: Record<string, any> = {};
     for (const f of typeFieldDefs) {
       const val = getFieldValue(found, f.key);
@@ -117,6 +121,7 @@ const CopySuggestion = () => {
       mainSuggestor: fd.mainSuggestor || "",
       teamMembers: fd.teamMembers || [],
       teamMemberShares: fd.teamMemberShares || {},
+      suggestionDepartment: found.suggestionDepartment || "",
       typeFields: mergedTypeFields,
     };
 
@@ -157,6 +162,7 @@ const CopySuggestion = () => {
           </div>
 
           {found && (() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const fd: Record<string, any> = found.formData || {};
             const teamMembers: string[] = fd.teamMembers || [];
             const teamMemberShares: Record<string, string> = fd.teamMemberShares || {};
@@ -184,7 +190,7 @@ const CopySuggestion = () => {
 
                 <div className="p-5 space-y-4">
                   {/* Basic Info Grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     <div className="space-y-0.5">
                       <p className="text-[10px] font-semibold uppercase text-muted-foreground flex items-center gap-1"><User className="h-3 w-3" />Employee</p>
                       <p className="text-xs font-medium">{found.employeeName || "—"}</p>
@@ -193,6 +199,10 @@ const CopySuggestion = () => {
                     <div className="space-y-0.5">
                       <p className="text-[10px] font-semibold uppercase text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" />Department</p>
                       <p className="text-xs font-medium">{found.department || "—"}</p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-[10px] font-semibold uppercase text-muted-foreground flex items-center gap-1"><Building2 className="h-3 w-3" />Suggestion Dept</p>
+                      <p className="text-xs font-medium">{found.suggestionDepartment || "—"}</p>
                     </div>
                     <div className="space-y-0.5">
                       <p className="text-[10px] font-semibold uppercase text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" />Date</p>
@@ -253,13 +263,13 @@ const CopySuggestion = () => {
                   </div>
 
                   {/* Other Info */}
-                  {(fd.otherInfo || (found as any).otherInfo) && (
+                  {(fd.otherInfo || (found as unknown as { otherInfo?: string }).otherInfo) && (
                     <>
                       <Separator />
                       <div className="space-y-0.5">
                         <p className="text-[10px] font-semibold uppercase text-muted-foreground">Other Information</p>
                         <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap rounded-lg bg-muted/30 border px-3 py-2">
-                          {fd.otherInfo || (found as any).otherInfo}
+                          {fd.otherInfo || (found as unknown as { otherInfo?: string }).otherInfo}
                         </p>
                       </div>
                     </>

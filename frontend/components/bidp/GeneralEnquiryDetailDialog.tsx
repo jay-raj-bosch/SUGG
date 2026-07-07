@@ -89,10 +89,10 @@ const collectAttachments = (suggestion: Suggestion): AttachmentItem[] => {
 };
 
 const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }: Props) => {
-  if (!suggestion) return null;
-
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [viewingAttachment, setViewingAttachment] = useState<AttachmentItem | null>(null);
+
+  if (!suggestion) return null;
 
   // Collect all attachments
   const allAttachments = collectAttachments(suggestion);
@@ -447,7 +447,7 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
 
   /** Render the full audit trail as a clean vertical stepper */
   const renderAuditTrail = () => {
-    let trail: AuditEntry[] = (suggestion.auditTrail && suggestion.auditTrail.length > 0)
+    const trail: AuditEntry[] = (suggestion.auditTrail && suggestion.auditTrail.length > 0)
       ? [...suggestion.auditTrail]
       : buildSyntheticTrail();
 
@@ -872,12 +872,12 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
                       <span className="text-xs text-foreground font-medium flex-1">{suggestion.type}</span>
                     </div>
                     <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
-                      <span className="text-xs text-muted-foreground w-40 shrink-0">Category</span>
-                      <span className="text-xs text-foreground font-medium flex-1">{suggestion.category}</span>
-                    </div>
-                    <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
                       <span className="text-xs text-muted-foreground w-40 shrink-0">Range</span>
                       <span className="text-xs text-foreground font-medium flex-1">{suggestion.range || "—"}</span>
+                    </div>
+                    <div className="flex gap-3 py-1.5 border-b border-border/40 items-start">
+                      <span className="text-xs text-muted-foreground w-40 shrink-0">Suggestion Department</span>
+                      <span className="text-xs text-foreground font-medium flex-1">{suggestion.suggestionDepartment || "—"}</span>
                     </div>
                     <div className="flex gap-3 py-1.5 items-start">
                       <span className="text-xs text-muted-foreground w-40 shrink-0">Days Pending</span>
@@ -947,6 +947,7 @@ const GeneralEnquiryDetailDialog = ({ suggestion, serialNo, open, onOpenChange }
               {/* Team Members — table format; share/amount only shown after FLM evaluation */}
               {(suggestion.formData?.teamMembers as string[] | undefined)?.length ? (() => {
                 const avatarColors = ["bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-cyan-500", "bg-pink-500", "bg-indigo-500"];
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const fd: Record<string, any> = suggestion.formData || {};
                 const teamMembers = fd.teamMembers as string[];
                 const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;

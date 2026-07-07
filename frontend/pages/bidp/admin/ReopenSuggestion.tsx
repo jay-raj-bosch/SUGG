@@ -157,7 +157,7 @@ const ReopenSuggestion = () => {
 
     // Update suggestion via context (updates local state + backend)
     try {
-      await updateSuggestion(suggestion.id, {
+      await updateSuggestion(String(suggestion.id), {
         status: targetStatus,
         assignedFlm: needsFLM ? selectedFlm : needsModerator ? selectedModerator : suggestion.assignedFlm,
         pendingWith: assignedTo,
@@ -242,6 +242,7 @@ const ReopenSuggestion = () => {
                   <p><span className="text-muted-foreground">Date:</span> {suggestion.date}</p>
                   <p><span className="text-muted-foreground">Range:</span> {suggestion.range}</p>
                   <p><span className="text-muted-foreground">Dept:</span> {suggestion.department || "N/A"}</p>
+                  <p><span className="text-muted-foreground">Suggestion Dept:</span> {suggestion.suggestionDepartment || "N/A"}</p>
                 </div>
                 {suggestion.rejectionReason && (
                   <div className="mt-2 p-2 bg-destructive/5 border border-destructive/20 rounded text-xs">

@@ -43,8 +43,7 @@ interface GlobalFieldsProps {
 // Employee options for searchable dropdown
 const employeeOptions = mockEmployees.map(e => ({
   value: e.employeeNo,
-  label: `${e.name} – ${e.employeeNo}`,
-  sublabel: e.department,
+  label: `${e.name} (${e.employeeNo}) · ${e.department}`,
 }));
 
 // All member options for team members (combine teamMemberOptions + mockEmployees for a richer list)
@@ -107,7 +106,7 @@ const GlobalFields = ({
     if (!suggestorSearch.trim()) return employeeOptions;
     const q = suggestorSearch.toLowerCase();
     return employeeOptions.filter(e =>
-      e.label.toLowerCase().includes(q) || e.sublabel.toLowerCase().includes(q)
+      e.label.toLowerCase().includes(q)
     );
   }, [suggestorSearch]);
 
@@ -292,7 +291,6 @@ const GlobalFields = ({
                     }}
                   >
                     <span>{emp.label}</span>
-                    <span className="block text-[10px] text-muted-foreground">{emp.sublabel}</span>
                   </button>
                 )) : (
                   <div className="p-3 text-xs text-muted-foreground text-center">No employees found</div>

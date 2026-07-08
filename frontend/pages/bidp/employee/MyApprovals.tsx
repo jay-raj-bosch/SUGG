@@ -37,6 +37,24 @@ import {
   type ApprovalLevel,
 } from "@/lib/bidp/approvalPipeline";
 
+// ── SFC Evaluation constants (moved to module scope) ──────────────────────
+const SFC_MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const;
+const SFC_MONTH_POINTS = [25, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2] as const;
+const SFC_WEIGHTAGE_OPTIONS = [
+  { label: "x1 (1st Kaizen)", value: 1 },
+  { label: "x1.25 (2nd Kaizen)", value: 1.25 },
+  { label: "x1.5 (3rd Kaizen)", value: 1.5 },
+  { label: "x1.75 (4th Kaizen)", value: 1.75 },
+] as const;
+const SFC_GEMBA_ROWS = [
+  { label: "Importance of the project to the value stream", max: 30, options: [{ label: "Directly linked to business case", pts: 30 }, { label: "Safety / Department objectives", pts: 20 }, { label: "No Relation", pts: 10 }] },
+  { label: "Sustenance of actions", max: 5, options: [{ label: "Long term", pts: 5 }, { label: "Mid term", pts: 3 }, { label: "Short term", pts: 2 }, { label: "Nil", pts: 0 }] },
+  { label: "Horizontal Deployment", max: 5, options: [{ label: "Implemented", pts: 5 }, { label: "Implementation initiated", pts: 3 }, { label: "Implementation initiated", pts: 2 }, { label: "None", pts: 0 }] },
+  { label: "Evaluation of project / Kaizen Sheet", max: 30, options: [{ label: "Exemplary", pts: 30 }, { label: "Good", pts: 20 }, { label: "Average", pts: 10 }, { label: "Not done", pts: 0 }] },
+  { label: "Standardization", max: 15, options: [{ label: "100% adherence", pts: 15 }, { label: "0.5", pts: 5 }, { label: "0.25", pts: 3 }, { label: "Nil", pts: 0 }] },
+  { label: "Presentation of project to RC/RH", max: 15, options: [{ label: "Presented", pts: 15 }, { label: "Presentation slot finalized", pts: 3 }, { label: "Not ready", pts: 2 }, { label: "Nil", pts: 0 }] },
+] as const;
+
 const MyApprovals = () => {
   const { t } = useLanguage();
   const { user } = useAuth();
@@ -74,16 +92,16 @@ const MyApprovals = () => {
   // ── SSS Evaluation form state (FLM only, SSS suggestions) ─────────────────
   // 10 criteria rows; each score is null (unset) or a number
   const SSS_CRITERIA = [
-    { label: "Position or Grade Factor",  optA: { label: "1 – Workmen",                       pts: 0.5 }, optB: { label: "2 – Supervisor & Above",                pts: 1 } },
-    { label: "Merit Factor",              optA: { label: "0.5 – Routine",                       pts: 0.5 }, optB: { label: "1 – Innovative",                         pts: 1 } },
-    { label: "Technical Value of Suggestion", optA: { label: "0.5 – Routine",                  pts: 0.5 }, optB: { label: "1 – Innovative",                         pts: 1 } },
-    { label: "Effort Factor",             optA: { label: "0.5 – Normal Effort",                 pts: 0.5 }, optB: { label: "1 – Extra Effort",                       pts: 1 } },
-    { label: "Safety Factor",             optA: { label: "0.5 – Good",                          pts: 0.5 }, optB: { label: "1 – Excellent",                          pts: 1 } },
-    { label: "Applicability",             optA: { label: "0 – Wider Operation",                 pts: 0   }, optB: { label: "1 – Wider Application",                  pts: 1 } },
-    { label: "Recurring Benefit",         optA: { label: "0 – One Time Benefit",                pts: 0   }, optB: { label: "1 – Benefits is Recurring in Nature",    pts: 1 } },
-    { label: "Customer Satisfaction",     optA: { label: "0 – NA",                              pts: 0   }, optB: { label: "1 – Result in Customer Satisfaction",    pts: 1 } },
-    { label: "Cycle Time Reduction",      optA: { label: "0 – NA",                              pts: 0   }, optB: { label: "1 – Result in Cycle Time Reduction",     pts: 1 } },
-    { label: "Systems & Procedures",      optA: { label: "0 – NA",                              pts: 0   }, optB: { label: "1 – Improves System & Procedure",        pts: 1 } },
+    { label: "Position or Grade Factor", optA: { label: "1 – Workmen", pts: 0.5 }, optB: { label: "2 – Supervisor & Above", pts: 1 } },
+    { label: "Merit Factor", optA: { label: "0.5 – Routine", pts: 0.5 }, optB: { label: "1 – Innovative", pts: 1 } },
+    { label: "Technical Value of Suggestion", optA: { label: "0.5 – Routine", pts: 0.5 }, optB: { label: "1 – Innovative", pts: 1 } },
+    { label: "Effort Factor", optA: { label: "0.5 – Normal Effort", pts: 0.5 }, optB: { label: "1 – Extra Effort", pts: 1 } },
+    { label: "Safety Factor", optA: { label: "0.5 – Good", pts: 0.5 }, optB: { label: "1 – Excellent", pts: 1 } },
+    { label: "Applicability", optA: { label: "0 – Wider Operation", pts: 0 }, optB: { label: "1 – Wider Application", pts: 1 } },
+    { label: "Recurring Benefit", optA: { label: "0 – One Time Benefit", pts: 0 }, optB: { label: "1 – Benefits is Recurring in Nature", pts: 1 } },
+    { label: "Customer Satisfaction", optA: { label: "0 – NA", pts: 0 }, optB: { label: "1 – Result in Customer Satisfaction", pts: 1 } },
+    { label: "Cycle Time Reduction", optA: { label: "0 – NA", pts: 0 }, optB: { label: "1 – Result in Cycle Time Reduction", pts: 1 } },
+    { label: "Systems & Procedures", optA: { label: "0 – NA", pts: 0 }, optB: { label: "1 – Improves System & Procedure", pts: 1 } },
   ] as const;
   // selections[i] = "A" | "B" | null
   const [sssSelections, setSssSelections] = useState<(null | "A" | "B")[]>(Array(10).fill(null));
@@ -96,15 +114,15 @@ const MyApprovals = () => {
   const sssFileInputRef = useRef<HTMLInputElement>(null);
   // Fallback authority data — used when backend is unreachable so the forward dropdown is never empty
   const FALLBACK_AUTHORITY: apiService.AuthorityAssignment[] = [
-    { id: 110, plant_code: "PLT-01", employee_no: "30698710", name: "Suresh M",     department: "BIDP1/TEF", role: "FLM",       type: "Internal" },
-    { id: 111, plant_code: "PLT-01", employee_no: "30698711", name: "Ganesh R",     department: "BIDP2/QAL", role: "FLM",       type: "Internal" },
-    { id: 112, plant_code: "PLT-01", employee_no: "30698712", name: "Priya S",      department: "BIDP1/HRD", role: "FLM",       type: "Internal" },
-    { id: 113, plant_code: "PLT-01", employee_no: "30698702", name: "Anita Sharma", department: "BIDP1/MNT", role: "Manager",   type: "Internal" },
+    { id: 110, plant_code: "PLT-01", employee_no: "30698710", name: "Suresh M", department: "BIDP1/TEF", role: "FLM", type: "Internal" },
+    { id: 111, plant_code: "PLT-01", employee_no: "30698711", name: "Ganesh R", department: "BIDP2/QAL", role: "FLM", type: "Internal" },
+    { id: 112, plant_code: "PLT-01", employee_no: "30698712", name: "Priya S", department: "BIDP1/HRD", role: "FLM", type: "Internal" },
+    { id: 113, plant_code: "PLT-01", employee_no: "30698702", name: "Anita Sharma", department: "BIDP1/MNT", role: "Manager", type: "Internal" },
     { id: 114, plant_code: "PLT-01", employee_no: "30698720", name: "Vijay Sharma", department: "BIDP1/ADM", role: "BPS Admin", type: "Internal" },
-    { id: 115, plant_code: "PLT-01", employee_no: "30698704", name: "Priya Devi",   department: "BIDP1/SAF", role: "BPS DH",    type: "Internal" },
-    { id: 116, plant_code: "PLT-01", employee_no: "30698750", name: "Rajesh Kumar", department: "BIDP1/FIN", role: "CTG",       type: "Internal" },
-    { id: 117, plant_code: "PLT-01", employee_no: "30698751", name: "Venkat Rao",   department: "BIDP1/TEF", role: "Implementation", type: "Internal" },
-    { id: 118, plant_code: "PLT-01", employee_no: "30698740", name: "Deepak Verma", department: "BIDP1/ADM", role: "VS RC",     type: "Internal" },
+    { id: 115, plant_code: "PLT-01", employee_no: "30698704", name: "Priya Devi", department: "BIDP1/SAF", role: "BPS DH", type: "Internal" },
+    { id: 116, plant_code: "PLT-01", employee_no: "30698750", name: "Rajesh Kumar", department: "BIDP1/FIN", role: "CTG", type: "Internal" },
+    { id: 117, plant_code: "PLT-01", employee_no: "30698751", name: "Venkat Rao", department: "BIDP1/TEF", role: "Implementation", type: "Internal" },
+    { id: 118, plant_code: "PLT-01", employee_no: "30698740", name: "Deepak Verma", department: "BIDP1/ADM", role: "VS RC", type: "Internal" },
   ];
   const [sssApprovers, setSssApprovers] = useState<apiService.AuthorityAssignment[]>(FALLBACK_AUTHORITY);
 
@@ -132,23 +150,6 @@ const MyApprovals = () => {
   };
 
   // ── SFC Evaluation form state (FLM only, Shop Floor CIP) ──────────────────
-  const SFC_MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"] as const;
-  const SFC_MONTH_POINTS = [25, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2] as const;
-  const SFC_WEIGHTAGE_OPTIONS = [
-    { label: "x1 (1st Kaizen)",  value: 1 },
-    { label: "x1.25 (2nd Kaizen)", value: 1.25 },
-    { label: "x1.5 (3rd Kaizen)",  value: 1.5 },
-    { label: "x1.75 (4th Kaizen)", value: 1.75 },
-  ] as const;
-  const SFC_GEMBA_ROWS = [
-    { label: "Importance of the project to the value stream", max: 30, options: [{ label: "Directly linked to business case", pts: 30 }, { label: "Safety / Department objectives", pts: 20 }, { label: "No Relation", pts: 10 }] },
-    { label: "Sustenance of actions", max: 5, options: [{ label: "Long term", pts: 5 }, { label: "Mid term", pts: 3 }, { label: "Short term", pts: 2 }, { label: "Nil", pts: 0 }] },
-    { label: "Horizontal Deployment", max: 5, options: [{ label: "Implemented", pts: 5 }, { label: "Implementation initiated", pts: 3 }, { label: "Implementation initiated", pts: 2 }, { label: "None", pts: 0 }] },
-    { label: "Evaluation of project / Kaizen Sheet", max: 30, options: [{ label: "Exemplary", pts: 30 }, { label: "Good", pts: 20 }, { label: "Average", pts: 10 }, { label: "Not done", pts: 0 }] },
-    { label: "Standardization", max: 15, options: [{ label: "100% adherence", pts: 15 }, { label: "0.5", pts: 5 }, { label: "0.25", pts: 3 }, { label: "Nil", pts: 0 }] },
-    { label: "Presentation of project to RC/RH", max: 15, options: [{ label: "Presented", pts: 15 }, { label: "Presentation slot finalized", pts: 3 }, { label: "Not ready", pts: 2 }, { label: "Nil", pts: 0 }] },
-  ] as const;
-
   const [sfcSelectedMonth, setSfcSelectedMonth] = useState<number | null>(null); // index 0-11
   const [sfcSelectedWeightage, setSfcSelectedWeightage] = useState<number | null>(null); // index 0-3
   const [sfcGembaSelections, setSfcGembaSelections] = useState<(number | null)[]>(Array(6).fill(null)); // points scored per row
@@ -273,6 +274,7 @@ const MyApprovals = () => {
     // Resolve suggestion department from top-level OR formData (some suggestions
     // only store it inside formData, e.g. when loaded from backend seed data)
     const suggDept = selected.suggestionDepartment
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       || (selected.formData as Record<string, any> | undefined)?.suggestionDepartment;
     const relevantDepts = [selected.department, suggDept].filter(Boolean) as string[];
     if (relevantDepts.length === 0) return atLevel;
@@ -286,10 +288,10 @@ const MyApprovals = () => {
     // their own CTF suggestion. Any non-BPS role (including plain "employee") qualifies.
     const ctfSelfImpl = (user.bidpRole !== "bps_admin" && user.bidpRole !== "bps_dh")
       ? suggestions.filter(s =>
-          s.type === "Cash The Flash" &&
-          s.status === "Pending Implementation" &&
-          s.employeeNo === user.employeeNo
-        )
+        s.type === "Cash The Flash" &&
+        s.status === "Pending Implementation" &&
+        s.employeeNo === user.employeeNo
+      )
       : [];
     if (user.bidpRole === "employee" || !currentLevel) return ctfSelfImpl;
     const validStatuses = getStatusesForLevel(currentLevel);
@@ -323,6 +325,7 @@ const MyApprovals = () => {
       // chose them, overriding the normal department-based routing).
       if (validStatuses.includes(s.status) && s.rerouteTargetEmpNo === user.employeeNo) return true;
       const suggDept = s.suggestionDepartment
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         || (s.formData as Record<string, any> | undefined)?.suggestionDepartment;
       const deptMatches = !!user.department &&
         (s.department === user.department || suggDept === user.department);
@@ -361,18 +364,18 @@ const MyApprovals = () => {
     if (!user?.employeeNo) return [];
     if (!currentLevel) {
       // Employee role (no approval level): show CTF self-implementation history
-      return suggestions.filter(s => (s as any).implementedBy === user.employeeNo);
+      return suggestions.filter(s => s.implementedBy === user.employeeNo);
     }
     // Show items this user has already acted on
     return suggestions.filter(s => {
       if (currentLevel === "FLM") return s.evaluatedBy === user.employeeNo;
       if (currentLevel === "Manager") return s.approvedByManager === user.employeeNo;
       if (currentLevel === "BPS Admin") return s.approvedByBpsAdmin === user.employeeNo;
-      if (currentLevel === "CTG") return (s as any).ctgEvaluatedBy === user.employeeNo;
-      if (currentLevel === "VS RC") return (s as any).approvedByVsRc === user.employeeNo;
+      if (currentLevel === "CTG") return s.ctgEvaluatedBy === user.employeeNo;
+      if (currentLevel === "VS RC") return s.approvedByVsRc === user.employeeNo;
       if (currentLevel === "BPS DH") return s.approvedByBpsDh === user.employeeNo;
       // CTF self-implemented (any non-BPS role can be the implementer)
-      if ((s as any).implementedBy === user.employeeNo) return true;
+      if (s.implementedBy === user.employeeNo) return true;
       return false;
     });
   }, [suggestions, user, currentLevel]);
@@ -488,19 +491,20 @@ const MyApprovals = () => {
       const auditAttachments = isSSSFLM
         ? sssAttachFiles.map(f => ({ name: f.name, type: f.type, url: f.url }))
         : isSFCFLM
-        ? sfcAttachFiles.map(f => ({ name: f.name, type: f.type, url: f.url }))
-        : reviewAttachFiles.map(f => ({ name: f.name, type: f.type, url: f.url }));
+          ? sfcAttachFiles.map(f => ({ name: f.name, type: f.type, url: f.url }))
+          : reviewAttachFiles.map(f => ({ name: f.name, type: f.type, url: f.url }));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const auditMetadata: Record<string, any> | undefined = isSSSFLM
         ? {
-            evaluationType: "SSS",
-            selections: sssSelections,
-            totalPoints: sssTotalPoints,
-            weightage: sssWeightage,
-            calculatedAmount: sssCalculatedAmount,
-            forwardTo: sssForwardTo,
-          }
+          evaluationType: "SSS",
+          selections: sssSelections,
+          totalPoints: sssTotalPoints,
+          weightage: sssWeightage,
+          calculatedAmount: sssCalculatedAmount,
+          forwardTo: sssForwardTo,
+        }
         : isSFCFLM
-        ? {
+          ? {
             evaluationType: "SFC",
             selectedMonth: sfcSelectedMonth,
             selectedWeightage: sfcSelectedWeightage,
@@ -510,13 +514,14 @@ const MyApprovals = () => {
             finalPoints: sfcFinalPoints,
             forwardTo: sfcForwardTo,
           }
-        : forwardTo
-        ? { forwardTo }
-        : undefined;
+          : forwardTo
+            ? { forwardTo }
+            : undefined;
 
       // ── Build award distribution breakdown for audit trail ──
       // Rules: on-behalf → mainSuggestor + team; self → registering employee + team
       if (currentLevel === "FLM" && amount > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const fd: Record<string, any> = selected.formData || {};
         const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;
         const isGroup = fd.groupSuggestion === "yes";
@@ -556,10 +561,10 @@ const MyApprovals = () => {
       const forwardedToName = isSSSFLM
         ? (sssApprovers.find(a => a.employee_no === sssForwardTo)?.name || sssForwardTo || undefined)
         : isSFCFLM
-        ? (sssApprovers.find(a => a.employee_no === sfcForwardTo)?.name || sfcForwardTo || undefined)
-        : forwardTo
-        ? (sssApprovers.find(a => a.employee_no === forwardTo)?.name || forwardTo)
-        : undefined;
+          ? (sssApprovers.find(a => a.employee_no === sfcForwardTo)?.name || sfcForwardTo || undefined)
+          : forwardTo
+            ? (sssApprovers.find(a => a.employee_no === forwardTo)?.name || forwardTo)
+            : undefined;
 
       // For CTF self-implementation, act as "Implementation" level in the pipeline
       const buildLevel: ApprovalLevel = isSelfImpl ? "Implementation" : (currentLevel as ApprovalLevel);
@@ -687,7 +692,7 @@ const MyApprovals = () => {
       return !!awardAmount.trim();
     }
     return true;
-  }, [selected, currentLevel, sssSelections, sssWeightage, sssCalculatedAmount, sssComments, awardAmount, sfcFinalPoints, sfcComments, reviewComments]);
+  }, [selected, currentLevel, sssSelections, sssWeightage, sssCalculatedAmount, sssComments, awardAmount, sfcFinalPoints, sfcComments, reviewComments, user]);
 
   const openSendBack = () => {
     setSendBackReason("");
@@ -883,11 +888,10 @@ const MyApprovals = () => {
       <div className="flex items-center gap-0.5 flex-wrap">
         {steps.map((step, i) => (
           <div key={step} className="flex items-center gap-0.5">
-            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-              i < activeIndex ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" :
-              i === activeIndex ? "bg-primary text-primary-foreground font-semibold" :
-              "bg-muted text-muted-foreground"
-            }`}>{step}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${i < activeIndex ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" :
+                i === activeIndex ? "bg-primary text-primary-foreground font-semibold" :
+                  "bg-muted text-muted-foreground"
+              }`}>{step}</span>
             {i < steps.length - 1 && <ChevronRight className="h-3 w-3 text-muted-foreground/50" />}
           </div>
         ))}
@@ -895,8 +899,10 @@ const MyApprovals = () => {
     );
   };
 
-  const fd = selected?.formData || {};
-  const tf = fd.typeFields || {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fd: Record<string, any> = selected?.formData || {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tf: Record<string, any> = fd.typeFields || {};
 
   // Build a combined lookup (empNo → {name, dept}) from all options + mockEmployees
   const allEmpOptions = [...teamMemberOptions, ...flmOptions];
@@ -907,7 +913,7 @@ const MyApprovals = () => {
   for (const e of mockEmployees) {
     if (!optByEmpNo[e.employeeNo]) optByEmpNo[e.employeeNo] = { name: e.name, dept: e.department };
   }
-  const avatarColors = ["bg-blue-500","bg-violet-500","bg-emerald-500","bg-amber-500","bg-rose-500","bg-cyan-500","bg-pink-500","bg-indigo-500"];
+  const avatarColors = ["bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-cyan-500", "bg-pink-500", "bg-indigo-500"];
 
   // ── Section helpers for the review dialog ──────────────────────────────────
   const SectionHead = ({ icon: Icon, title }: { icon: React.ElementType; title: string }) => (
@@ -943,8 +949,10 @@ const MyApprovals = () => {
   // Render type-specific fields (mirrors SuggestionDetailDialog logic)
   const renderTypeFields = (suggestion: Suggestion) => {
     const type = suggestion.type;
-    const sfd = suggestion.formData || {};
-    const stf = sfd.typeFields || {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sfd: Record<string, any> = suggestion.formData || {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stf: Record<string, any> = sfd.typeFields || {};
 
     if (type === "Simple Suggestion Scheme") return (
       <div className="rounded-lg border bg-muted/10 px-3 py-2 space-y-0">
@@ -953,11 +961,11 @@ const MyApprovals = () => {
         <Row label="Date of Implementation" value={fmtDate(stf.dateOfImplementation)} />
         <Row label="FLM" value={stf.flm
           ? (() => {
-              const found = sssApprovers.find(a => a.employee_no === stf.flm) ||
-                            flmOptions.find(f => f.value === stf.flm);
-              const name = found ? found.name : undefined;
-              return name ? `${name} (${stf.flm})` : stf.flm;
-            })()
+            const found = sssApprovers.find(a => a.employee_no === stf.flm) ||
+              flmOptions.find(f => f.value === stf.flm);
+            const name = found ? found.name : undefined;
+            return name ? `${name} (${stf.flm})` : stf.flm;
+          })()
           : undefined} />
         <div className="py-2 space-y-2">
           <Block label="Present Method / Problem" value={stf.presentMethod || suggestion.presentMethod} />
@@ -1035,11 +1043,11 @@ const MyApprovals = () => {
         <Row label="Date of Implementation" value={fmtDate(stf.dateOfImplementation)} />
         <Row label="FLM" value={stf.flm
           ? (() => {
-              const found = sssApprovers.find(a => a.employee_no === stf.flm) ||
-                            flmOptions.find(f => f.value === stf.flm);
-              const name = found ? found.name : undefined;
-              return name ? `${name} (${stf.flm})` : stf.flm;
-            })()
+            const found = sssApprovers.find(a => a.employee_no === stf.flm) ||
+              flmOptions.find(f => f.value === stf.flm);
+            const name = found ? found.name : undefined;
+            return name ? `${name} (${stf.flm})` : stf.flm;
+          })()
           : undefined} />
         <div className="py-2 space-y-2">
           <Block label="Description – Idea / Problem" value={stf.descriptionProblem || suggestion.presentMethod} />
@@ -1068,11 +1076,11 @@ const MyApprovals = () => {
         <Row label="Category" value={stf.category || suggestion.category} />
         <Row label="FLM" value={stf.flm
           ? (() => {
-              const found = sssApprovers.find(a => a.employee_no === stf.flm) ||
-                            flmOptions.find(f => f.value === stf.flm);
-              const name = found ? found.name : undefined;
-              return name ? `${name} (${stf.flm})` : stf.flm;
-            })()
+            const found = sssApprovers.find(a => a.employee_no === stf.flm) ||
+              flmOptions.find(f => f.value === stf.flm);
+            const name = found ? found.name : undefined;
+            return name ? `${name} (${stf.flm})` : stf.flm;
+          })()
           : undefined} />
         <div className="py-2 space-y-2">
           <Block label="Present / Before Method" value={stf.presentMethod || suggestion.presentMethod} />
@@ -1106,7 +1114,7 @@ const MyApprovals = () => {
     if (allAttachments.length === 0 && !legacyAttachment) return null;
 
     const images = allAttachments.filter(a => isImageMime(a.type));
-    const docs   = allAttachments.filter(a => !isImageMime(a.type));
+    const docs = allAttachments.filter(a => !isImageMime(a.type));
 
     return (
       <>
@@ -1474,8 +1482,8 @@ const MyApprovals = () => {
                       <Row label="Suggestion No" value={selected.suggestionNo} />
                       <Row label="Date" value={fmtDate(selected.date)} />
                       <Row label="Type" value={selected.type} />
-                      <Row label="Category" value={selected.category} />
                       <Row label="Range" value={selected.range} />
+                      <Row label="Suggestion Dept" value={selected.suggestionDepartment || "—"} />
                       <Row label="Days Pending" value={String(calculateDaysPending(selected))} />
                     </div>
                   </div>
@@ -1573,7 +1581,7 @@ const MyApprovals = () => {
                           let mNo: string;
                           if (di !== -1) {
                             mName = m.slice(0, di).trim();
-                            mNo   = m.slice(di + 1).trim();
+                            mNo = m.slice(di + 1).trim();
                           } else {
                             const found = optByEmpNo[m];
                             mName = found?.name || "";
@@ -1647,38 +1655,35 @@ const MyApprovals = () => {
                           const isRerouted = entry.action === "Rerouted";
                           return (
                             <div key={entry.id}
-                              className={`rounded-lg border px-3 py-3 space-y-2 ${
-                                isRerouted
+                              className={`rounded-lg border px-3 py-3 space-y-2 ${isRerouted
                                   ? "border-violet-200 bg-violet-50/60 dark:border-violet-800 dark:bg-violet-950/20"
                                   : isSendBack
-                                  ? "border-amber-200 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20"
-                                  : "border-blue-200 bg-blue-50/60 dark:border-blue-800 dark:bg-blue-950/20"
-                              }`}>
+                                    ? "border-amber-200 bg-amber-50/60 dark:border-amber-800 dark:bg-amber-950/20"
+                                    : "border-blue-200 bg-blue-50/60 dark:border-blue-800 dark:bg-blue-950/20"
+                                }`}>
                               {/* Header */}
                               <div className="flex items-center justify-between flex-wrap gap-1.5">
                                 <div className="flex items-center gap-2">
                                   {isRerouted
                                     ? <ArrowRightLeft className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
                                     : isSendBack
-                                    ? <Undo2 className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                                    : <CheckCircle2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />}
+                                      ? <Undo2 className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                      : <CheckCircle2 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />}
                                   <span className="text-xs font-semibold">
                                     {entry.performedByName || entry.performedBy}
                                   </span>
                                   {entry.role && (
-                                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium border ${
-                                      isRerouted
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium border ${isRerouted
                                         ? "bg-violet-100 border-violet-300 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
                                         : isSendBack
-                                        ? "bg-amber-100 border-amber-300 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-                                        : "bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
-                                    }`}>
+                                          ? "bg-amber-100 border-amber-300 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                                          : "bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                                      }`}>
                                       {entry.role}
                                     </span>
                                   )}
-                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                    isRerouted ? "text-violet-600 dark:text-violet-400" : isSendBack ? "text-amber-600 dark:text-amber-400" : "text-blue-600 dark:text-blue-400"
-                                  }`}>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isRerouted ? "text-violet-600 dark:text-violet-400" : isSendBack ? "text-amber-600 dark:text-amber-400" : "text-blue-600 dark:text-blue-400"
+                                    }`}>
                                     {entry.action}
                                   </span>
                                 </div>
@@ -1931,11 +1936,10 @@ const MyApprovals = () => {
                       </div>
                       {/* Routing hint */}
                       {sssCalculatedAmount !== null && (
-                        <div className={`flex items-center gap-2 text-[11px] px-3 py-2 rounded-lg border ${
-                          sssCalculatedAmount > 500
+                        <div className={`flex items-center gap-2 text-[11px] px-3 py-2 rounded-lg border ${sssCalculatedAmount > 500
                             ? "bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950/30 dark:border-orange-700 dark:text-orange-400"
                             : "bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-400"
-                        }`}>
+                          }`}>
                           <ChevronRight className="h-3.5 w-3.5 shrink-0" />
                           {sssCalculatedAmount > 500
                             ? <span>Award &gt; ₹500 — Full pipeline: <strong>FLM → Manager → BPS Admin → BPS DH → Close</strong></span>
@@ -2097,7 +2101,7 @@ const MyApprovals = () => {
                                   className="accent-primary h-3.5 w-3.5"
                                 />
                                 <span className="text-[10px] font-bold">{opt.label}</span>
-                           
+
                               </label>
                             ))}
                           </div>
@@ -2206,11 +2210,10 @@ const MyApprovals = () => {
                       </div>
                       {/* Routing hint */}
                       {sfcFinalPoints !== null && (
-                        <div className={`flex items-center gap-2 text-[11px] px-3 py-2 rounded-lg border ${
-                          sfcFinalPoints > 500
+                        <div className={`flex items-center gap-2 text-[11px] px-3 py-2 rounded-lg border ${sfcFinalPoints > 500
                             ? "bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950/30 dark:border-orange-700 dark:text-orange-400"
                             : "bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-400"
-                        }`}>
+                          }`}>
                           <ChevronRight className="h-3.5 w-3.5 shrink-0" />
                           {sfcFinalPoints > 500
                             ? <span>Points &gt; 500 — Full pipeline: <strong>FLM → Manager → BPS Admin → BPS DH → Close</strong></span>
@@ -2352,9 +2355,8 @@ const MyApprovals = () => {
                                 placeholder="0"
                                 value={awardAmount}
                                 onChange={e => setAwardAmount(e.target.value)}
-                                className={`pl-7 h-10 text-base font-semibold ${
-                                  !awardAmount.trim() ? "border-amber-400 dark:border-amber-500 focus-visible:ring-amber-400" : "border-primary/50 focus-visible:ring-primary"
-                                }`}
+                                className={`pl-7 h-10 text-base font-semibold ${!awardAmount.trim() ? "border-amber-400 dark:border-amber-500 focus-visible:ring-amber-400" : "border-primary/50 focus-visible:ring-primary"
+                                  }`}
                               />
                             </div>
                             {!awardAmount.trim() && (
@@ -2373,11 +2375,10 @@ const MyApprovals = () => {
                                   ₹{calculateCtfAward(parseFloat(awardAmount)).toLocaleString('en-IN')}
                                 </p>
                               </div>
-                              <div className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold border ${
-                                calculateCtfAward(parseFloat(awardAmount)) > 5000
+                              <div className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-semibold border ${calculateCtfAward(parseFloat(awardAmount)) > 5000
                                   ? "bg-orange-50 border-orange-300 text-orange-700 dark:bg-orange-950/30 dark:border-orange-600 dark:text-orange-400"
                                   : "bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/30 dark:border-blue-600 dark:text-blue-400"
-                              }`}>
+                                }`}>
                                 <ChevronRight className="h-3 w-3" />
                                 {calculateCtfAward(parseFloat(awardAmount)) > 5000
                                   ? "→ VS RC → BPS DH"
@@ -2564,11 +2565,10 @@ const MyApprovals = () => {
                         placeholder={selected.type === "Cash The Flash" ? "Enter your evaluation comments (required)..." : "Enter your review comments..."}
                         value={reviewComments}
                         onChange={e => setReviewComments(e.target.value)}
-                        className={`text-xs min-h-[72px] resize-none ${
-                          selected.type === "Cash The Flash" && !reviewComments.trim()
+                        className={`text-xs min-h-[72px] resize-none ${selected.type === "Cash The Flash" && !reviewComments.trim()
                             ? "border-amber-300 dark:border-amber-600"
                             : ""
-                        }`}
+                          }`}
                       />
                       {selected.type === "Cash The Flash" && !reviewComments.trim() && (
                         <p className="text-[10px] text-amber-600 dark:text-amber-400">Comments are required for CTF suggestions</p>

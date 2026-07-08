@@ -104,7 +104,7 @@ const TransferSuggestion = () => {
 
     // Update suggestion via context (updates local state + backend)
     if (suggestion) {
-      updateSuggestion(suggestion.id, {
+      updateSuggestion(String(suggestion.id), {
         employeeNo: newEmployeeNo,
         employeeName: newEmployee?.name || "",
         department: newEmployee?.department || suggestion.department,
@@ -176,10 +176,11 @@ const TransferSuggestion = () => {
                 </div>
                 <Badge variant="outline" className={`text-[10px] ${statusColors[suggestion.status]}`}>{suggestion.status}</Badge>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-xs pt-1">
-                <p><span className="text-muted-foreground">Employee:</span> {suggestion.employeeName}</p>
-                <p><span className="text-muted-foreground">Emp No:</span> {suggestion.employeeNo}</p>
-                <p><span className="text-muted-foreground">Department:</span> {suggestion.department || "N/A"}</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs pt-1">
+                 <p><span className="text-muted-foreground">Employee:</span> {suggestion.employeeName}</p>
+                 <p><span className="text-muted-foreground">Emp No:</span> {suggestion.employeeNo}</p>
+                 <p><span className="text-muted-foreground">Department:</span> {suggestion.department || "N/A"}</p>
+                 <p><span className="text-muted-foreground">Suggestion Dept:</span> {suggestion.suggestionDepartment || "N/A"}</p>
               </div>
               {suggestion.pendingWith && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Pending with: {suggestion.pendingWith} ({calculateDaysPending(suggestion)} days)</p>

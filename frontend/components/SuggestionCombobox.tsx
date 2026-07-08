@@ -25,7 +25,7 @@ const SuggestionCombobox = ({
   onChange,
   placeholder = "Type or select...",
   className,
-  maxVisible = 50,
+  maxVisible = 200,
 }: SuggestionComboboxProps) => {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -35,7 +35,7 @@ const SuggestionCombobox = ({
   useEffect(() => {
     if (value) {
       const match = options.find(o => o.value === value);
-      if (match) setQuery(match.value);
+      if (match) setQuery(match.label);
       else setQuery(value);
     } else {
       setQuery("");
@@ -69,7 +69,7 @@ const SuggestionCombobox = ({
 
   const handleSelect = (opt: SuggestionOption) => {
     onChange(opt.value);
-    setQuery(opt.value);
+    setQuery(opt.label);
     setOpen(false);
   };
 
@@ -98,7 +98,7 @@ const SuggestionCombobox = ({
         />
       </div>
       {open && visibleItems.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full max-h-64 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-50 mt-1 w-full max-h-80 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
           {/* Match count header when there are many results */}
           {totalMatches > 10 && (
             <div className="sticky top-0 z-10 bg-muted/90 backdrop-blur-sm border-b px-3 py-1.5 text-[10px] text-muted-foreground font-medium flex justify-between">

@@ -33,7 +33,7 @@ interface Props {
 const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete }: Props) => {
   const { updateSuggestion } = useSuggestions();
   const { categories } = useCategories();
-  const { uniqueRanges } = useDeptMappings();
+  const { uniqueRanges, uniqueDepartments } = useDeptMappings();
   const [editData, setEditData] = useState<Partial<Suggestion>>({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [lightboxImages, setLightboxImages] = useState<AttachmentItem[]>([]);
@@ -102,7 +102,9 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
 
   if (!suggestion) return null;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fd: Record<string, any> = suggestion.formData || {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tf: Record<string, any> = fd.typeFields || {};
 
   // Helpers
@@ -113,6 +115,7 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
   };
 
   const val = (key: keyof Suggestion) => (isEdit ? (editData[key] ?? suggestion[key]) : suggestion[key]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const setField = (field: keyof Suggestion, value: any) => setEditData(prev => ({ ...prev, [field]: value }));
 
   // ── View-mode section helpers ────────────────────────────────────────────
@@ -379,13 +382,14 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
               <TextField label="Subject" field="subject" required />
               <SelectField label="Type" field="type" options={suggestionTypes} required />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <SelectField label="Category" field="category" options={categories} required />
               <div className="space-y-1">
                 <Label className="text-xs font-medium text-muted-foreground">Date</Label>
                 <Input type="date" value={String(val("date") || "")} onChange={(e) => setField("date", e.target.value)} className="text-sm" />
               </div>
               <SelectField label="Range" field="range" options={uniqueRanges} />
+              <SelectField label="Suggestion Department" field="suggestionDepartment" options={uniqueDepartments} required />
             </div>
             <Separator />
             <div className="grid grid-cols-2 gap-4">
@@ -422,6 +426,7 @@ const SuggestionDetailDialog = ({ suggestion, mode, open, onOpenChange, onDelete
               <Row label="Suggestion Date" value={fmtDate(suggestion.date)} />
               <Row label="Type of Suggestion" value={suggestion.type} />
               <Row label="Range" value={suggestion.range} />
+              <Row label="Suggestion Department" value={suggestion.suggestionDepartment || "—"} />
             </div>
 
             {/* ② Employee / Submission Info */}

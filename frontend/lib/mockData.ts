@@ -10,7 +10,6 @@
 //   - reopen_audit_log (id, suggestionNo, remark, date)
 //   - notifications (id, userId, message, type, read, timestamp)
 //   - memo_reports (generated views, not a table)
-import { User } from "lucide-react";
 import type { AttachmentItem } from "./attachmentUtils";
 
 export const suggestionTypes = [
@@ -141,6 +140,13 @@ export interface Suggestion {
   approvedByBpsDh?: string;
   approvedByBpsDhName?: string;
   approvedByBpsDhOn?: string;
+  implementedBy?: string;
+  implementedByName?: string;
+  ctgEvaluatedBy?: string;
+  ctgEvaluatedByName?: string;
+  approvedByVsRc?: string;
+  approvedByVsRcName?: string;
+  approvedByVsRcOn?: string;
   // Send-back history
   sendBackHistory?: Array<{
     from: string;        // level that sent back (e.g. "Manager")
@@ -184,7 +190,6 @@ export interface Suggestion {
   }>;
   originalEmployeeNo?: string;         // original suggestor before first transfer
   originalEmployeeName?: string;
-  plantCode?: string;
   // Audit trail — complete lifecycle log for compliance
   auditTrail?: AuditEntry[];
 }

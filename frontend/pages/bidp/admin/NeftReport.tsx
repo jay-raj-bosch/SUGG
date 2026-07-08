@@ -102,17 +102,17 @@ const NeftReport = () => {
       const award = s.awardAmount || 0;
       if (award <= 0) return;
 
-      const fd: Record<string, any> = s.formData || {};
+      const fd: Record<string, unknown> = s.formData || {};
       const isOnBehalf = fd.suggestionFor === "behalf" && fd.mainSuggestor;
       const isGroup = fd.groupSuggestion === "yes";
-      const teamMembers: string[] = fd.teamMembers || [];
-      const suggNo = s.suggestionNo || s.id;
+      const teamMembers: string[] = Array.isArray(fd.teamMembers) ? (fd.teamMembers as string[]) : [];
+      const suggNo = String(s.suggestionNo || s.id);
       const sType = s.type || "—";
 
       // Determine the primary person (who gets the award / is included in the split)
       // On-behalf: mainSuggestor is the primary person, registering employee is excluded
       // Self: registering employee is the primary person
-      const primaryEmpNo = isOnBehalf ? fd.mainSuggestor : (s.employeeNo || "");
+      const primaryEmpNo = isOnBehalf ? (fd.mainSuggestor as string) : (s.employeeNo || "");
       const primaryName = isOnBehalf ? undefined : (s.employeeName || undefined);
       const primaryDept = isOnBehalf ? undefined : (s.department || undefined);
 
@@ -126,7 +126,7 @@ const NeftReport = () => {
         }
       }
       if (sType === "Shop Floor CIP") {
-        const moderators: string[] = Array.isArray(fd.moderators) ? fd.moderators : (fd.moderator ? [fd.moderator] : []);
+        const moderators: string[] = Array.isArray(fd.moderators) ? (fd.moderators as string[]) : (fd.moderator ? [fd.moderator as string] : []);
         for (const m of moderators) {
           if (m) recipientSet.add(m);
         }

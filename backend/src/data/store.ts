@@ -57,8 +57,6 @@ export interface Suggestion {
   employee_no: string;
   employee_name: string;
   department: string;
-  /** The department the suggestion is actually about (may differ from the submitter's own department) */
-  suggestion_department?: string;
   pending_with?: string;
   days_pending: number;
   plant_code: string;
@@ -97,18 +95,6 @@ export interface Suggestion {
     reason: string;
     date: string;
   }>;
-  reroute_history?: Array<{
-    fromLevel: string;
-    toLevel: string;
-    toEmpNo: string;
-    toName: string;
-    reason: string;
-    date: string;
-    reroutedBy: string;
-    reroutedByName: string;
-  }>;
-  reroute_target_emp_no?: string;
-  reroute_target_name?: string;
   // Audit trail — complete lifecycle log
   audit_trail?: AuditEntry[];
   created_at: string;
@@ -347,11 +333,9 @@ function toFrontendSuggestion(s: Suggestion): Record<string, any> {
     date: s.date,
     pendingWith: s.pending_with,
     daysPending: s.days_pending,
-    suggestionFor: s.suggestion_for,
     employeeNo: s.employee_no,
     employeeName: s.employee_name,
     department: s.department,
-    suggestionDepartment: s.suggestion_department,
     range: s.range,
     presentMethod: s.present_method,
     proposedMethod: s.proposed_method,
@@ -382,9 +366,6 @@ function toFrontendSuggestion(s: Suggestion): Record<string, any> {
     approvedByBpsDhName:   s.approved_by_bps_dh_name,
     approvedByBpsDhOn:     s.approved_by_bps_dh_on,
     sendBackHistory:       s.send_back_history,
-    rerouteHistory:        s.reroute_history,
-    rerouteTargetEmpNo:    s.reroute_target_emp_no,
-    rerouteTargetName:     s.reroute_target_name,
     auditTrail:            s.audit_trail?.map(a => ({
       id: a.id,
       action: a.action,
@@ -442,7 +423,7 @@ export function createSuggestion(data: {
   groupSuggestion?: string; otherInfo?: string; employeeNo: string;
   pendingWith?: string; plantCode?: string; presentMethod?: string;
   proposedMethod?: string; benefits?: string; formData?: Record<string, any>;
-  assignedFlm?: string; approvalLevel?: string; suggestionDepartment?: string;
+  assignedFlm?: string; approvalLevel?: string;
 }): Record<string, any> {
   const typeCode = data.typeCode;
   const typeName = TYPE_CODE_TO_NAME[typeCode] || typeCode;
@@ -471,7 +452,6 @@ export function createSuggestion(data: {
     employee_no: data.employeeNo,
     employee_name: emp?.name || "",
     department: emp?.department || "",
-    suggestion_department: data.suggestionDepartment,
     pending_with: data.pendingWith,
     days_pending: 0,
     plant_code: data.plantCode || emp?.plant_code || "PLT-01",
@@ -498,7 +478,6 @@ export function updateSuggestion(id: number | string, data: Record<string, any>,
   if (data.category !== undefined)        s.category = data.category;
   if (data.status !== undefined)          s.status = data.status;
   if (data.range !== undefined)           s.range = data.range;
-  if (data.suggestionDepartment !== undefined) s.suggestion_department = data.suggestionDepartment;
   if (data.suggestionFor !== undefined)   s.suggestion_for = data.suggestionFor;
   if (data.groupSuggestion !== undefined) s.group_suggestion = data.groupSuggestion;
   if (data.otherInfo !== undefined)       s.other_info = data.otherInfo;
@@ -533,9 +512,6 @@ export function updateSuggestion(id: number | string, data: Record<string, any>,
   if (data.approvedByBpsDhName !== undefined)   s.approved_by_bps_dh_name = data.approvedByBpsDhName;
   if (data.approvedByBpsDhOn !== undefined)     s.approved_by_bps_dh_on = data.approvedByBpsDhOn;
   if (data.sendBackHistory !== undefined)       s.send_back_history = data.sendBackHistory;
-  if (data.rerouteHistory !== undefined)        s.reroute_history = data.rerouteHistory;
-  if (data.rerouteTargetEmpNo !== undefined)     s.reroute_target_emp_no = data.rerouteTargetEmpNo;
-  if (data.rerouteTargetName !== undefined)      s.reroute_target_name = data.rerouteTargetName;
   if (data.auditTrail !== undefined)            s.audit_trail = data.auditTrail.map((a: any) => ({
     id: a.id,
     action: a.action,

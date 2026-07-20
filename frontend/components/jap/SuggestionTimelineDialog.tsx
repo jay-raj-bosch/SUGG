@@ -40,6 +40,8 @@ function buildTimeline(s: Suggestion): TimelineStep[] {
   const fd = (s.formData ?? {}) as Record<string, unknown>;
   const isRejected = s.status === JAP_STATUSES.REJECTED;
   const isReopened = s.status === JAP_STATUSES.REOPENED;
+  const hasRejectionRecord = !!s.rejectedOn; // persists even after the suggestion is reopened & advances again
+  const hasReopenRecord = !!fd.reopenedAt;
 
   // Determine which phase we're currently at
   const PHASE_ORDER = [
@@ -189,26 +191,27 @@ function buildTimeline(s: Suggestion): TimelineStep[] {
   });
 
   // ── Rejection / Reopen overlay (append at end) ──
-  if (isRejected) {
+  if (hasRejectionRecord) {
     steps.push({
       phase: "—",
       label: "Rejected",
       labelHi: "अस्वीकृत",
       icon: <XCircle className={IC} />,
-      state: "rejected",
+      state: hasReopenRecord ? "completed" : "rejected",
       approver: s.rejectedByName || undefined,
       date: s.rejectedOn || undefined,
       comment: s.rejectionReason || "Rejected",
     });
   }
 
-  if (isReopened) {
+  if (hasReopenRecord) {
     steps.push({
       phase: "—",
       label: "Reopened",
       labelHi: "पुनः खोला गया",
       icon: <RotateCcw className={IC} />,
-      state: "active",
+      state: s.status === JAP_STATUSES.REOPENED ? "active" : "completed",
+      approver: (fd.reopenedByName as string) || undefined,
       date: (fd.reopenedOn as string) || undefined,
       comment: (fd.reopenReason as string) || "Suggestion reopened for reconsideration",
     });

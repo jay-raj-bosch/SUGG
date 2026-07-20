@@ -151,7 +151,7 @@ const JaPEvalNonQuantifiable = () => {
   useEffect(() => {
     const ctx = contextSuggestions.filter(s => s.plantCode === "PLT-02");
     setAllSuggestions(ctx);
-    apiService.fetchSuggestions("jap", { limit: 2000 })
+    apiService.fetchSuggestions({ plantCode: "jap", limit: 2000 })
       .then(r => {
         if (r.data?.length) {
           const japOnly = r.data.filter(s => s.plantCode === "PLT-02");
@@ -222,7 +222,7 @@ const JaPEvalNonQuantifiable = () => {
         formData: { ...(suggestion.formData as any), ...evalData },
       });
       try {
-        await apiService.patchSuggestionStatus("jap", suggestion.id, "In Award");
+        await apiService.patchSuggestionStatus(suggestion.id, "In Award");
       } catch { /* local fallback */ }
     }
 

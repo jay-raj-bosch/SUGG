@@ -324,6 +324,25 @@ export async function markAllNotificationsRead(): Promise<void> {
   return api.patch("/notifications/read-all");
 }
 
+// ─── Translation (voice capture — non-English speech → English) ─────────────
+
+export interface TranslateResponse {
+  translated: string;
+  didTranslate: boolean;
+}
+
+/**
+ * POST /api/translate — server-side proxy to the internal translation API.
+ * `sourceLang`/`targetLang` are 2-letter codes (e.g. "hi", "en").
+ */
+export async function translateText(
+  text: string,
+  sourceLang: string,
+  targetLang = "en",
+): Promise<TranslateResponse> {
+  return api.post<TranslateResponse>("/translate", { text, sourceLang, targetLang });
+}
+
 // ─── Awards ───────────────────────────────────────────────────────────────────
 
 export async function fetchAwards(plant: "bidp" | "jap", employeeNo?: string): Promise<Award[]> {

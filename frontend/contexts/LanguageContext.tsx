@@ -58,7 +58,7 @@ export const translations: Record<string, Record<Language, string>> = {
   "Details of present Method": { kannada: "ಪ್ರಸ್ತುತ ವಿಧಾನದ ವಿವರಗಳು", tamil: "தற்போதைய முறையின் விவரங்கள்", hindi: "वर्तमान विधि का विवरण", telugu: "ప్రస్తుత పద్ధతి వివరాలు" },
   "Details of proposed Method": { kannada: "ಉದ್ದೇಶಿತ ವಿಧಾನದ ವಿವರಗಳು", tamil: "முன்மொழியப்பட்ட முறையின் விவரங்கள்", hindi: "प्रस्तावित विधि का विवरण", telugu: "ప్రతిపాదిత పద్ధతి వివరాలు" },
   "Benefits": { kannada: "ಪ್ರಯೋಜನಗಳು", tamil: "நன்மைகள்", hindi: "लाभ", telugu: "ప్రయోజనాలు" },
-  "Select Approver": { kannada: "ಅನುಮೋದಕ ಆಯ್ಕೆಮಾಡಿ", tamil: "அங்கீகாரி தேர்வு", hindi: "अनुमोदक चुनें", telugu: "ఆమోదకుడిని ఎంచుకోండి" },
+  "Select FLM": { kannada: "FLM ಆಯ್ಕೆಮಾಡಿ", tamil: "FLM தேர்வு", hindi: "FLM चुनें", telugu: "FLM ఎంచుకోండి" },
 
   // ── Shop Floor CIP fields ──
   "Date of Implementation": { kannada: "ಅನುಷ್ಠಾನ ದಿನಾಂಕ", tamil: "செயல்படுத்திய தேதி", hindi: "कार्यान्वयन तिथि", telugu: "అమలు తేదీ" },
@@ -73,13 +73,14 @@ export const translations: Record<string, Record<Language, string>> = {
   "Root Cause": { kannada: "ಮೂಲ ಕಾರಣ", tamil: "மூல காரணம்", hindi: "मूल कारण", telugu: "మూల కారణం" },
   "Idea to Eliminate Root Cause": { kannada: "ಮೂಲ ಕಾರಣ ನಿವಾರಣೆ ಯೋಚನೆ", tamil: "மூல காரணத்தை நீக்கும் யோசனை", hindi: "मूल कारण दूर करने का विचार", telugu: "మూల కారణం తొలగించే ఆలోచన" },
   "Action Taken": { kannada: "ಕ್ರಮ ತೆಗೆದುಕೊಳ್ಳಲಾಗಿದೆ", tamil: "நடவடிக்கை எடுக்கப்பட்டது", hindi: "की गई कार्रवाई", telugu: "తీసుకున్న చర్య" },
-  "Horizontal Deployment Count": { kannada: "ಈ ಸುಧಾರಣೆಯನ್ನು ಎಷ್ಟು ಸ್ಥಳಗಳಲ್ಲಿ ಸಮತಲದಲ್ಲಿ ನಿಯೋಜಿಸಲಾಗಿದೆ", tamil: "கிடைமட்ட பயன்பாட்டு எண்ணிக்கை", hindi: "क्षैतिज तैनाती गिनती", telugu: "క్షితిజ సమాంతర విస్తరణ సంఖ్య" },
+  "Horizontal Deployment Count": { kannada: "ಅಡ್ಡ ನಿಯೋಜನೆ ಸಂಖ್ಯೆ", tamil: "கிடைமட்ட பயன்பாட்டு எண்ணிக்கை", hindi: "क्षैतिज तैनाती गिनती", telugu: "క్షితిజ సమాంతర విస్తరణ సంఖ్య" },
 
   // ── My Idea Card fields ──
   "Description – Idea / Problem": { kannada: "ವಿವರಣೆ – ಐಡಿಯಾ / ಸಮಸ್ಯೆ", tamil: "விளக்கம் – யோசனை / சிக்கல்", hindi: "विवरण – विचार / समस्या", telugu: "వివరణ – ఆలోచన / సమస్య" },
   "Description – Improvement Done": { kannada: "ವಿವರಣೆ – ಸುಧಾರಣೆ ಮಾಡಲಾಗಿದೆ", tamil: "விளக்கம் – மேம்பாடு செய்யப்பட்டது", hindi: "विवरण – सुधार किया गया", telugu: "వివరణ – చేసిన మెరుగుదల" },
 
   // ── Daily CIP fields ──
+  "Workshop": { kannada: "ಕಾರ್ಯಾಗಾರ", tamil: "பட்டறை", hindi: "कार्यशाला", telugu: "వర్క్‌షాప్" },
   "Machine No / Area of Improvement": { kannada: "ಯಂತ್ರ ಸಂ / ಸುಧಾರಣೆ ಪ್ರದೇಶ", tamil: "இயந்திர எண் / மேம்பாட்டு பகுதி", hindi: "मशीन नं / सुधार क्षेत्र", telugu: "మెషిన్ నం / మెరుగుదల ప్రాంతం" },
   "Suggestion Description": { kannada: "ಸಲಹೆ ವಿವರಣೆ", tamil: "பரிந்துரை விளக்கம்", hindi: "सुझाव विवरण", telugu: "సూచన వివరణ" },
   "Photos – Before": { kannada: "ಫೋಟೋಗಳು – ಮೊದಲು", tamil: "புகைப்படங்கள் – முன்", hindi: "फोटो – पहले", telugu: "ఫోటోలు – ముందు" },

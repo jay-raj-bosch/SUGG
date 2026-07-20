@@ -84,7 +84,7 @@ const JaPViewSuggestions = () => {
     const ctx = contextSuggestions.filter(s => s.plantCode === "PLT-02");
     setAllSuggestions(ctx);
     setResults(ctx);
-    apiService.fetchSuggestions("jap", { limit: 2000 }).then(r => {
+    apiService.fetchSuggestions({ plantCode: "jap", limit: 2000 }).then(r => {
       if (r.data?.length) {
         const japOnly = r.data.filter(s => s.plantCode === "PLT-02");
         if (japOnly.length) { setAllSuggestions(japOnly); setResults(japOnly); }
@@ -185,7 +185,7 @@ const JaPViewSuggestions = () => {
     }
 
     try {
-      await apiService.patchSuggestionStatus("jap", selectedSugg.id, patchedFields.status as string);
+      await apiService.patchSuggestionStatus(selectedSugg.id, patchedFields.status as string);
     } catch { /* local fallback */ }
 
     // Merge formData so we preserve statusBeforeHold, etc.

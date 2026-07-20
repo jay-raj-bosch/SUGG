@@ -54,6 +54,12 @@ async function request<T>(
 
   if (!response.ok) {
     const payload = await response.json().catch(() => ({ error: response.statusText }));
+    // A 401 on a request that DID carry a token means the token is invalid/expired.
+    // Clear it immediately so it isn't resent on every subsequent call (which would
+    // otherwise just keep failing with the same "jwt expired" error indefinitely).
+    if (response.status === 401 && token) {
+      clearToken();
+    }
     throw new ApiError(response.status, payload.error ?? "Request failed");
   }
 

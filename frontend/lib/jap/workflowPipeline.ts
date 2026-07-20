@@ -195,7 +195,9 @@ export function buildJapRejectionUpdate(
   rejectorEmpNo: string,
   rejectorName: string,
   reason: string,
-): Partial<Suggestion> {
+  previousStatus: string,
+  existingFormData?: Record<string, unknown>,
+): Partial<Suggestion> & Record<string, unknown> {
   return {
     status: JAP_STATUSES.REJECTED,
     rejectionReason: reason,
@@ -204,20 +206,61 @@ export function buildJapRejectionUpdate(
     rejectedOn: new Date().toISOString().split("T")[0],
     pendingWith: undefined,
     daysPending: undefined,
+    // Remember which phase this was rejected from so a future reopen can
+    // route the suggestion back to the correct phase instead of a dead end.
+    formData: {
+      ...(existingFormData ?? {}),
+      rejectedFromStatus: previousStatus,
+    },
   };
 }
 
 /** Build the suggestion update when a suggestion is reopened */
-export function buildJapReopenUpdate(reopenReason: string): Partial<Suggestion> {
+export function buildJapReopenUpdate(
+  suggestion: Suggestion,
+  reopenReason: string,
+  reopenedByEmpNo: string,
+  reopenedByName: string,
+): Partial<Suggestion> & Record<string, unknown> {
+  const nowIso = new Date().toISOString();
+  const today = nowIso.split("T")[0];
+  const existingFormData = (suggestion.formData ?? {}) as Record<string, unknown>;
+
+  // Route back to whichever phase the suggestion was rejected from. Fall back
+  // to the Opinion phase if that information isn't available (e.g. suggestions
+  // rejected before this tracking was added).
+  const rejectedFromStatus = (existingFormData.rejectedFromStatus as string) || JAP_STATUSES.IN_OPINION;
+  const targetStatus = (STATUS_PENDING_WITH[rejectedFromStatus]
+    ? rejectedFromStatus
+    : JAP_STATUSES.IN_OPINION) as JapStatus;
+
+  const reopenedAuditEntry = {
+    id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    action: "Reopened" as const,
+    performedBy: reopenedByEmpNo,
+    performedByName: reopenedByName,
+    role: "Admin",
+    date: nowIso,
+    fromStatus: JAP_STATUSES.REJECTED,
+    toStatus: targetStatus,
+    comments: reopenReason,
+  };
+
   return {
-    status: JAP_STATUSES.REOPENED,
-    rejectionReason: undefined,
-    pendingWith: undefined,
+    status: targetStatus,
+    pendingWith: STATUS_PENDING_WITH[targetStatus],
     daysPending: 0,
+    // Merge (never replace) so prior feasibility/opinion/implementation/evaluation
+    // audit stamps already stored in formData survive the reopen.
     formData: {
+      ...existingFormData,
       reopenReason,
-      reopenedAt: new Date().toISOString(),
+      reopenedAt: nowIso,
+      reopenedOn: today,
+      reopenedBy: reopenedByEmpNo,
+      reopenedByName: reopenedByName,
     },
+    auditTrail: [...(suggestion.auditTrail ?? []), reopenedAuditEntry],
   };
 }
 

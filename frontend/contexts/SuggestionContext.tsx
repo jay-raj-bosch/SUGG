@@ -6,7 +6,6 @@ import { createContext, useContext, useState, useCallback, useEffect, useMemo, u
 import { Suggestion, AuditEntry, mockSuggestions as initialSuggestions } from "@/lib/mockData";
 import * as apiService from "@/lib/apiService";
 import { usePlant } from "@/contexts/PlantContext";
-import { PLANT_CODE_BIDP, PLANT_SEGMENT_TO_CODE, STORAGE_KEYS } from "@/lib/constants";
 
 interface SuggestionContextType {
   suggestions: Suggestion[];
@@ -29,19 +28,17 @@ interface SuggestionContextType {
 const SuggestionContext = createContext<SuggestionContextType | undefined>(undefined);
 
 // Bump this version whenever mock data structure changes to force a fresh seed.
-const MOCK_DATA_VERSION = "v13";
+const MOCK_DATA_VERSION = "v12";
 
 // ── Stale-cache eviction ─────────────────────────────────────────────────────
-// Scans all suggestion DB cache keys; removes any whose version tag is stale.
+// Scans all bidp_db_ data keys; removes any whose version tag is missing or stale.
 // Runs at module-load time so it triggers on both page load AND Vite HMR.
 (function evictStaleMockCache() {
   try {
-    const prefix = STORAGE_KEYS.SUGGESTION_DB_PREFIX;
-    const versionPrefix = STORAGE_KEYS.SUGGESTION_VERSION_PREFIX;
     Object.keys(sessionStorage)
-      .filter(k => k.startsWith(prefix) && !k.includes("version_"))
+      .filter(k => k.startsWith("bidp_db_") && !k.includes("version_"))
       .forEach(dataKey => {
-        const vk = dataKey.replace(prefix, versionPrefix);
+        const vk = dataKey.replace("bidp_db_", "bidp_db_version_");
         if (sessionStorage.getItem(vk) !== MOCK_DATA_VERSION) {
           sessionStorage.removeItem(dataKey);
           sessionStorage.removeItem(vk);
@@ -66,9 +63,10 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
   // the effect re-runs even under HMR without a full browser refresh.
   const [seedTick, setSeedTick] = useState(() => {
     try {
-      const activePlant = sessionStorage.getItem(STORAGE_KEYS.SELECTED_PLANT);
-      if (!activePlant) return 0;
-      const vk = `${STORAGE_KEYS.SUGGESTION_VERSION_PREFIX}${activePlant}`;
+      // If no version key exists for this plant, data was just evicted → tick
+      const plant = sessionStorage.getItem("selectedPlant");
+      if (!plant) return 0;
+      const vk = `bidp_db_version_${plant}`;
       return sessionStorage.getItem(vk) === MOCK_DATA_VERSION ? 0 : 1;
     } catch { return 0; }
   });
@@ -86,20 +84,20 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
   // Treat sessionStorage as our "database". The FULL suggestions array is
   // saved on every mutation. On load we check sessionStorage first; if present
   // we use that (preserving all approvals/edits). If absent, seed from mock data.
-  const storageKey = plant ? `${STORAGE_KEYS.SUGGESTION_DB_PREFIX}${plant}` : null;
+  const storageKey = plant ? `bidp_db_${plant}` : null;
 
   const persist = useCallback((data: Suggestion[]) => {
     if (!storageKey) return;
     try {
       sessionStorage.setItem(storageKey, JSON.stringify(data));
-      sessionStorage.setItem(`${storageKey.replace(STORAGE_KEYS.SUGGESTION_DB_PREFIX, STORAGE_KEYS.SUGGESTION_VERSION_PREFIX)}`, MOCK_DATA_VERSION);
+      sessionStorage.setItem(`${storageKey.replace("bidp_db_", "bidp_db_version_")}`, MOCK_DATA_VERSION);
     } catch { /* quota */ }
   }, [storageKey]);
 
   /** Re-fetch from backend; falls back to current local state */
   const refreshSuggestions = useCallback(async (): Promise<Suggestion[]> => {
     try {
-      const result = await apiService.fetchSuggestions(plant as "bidp" | "jap", { limit: 2000 });
+      const result = await apiService.fetchSuggestions({ limit: 2000, plantCode: plant ?? undefined });
       if (result.data?.length) {
         setSuggestions(result.data);
         suggestionsRef.current = result.data;
@@ -118,8 +116,8 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
       suggestionsRef.current = [];
       return;
     }
-    const key = `${STORAGE_KEYS.SUGGESTION_DB_PREFIX}${plant}`;
-    const versionKey = `${STORAGE_KEYS.SUGGESTION_VERSION_PREFIX}${plant}`;
+    const key = `bidp_db_${plant}`;
+    const versionKey = `bidp_db_version_${plant}`;
     const savedVersion = sessionStorage.getItem(versionKey);
     const saved = sessionStorage.getItem(key);
     if (saved && savedVersion === MOCK_DATA_VERSION) {
@@ -129,9 +127,9 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
       suggestionsRef.current = restored;
     } else {
       // First visit or mock data updated — seed from fresh mock data
-      const plantKey = PLANT_SEGMENT_TO_CODE[plant] ?? PLANT_CODE_BIDP;
+      const plantKey = plant.toUpperCase().replace("BIDP", "PLT-01").replace("JAP", "PLT-02");
       // Suggestions without plantCode are legacy BidP data → treat as PLT-01
-      const seed = initialSuggestions.filter(s => (s.plantCode || PLANT_CODE_BIDP) === plantKey);
+      const seed = initialSuggestions.filter(s => (s.plantCode || "PLT-01") === plantKey);
       setSuggestions(seed);
       suggestionsRef.current = seed;
       // Persist the seed so all roles share the same state
@@ -142,8 +140,8 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
     }
     // Try backend — if available, overwrite with real data.
     // Only accept the response if it actually contains suggestions for this plant.
-    const expectedPlantCode = PLANT_SEGMENT_TO_CODE[plant] ?? PLANT_CODE_BIDP;
-    apiService.fetchSuggestions(plant as "bidp" | "jap", { limit: 500 })
+    const expectedPlantCode = plant === "jap" ? "PLT-02" : "PLT-01";
+    apiService.fetchSuggestions({ limit: 500, plantCode: plant })
       .then(result => {
         if (result.data.length) {
           // Guard: the JWT user may belong to a different plant, so the backend
@@ -194,7 +192,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
         "Improvement Suggestion": "JAP",
       };
       const typeCode = typeCodeMap[suggestion.type] ?? "SSS";
-      const created = await apiService.createSuggestion(plant as "bidp" | "jap", {
+      const created = await apiService.createSuggestion({
         typeCode,
         subject: suggestion.subject,
         category: suggestion.category,
@@ -210,7 +208,6 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
         benefits: suggestion.benefits,
         assignedFlm: suggestion.assignedFlm,
         approvalLevel: suggestion.approvalLevel,
-        suggestionDepartment: (suggestion as any).suggestionDepartment,
         plantCode: plant,
         ...((suggestion as any).formData ?? {}),
       });
@@ -218,16 +215,8 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
     } catch {
       const id = String(Date.now());
       const prefix = { "Simple Suggestion Scheme": "SSS", "Shop Floor CIP": "SFC", "My Idea Card": "MIC", "Daily CIP": "DCP", "Cash The Flash": "CTF", "Improvement Suggestion": "JAP" }[suggestion.type] ?? "SUG";
-      const yy = String(new Date().getFullYear()).slice(-2);
-      // Extract dept suffix: "BIDP1/TEF" → "TEF"; fallback to "GEN"
-      const rawDept: string = suggestion.department ?? "";
-      const deptSuffix = (rawDept.includes("/") ? rawDept.split("/").pop() : rawDept).trim().toUpperCase() || "GEN";
-      // Sequential number: count existing suggestions with same prefix+dept+year
-      const existingCount = suggestionsRef.current.filter(s =>
-        s.suggestionNo?.startsWith(`${prefix}_${deptSuffix}_${yy}_`)
-      ).length;
-      const seq = String(existingCount + 1).padStart(2, "0");
-      const suggestionNo = suggestion.suggestionNo || `${prefix}_${deptSuffix}_${yy}_${seq}`;
+      const year = new Date().getFullYear();
+      const suggestionNo = suggestion.suggestionNo || `${prefix}-${year}-${String(Math.floor(Math.random() * 999)).padStart(3, "0")}`;
       newEntry = { ...suggestionWithAudit, plantCode: suggestion.plantCode ?? plant ?? "", id, suggestionNo };
     }
     setSuggestions(prev => {
@@ -239,13 +228,8 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
   }, [plant, persist]);
 
   const updateSuggestion = useCallback(async (id: string, updates: Partial<Suggestion>) => {
-    // sessionStorage is our "database" (see persist() above) — the optimistic
-    // local update below is the source of truth for the UI. The backend call
-    // is best-effort sync only: if it fails (backend restarted mid-session,
-    // record not found there, momentarily unreachable, etc.) we keep the local
-    // change instead of rolling back, so an approval/forward action never
-    // fails for the user just because the in-memory backend is out of sync.
-    // This mirrors the resilience already used by addSuggestion().
+    // Snapshot previous state for potential rollback
+    const previous = suggestionsRef.current;
     setSuggestions(prev => {
       const updated = prev.map(s => s.id === id ? { ...s, ...updates } : s);
       suggestionsRef.current = updated;
@@ -253,11 +237,16 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
       return updated;
     });
     try {
-      await apiService.updateSuggestion(plant as "bidp" | "jap", id, updates as Record<string, unknown>);
+      await apiService.updateSuggestion(id, updates as Record<string, unknown>);
     } catch (err) {
-      console.error("[SuggestionContext] updateSuggestion backend sync failed (keeping local change):", err);
+      // Rollback the optimistic update so the UI does not drift from the server
+      console.error("[SuggestionContext] updateSuggestion failed, rolling back:", err);
+      setSuggestions(previous);
+      suggestionsRef.current = previous;
+      persist(previous);
+      throw err;
     }
-  }, [plant, persist]);
+  }, [persist]);
 
   const deleteSuggestion = useCallback((id: string) => {
     setSuggestions(prev => {

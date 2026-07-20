@@ -35,7 +35,7 @@ import {
   rejectReopenRequest, rerouteReopenSlot,
   type ReopenRequest, type ReopenSignSlot,
 } from "@/lib/jap/reopenApprovalStore";
-import { buildJapReopenUpdate } from "@/lib/jap/workflowPipeline";
+import { buildJapReopenUpdate, STATUS_TO_PHASE } from "@/lib/jap/workflowPipeline";
 
 interface ReopenRecord {
   id: string;
@@ -158,16 +158,21 @@ const JaPReopenSuggestion = () => {
       const target = allSuggestions.find(s => s.id === updated.suggestionId || s.suggestionNo === updated.suggNo);
       if (target) {
         const reopenReason = updated.reopenReason || "Reopen approved by signatories";
-        updateSuggestion(target.id, buildJapReopenUpdate(reopenReason));
-        setAllSuggestions(prev =>
-          prev.map(s => s.id === target.id ? { ...s, ...buildJapReopenUpdate(reopenReason) } : s),
-        );
+        const reopenUpdate = buildJapReopenUpdate(target, reopenReason, user.employeeNo, user.name ?? "");
         try {
-          await apiService.patchSuggestionStatus("jap", target.id, "Reopened");
-        } catch { /* local fallback */ }
+          await updateSuggestion(target.id, reopenUpdate);
+          setAllSuggestions(prev =>
+            prev.map(s => s.id === target.id ? { ...s, ...reopenUpdate } : s),
+          );
+          const nextPhaseLabel = STATUS_TO_PHASE[reopenUpdate.status as string] ?? reopenUpdate.status;
+          toast.success(`${updated.suggNo} fully approved and reopened → ${nextPhaseLabel}`);
+          addNotification(`${updated.suggNo} reopen approved and moved to ${nextPhaseLabel}`, "success");
+        } catch {
+          toast.error(`Failed to reopen ${updated.suggNo} — please try again`);
+        }
+      } else {
+        toast.error(`Could not find suggestion ${updated.suggNo} to reopen`);
       }
-      toast.success(`${updated.suggNo} fully approved and reopened`);
-      addNotification(`${updated.suggNo} reopen approved and moved to Reopened`, "success");
     } else {
       toast.success(`Signature recorded for ${updated.suggNo}`);
       addNotification(`Reopen signature added for ${updated.suggNo}`, "info");
@@ -679,9 +684,9 @@ const JaPReopenSuggestion = () => {
                         <span className="font-semibold">Rejection reason: </span>{suggFull.rejectionReason}
                       </div>
                     )}
-                    {suggFull?.description && (
+                    {suggFull?.subject && (
                       <div className="text-xs text-muted-foreground border-t pt-2 mt-1">
-                        <span className="font-semibold text-foreground">Suggestion: </span>{suggFull.description}
+                        <span className="font-semibold text-foreground">Suggestion: </span>{suggFull.subject}
                       </div>
                     )}
                   </div>

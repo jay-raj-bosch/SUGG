@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { translateText as translateViaBackend } from "@/lib/apiService";
 
 declare global {
   interface Window {
@@ -42,15 +43,24 @@ function langCodeToTranslateCode(bcp47: string): string {
 }
 
 /**
- * Translate text to English using Google Translate (unofficial web endpoint)
- * as primary — this uses Google's neural MT engine (same quality as
- * translate.google.com). Falls back to MyMemory API, then to original text.
+ * Translate text to English.
+ * Primary: our backend's /api/translate, which proxies the internal
+ * translation API (credentials stay server-side — see
+ * backend/src/services/translationService.ts). Falls back to Google
+ * Translate's unofficial web endpoint if the backend call fails or the
+ * internal API isn't configured yet, then MyMemory, then the original text.
  */
 async function translateToEnglish(text: string, sourceLang: string): Promise<{ translated: string; didTranslate: boolean }> {
   const src = langCodeToTranslateCode(sourceLang);
   if (src === "en") return { translated: text, didTranslate: false };
 
-  // Primary: Google Translate unofficial API — high accuracy, neural MT
+  // Primary: our backend (internal translation API)
+  try {
+    const result = await translateViaBackend(text, src, "en");
+    if (result.didTranslate) return result;
+  } catch { /* backend unreachable or internal API not yet configured — fall through */ }
+
+  // Fallback: Google Translate unofficial API — high accuracy, neural MT
   try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=en&dt=t&q=${encodeURIComponent(text)}`;
     const res = await fetch(url);

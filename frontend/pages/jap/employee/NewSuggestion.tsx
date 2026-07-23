@@ -227,7 +227,7 @@ const JaPNewSuggestion = () => {
 
   // -- Voice engine ——————————————————————————————————————————————————————————
   const [voiceEnabled,   setVoiceEnabled]   = useState(false);
-  const [voiceLang,      setVoiceLang]      = useState("en-IN");
+  const [voiceLang,      setVoiceLang]      = useState("hi-IN");
   const [showLangPicker, setShowLangPicker] = useState(false);
   const [listeningField, setListeningField] = useState<string | null>(null);
   const listeningFieldRef = useRef<string | null>(null);

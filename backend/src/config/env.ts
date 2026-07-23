@@ -48,7 +48,8 @@ export const env = {
 
   // ── Translation API (Azure Translator Text) ─────────────────────────────
   // Backend-only secrets. Never expose these in frontend code.
-  // Endpoint default supports global Azure Translator deployments.
+  // Endpoint can be custom (e.g. https://openaichatgpt-rbin-bdo.cognitiveservices.azure.com/)
+  // or the default global Azure Translator API.
   AZURE_TRANSLATOR_KEY: process.env.AZURE_TRANSLATOR_KEY || "",
   AZURE_TRANSLATOR_REGION: process.env.AZURE_TRANSLATOR_REGION || "",
   AZURE_TRANSLATOR_ENDPOINT: process.env.AZURE_TRANSLATOR_ENDPOINT || "https://api.cognitive.microsofttranslator.com",

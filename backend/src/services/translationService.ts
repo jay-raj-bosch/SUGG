@@ -30,6 +30,7 @@ function readStringField(record: Record<string, unknown>, key: string): string |
 
 /**
  * Calls Azure Translator Text API.
+ * Supports both standard and custom Azure endpoints.
  * Docs: POST /translate?api-version=3.0&from=hi&to=en
  */
 async function callProviderApi(text: string, sourceLang: string, targetLang: string): Promise<string> {
@@ -40,7 +41,15 @@ async function callProviderApi(text: string, sourceLang: string, targetLang: str
     to: targetLang,
   });
 
-  const res = await fetch(`${base}/translate?${qs.toString()}`, {
+  // Azure Translator supports two common endpoint styles:
+  // 1) Global endpoint: https://api.cognitive.microsofttranslator.com/translate?api-version=3.0
+  // 2) Custom domain:   https://<name>.cognitiveservices.azure.com/translator/text/v3.0/translate
+  const standardUrl = `${base}/translate?${qs.toString()}`;
+  const customDomainUrl = `${base}/translator/text/v3.0/translate?${qs.toString()}`;
+  const primaryUrl = base.includes("api.cognitive.microsofttranslator.com") ? standardUrl : customDomainUrl;
+  const fallbackUrl = base.includes("api.cognitive.microsofttranslator.com") ? customDomainUrl : standardUrl;
+
+  const makeRequest = async (url: string) => fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -50,6 +59,12 @@ async function callProviderApi(text: string, sourceLang: string, targetLang: str
     },
     body: JSON.stringify([{ text }]),
   });
+
+  let res = await makeRequest(primaryUrl);
+  // Some resources return 404 on the wrong style; retry once with alternate path.
+  if (res.status === 404 || res.status === 405) {
+    res = await makeRequest(fallbackUrl);
+  }
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");

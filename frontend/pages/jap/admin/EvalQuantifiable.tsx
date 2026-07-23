@@ -166,7 +166,7 @@ const JaPEvalQuantifiable = () => {
   useEffect(() => {
     const ctx = contextSuggestions.filter(s => s.plantCode === "PLT-02");
     setAllSuggestions(ctx);
-    apiService.fetchSuggestions({ plantCode: "jap", limit: 2000 })
+    apiService.fetchSuggestions("jap", { limit: 2000 })
       .then(r => {
         if (r.data?.length) {
           const japOnly = r.data.filter(s => s.plantCode === "PLT-02");
@@ -268,7 +268,7 @@ const JaPEvalQuantifiable = () => {
         formData: mergedFormData,
       });
       try {
-        await apiService.patchSuggestionStatus(suggestion.id, "In Evaluation");
+        await apiService.patchSuggestionStatus("jap", suggestion.id, "In Evaluation");
       } catch { /* local fallback */ }
       setSubmitted(true);
       toast.success(`Basic evaluation saved — routed to CTG for savings calculation`);
@@ -301,7 +301,7 @@ const JaPEvalQuantifiable = () => {
         formData: mergedFormData,
       });
       try {
-        await apiService.patchSuggestionStatus(suggestion.id, "In Award");
+        await apiService.patchSuggestionStatus("jap", suggestion.id, "In Award");
       } catch { /* local fallback */ }
     }
 

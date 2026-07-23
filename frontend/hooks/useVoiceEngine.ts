@@ -230,16 +230,21 @@ export function useVoiceEngine(
         const capturedSession = sessionRef.current;
 
         if (shouldTranslate) {
+          setStatus({ text: "Translating captured speech to English…", ok: true });
           setOriginalText(trimmed);
           setIsTranslating(true);
           translateToEnglish(trimmed, lang).then(({ translated, didTranslate }) => {
             if (sessionRef.current < capturedSession - 1) return; // stale
             setIsTranslating(false);
             setOriginalText(didTranslate ? trimmed : null);
+            setStatus(didTranslate
+              ? { text: `✓ Translated to English`, ok: true }
+              : { text: "✓ Speech captured", ok: true });
             cbRef.current(translated);
           });
         } else {
           setOriginalText(null);
+          setStatus({ text: "✓ Speech captured", ok: true });
           cbRef.current(trimmed);
         }
       }

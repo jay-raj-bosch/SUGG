@@ -10,7 +10,20 @@
 //   - reopen_audit_log (id, suggestionNo, remark, date)
 //   - notifications (id, userId, message, type, read, timestamp)
 //   - memo_reports (generated views, not a table)
+import { User } from "lucide-react";
 import type { AttachmentItem } from "./attachmentUtils";
+
+// Mock logged-in user data
+export const mockUser = {
+  employeeNo: "30698665",
+  name: "Karthik",
+  department: "BIDP1/TEF",
+  area: "RBIN/BIDP1",
+  plantCode: "PLT-01",
+  role: "employee" as "employee" | "admin",
+  ntid: "karthik",
+  email: "karthik@company.com",
+};
 
 export const suggestionTypes = [
   "Simple Suggestion Scheme",
@@ -81,17 +94,10 @@ export const statusColors: Record<string, string> = {
 };
 
 export interface Suggestion {
-  /**
-   * Unique identifier.
-   * Mock data uses string IDs (e.g. "jap-17").
-   * The .NET backend will return numeric IDs — both are accepted here.
-   */
-  id: string | number;
+  id: string;
   suggestionNo: string;
   subject: string;
   type: string;
-  /** Plant isolation field. Must be "PLT-01" (BidP) or "PLT-02" (JaP). */
-  plantCode?: string;
   category: string;
   status: string;
   date: string;
@@ -104,21 +110,13 @@ export interface Suggestion {
   employeeNo?: string;
   employeeName?: string;
   department?: string;
-  /** The department the suggestion is actually about (may differ from the submitter's own department) */
-  suggestionDepartment?: string;
   range?: string;
   presentMethod?: string;
   proposedMethod?: string;
   benefits?: string;
   attachment?: string;                // legacy single filename or URL
   attachments?: AttachmentItem[];      // uploaded file list (images + docs)
-  /**
-   * Type-specific extended fields stored as a JSON blob.
-   * JaP shape: see JapFormData in frontend/lib/types/formData.ts
-   * BidP shape: see BidpFormData in frontend/lib/types/formData.ts
-   * The .NET backend should store this as a jsonb column and return it as-is.
-   */
-  formData?: Record<string, unknown>;
+  formData?: Record<string, any>;      // full form state for draft editing
   suggestionFor?: string;              // "self" | "others"
   // Rejection metadata
   rejectionReason?: string;
@@ -140,13 +138,6 @@ export interface Suggestion {
   approvedByBpsDh?: string;
   approvedByBpsDhName?: string;
   approvedByBpsDhOn?: string;
-  implementedBy?: string;
-  implementedByName?: string;
-  ctgEvaluatedBy?: string;
-  ctgEvaluatedByName?: string;
-  approvedByVsRc?: string;
-  approvedByVsRcName?: string;
-  approvedByVsRcOn?: string;
   // Send-back history
   sendBackHistory?: Array<{
     from: string;        // level that sent back (e.g. "Manager")
@@ -157,23 +148,6 @@ export interface Suggestion {
     date: string;        // ISO date
     attachments?: Array<{ name: string; type: string; url?: string }>;  // files attached
   }>;
-  // Reroute history — BPS Admin/BPS DH redirecting to a SPECIFIC person at ANY level
-  // (distinct from send-back, which targets a previous LEVEL generically for revision)
-  rerouteHistory?: Array<{
-    fromLevel: string;    // level the reroute was initiated from
-    toLevel: string;      // level rerouted to (e.g. "FLM" | "Manager" | "BPS Admin" | "BPS DH")
-    toEmpNo: string;      // employee no of the specific person rerouted to
-    toName: string;       // name of that person
-    reason: string;
-    date: string;         // ISO date
-    reroutedBy: string;   // emp no of who performed the reroute
-    reroutedByName: string;
-  }>;
-  // The specific person a suggestion is currently rerouted to (if any) — lets
-  // the "my approvals" view surface it to exactly that person even if their
-  // department doesn't match the suggestion's own department.
-  rerouteTargetEmpNo?: string;
-  rerouteTargetName?: string;
   // Reopen metadata
   reopenRemark?: string;               // admin remark when reopening rejected suggestion
   reopenedOn?: string;                 // ISO date
@@ -190,6 +164,7 @@ export interface Suggestion {
   }>;
   originalEmployeeNo?: string;         // original suggestor before first transfer
   originalEmployeeName?: string;
+  plantCode?: string;
   // Audit trail — complete lifecycle log for compliance
   auditTrail?: AuditEntry[];
 }
@@ -197,7 +172,7 @@ export interface Suggestion {
 /** A single audit log entry capturing an action on a suggestion */
 export interface AuditEntry {
   id: string;                          // unique entry id (timestamp-based)
-  action: "Submitted" | "Approved" | "Rejected" | "Sent Back" | "Rerouted" | "Reopened" | "Transferred" | "Closed" | "Evaluated" | "Updated" | "Created";
+  action: "Submitted" | "Approved" | "Rejected" | "Sent Back" | "Reopened" | "Transferred" | "Closed" | "Evaluated" | "Updated" | "Created";
   performedBy: string;                 // employee no
   performedByName: string;             // full name
   performedByDept?: string;            // department
@@ -228,34 +203,6 @@ export const mockEmployees: MockEmployee[] = [
   { employeeNo: "30698702", name: "Anita Sharma", department: "BIDP1/MNT", category: "M&SS", email: "anita.sharma@company.com", ntid: "asharma", plantCode: "PLT-01" },
   { employeeNo: "30698704", name: "Priya Devi", department: "BIDP1/SAF", category: "M&SS", email: "priya.devi@company.com", ntid: "pdevi", plantCode: "PLT-01" },
   { employeeNo: "30698706", name: "Kavitha Nair", department: "BIDP2/QAL", category: "M&SS", email: "kavitha.nair@company.com", ntid: "knair", plantCode: "PLT-01" },
-  { employeeNo: "30698730", name: "Ramesh Iyer", department: "BIDP1/MNT", category: "M&SS", email: "ramesh.iyer@company.com", ntid: "riyer", plantCode: "PLT-01" },
-  { employeeNo: "30698731", name: "Lakshmi Rao", department: "BIDP1/ADM", category: "M&SS", email: "lakshmi.rao@company.com", ntid: "lrao", plantCode: "PLT-01" },
-  { employeeNo: "30698740", name: "Deepak Verma", department: "BIDP1/ADM", category: "M&SS", email: "deepak.verma@company.com", ntid: "dverma", plantCode: "PLT-01" },
-  // Additional manpower — a few regular employees per department
-  { employeeNo: "30698741", name: "Manoj Kumar",    department: "BIDP1/TEF", category: "M&SS", email: "manoj.kumar@company.com",    ntid: "mkumar",    plantCode: "PLT-01" },
-  { employeeNo: "30698742", name: "Divya Reddy",    department: "BIDP1/TEF", category: "M&SS", email: "divya.reddy@company.com",    ntid: "dreddy",    plantCode: "PLT-01" },
-  { employeeNo: "30698743", name: "Arun Prasad",    department: "BIDP2/QAL", category: "M&SS", email: "arun.prasad@company.com",    ntid: "aprasad",   plantCode: "PLT-01" },
-  { employeeNo: "30698744", name: "Meera Krishnan", department: "BIDP2/QAL", category: "M&SS", email: "meera.krishnan@company.com", ntid: "mkrishnan", plantCode: "PLT-01" },
-  { employeeNo: "30698745", name: "Sanjay Gupta",   department: "BIDP1/MNT", category: "M&SS", email: "sanjay.gupta@company.com",   ntid: "sgupta",    plantCode: "PLT-01" },
-  { employeeNo: "30698746", name: "Pooja Mehta",    department: "BIDP1/MNT", category: "M&SS", email: "pooja.mehta@company.com",    ntid: "pmehta",    plantCode: "PLT-01" },
-  { employeeNo: "30698747", name: "Vikas Singh",    department: "BIDP1/SAF", category: "M&SS", email: "vikas.singh@company.com",    ntid: "vsingh",    plantCode: "PLT-01" },
-  { employeeNo: "30698748", name: "Nandini Rao",    department: "BIDP1/SAF", category: "M&SS", email: "nandini.rao@company.com",    ntid: "nrao",      plantCode: "PLT-01" },
-  { employeeNo: "30698749", name: "Rahul Joshi",    department: "BIDP1/HRD", category: "M&SS", email: "rahul.joshi@company.com",    ntid: "rjoshi",    plantCode: "PLT-01" },
-  { employeeNo: "30698750", name: "Swathi Menon",   department: "BIDP1/HRD", category: "M&SS", email: "swathi.menon@company.com",   ntid: "smenon",    plantCode: "PLT-01" },
-  { employeeNo: "30698751", name: "Ashok Pillai",   department: "BIDP1/ADM", category: "M&SS", email: "ashok.pillai@company.com",   ntid: "apillai",   plantCode: "PLT-01" },
-  { employeeNo: "30698752", name: "Geeta Bansal",   department: "BIDP1/ADM", category: "M&SS", email: "geeta.bansal@company.com",   ntid: "gbansal",   plantCode: "PLT-01" },
-  { employeeNo: "30698753", name: "Naveen Kumar",   department: "BIDP3/LOG", category: "M&SS", email: "naveen.kumar@company.com",   ntid: "nkumar",    plantCode: "PLT-01" },
-  { employeeNo: "30698754", name: "Shalini Devi",   department: "BIDP3/LOG", category: "M&SS", email: "shalini.devi@company.com",   ntid: "sdevi",     plantCode: "PLT-01" },
-  { employeeNo: "30698755", name: "Rajiv Menon",    department: "BIDP3/LOG", category: "M&SS", email: "rajiv.menon@company.com",    ntid: "rmenon",    plantCode: "PLT-01" },
-  { employeeNo: "30698756", name: "Abhishek Rao",   department: "BIDP2/RND", category: "M&SS", email: "abhishek.rao@company.com",   ntid: "arao",      plantCode: "PLT-01" },
-  { employeeNo: "30698757", name: "Kavya Iyer",     department: "BIDP2/RND", category: "M&SS", email: "kavya.iyer@company.com",     ntid: "kiyer",     plantCode: "PLT-01" },
-  { employeeNo: "30698758", name: "Siddharth Nair", department: "BIDP2/RND", category: "M&SS", email: "siddharth.nair@company.com", ntid: "snair",     plantCode: "PLT-01" },
-  { employeeNo: "30698759", name: "Neha Kapoor",    department: "BIDP1/FIN", category: "M&SS", email: "neha.kapoor@company.com",    ntid: "nkapoor",   plantCode: "PLT-01" },
-  { employeeNo: "30698760", name: "Vinod Shetty",   department: "BIDP1/FIN", category: "M&SS", email: "vinod.shetty@company.com",   ntid: "vshetty",   plantCode: "PLT-01" },
-  { employeeNo: "30698761", name: "Anjali Verma",   department: "BIDP1/FIN", category: "M&SS", email: "anjali.verma@company.com",   ntid: "averma",    plantCode: "PLT-01" },
-  { employeeNo: "30698762", name: "Rohit Malhotra", department: "BIDP1/ITS", category: "M&SS", email: "rohit.malhotra@company.com", ntid: "rmalhotra", plantCode: "PLT-01" },
-  { employeeNo: "30698763", name: "Sneha Pillai",   department: "BIDP1/ITS", category: "M&SS", email: "sneha.pillai@company.com",   ntid: "spillai",   plantCode: "PLT-01" },
-  { employeeNo: "30698764", name: "Karan Bhatt",    department: "BIDP1/ITS", category: "M&SS", email: "karan.bhatt@company.com",    ntid: "kbhatt",    plantCode: "PLT-01" },
   // ═══ JaP (PLT-02) employees — Jaipur Plant ═══
   { employeeNo: "EMP-10201", name: "Suresh M",      department: "Production",    category: "M&SS", email: "suresh.m@company.com",      ntid: "sureshm",  plantCode: "PLT-02" },
   { employeeNo: "EMP-10202", name: "Ganesh R",      department: "Quality",       category: "M&SS", email: "ganesh.r@company.com",      ntid: "ganeshr",  plantCode: "PLT-02" },

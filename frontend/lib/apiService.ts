@@ -157,11 +157,13 @@ export interface ReportSummary {
  * Standard credential-based login.
  * POST /api/auth/login  →  { token, user }
  * Stores the returned JWT in localStorage["authToken"].
+ * `role` is an optional server-side assertion — omit it to just authenticate
+ * the given employeeNo without requiring a specific coarse role match.
  */
 export async function login(
   employeeNo: string,
   password: string,
-  role: "employee" | "admin"
+  role?: "employee" | "admin"
 ): Promise<LoginResponse> {
   const data = await api.post<LoginResponse>("/auth/login", { employeeNo, password, role });
   setToken(data.token);

@@ -51,7 +51,7 @@ interface AuthContextType {
   user: AuthUser | null;
   /** Demo/fallback only — sets a placeholder role when no real auth is present. */
   setRole: (role: "employee" | "admin") => void;
-  setBidpRole: (bidpRole: BidpRole, userData: Partial<AuthUser>) => void;
+  setBidpRole: (bidpRole: BidpRole, userData: Partial<AuthUser>) => Promise<void>;
   setJapRole: (japRole: JapRole, userData: Partial<AuthUser>) => Promise<void>;
   login: (employeeNo: string, password: string, requiredRole: "employee" | "admin") => Promise<string | null>;
   /** SSO login — pass the access token received from the SSO provider redirect. */
@@ -134,27 +134,47 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const setBidpRole = useCallback((bidpRole: BidpRole, userData: Partial<AuthUser>) => {
+  // Demo password matches backend/src/data/store.ts DEFAULT_HASH for all seeded employees.
+  // Shared by both plants' demo role-select flows to log in as the picked employee so a
+  // real JWT is issued — without it, every authenticated call (category list, approve/
+  // reject, etc.) is silently rejected with 401. For BidP specifically, this fixes the
+  // Category Master dropdown appearing empty for anyone who entered via role-select.
+  const DEMO_PASSWORD = "password123";
+
+  const setBidpRole = useCallback(async (bidpRole: BidpRole, userData: Partial<AuthUser>) => {
     const baseRole = bidpRoleHasAdminAccess(bidpRole) ? "admin" : "employee";
-    sessionStorage.setItem("bidpRole", bidpRole);
-    sessionStorage.setItem("bidpUserData", JSON.stringify(userData));
     // Clear JaP session when entering BidP
     sessionStorage.removeItem("japRole");
     sessionStorage.removeItem("japUserData");
-    setUser(prev => ({
-      ...(prev || { employeeNo: "", name: "", department: "", area: "", plantCode: "", ntid: "", email: "" }),
-      ...userData,
-      role: baseRole,
-      bidpRole,
-      japRole: undefined,
-    } as AuthUser));
-  }, []);
 
-  // Demo password matches backend/src/data/store.ts DEFAULT_HASH for all seeded employees.
-  // JaPRoleSelect uses this to log in as the picked workflow-role employee so a real JWT
-  // is issued — without it, every authenticated write (approve/reject/etc.) is silently
-  // rejected with 401 and rolled back client-side, making the workflow look stuck.
-  const JAP_DEMO_PASSWORD = "password123";
+    let resolvedUser: AuthUser | null = null;
+    if (userData.employeeNo) {
+      try {
+        // No requiredRole filter here — the backend's coarse employee/admin role
+        // field doesn't necessarily match this role tile's hasAdminAccess bucket
+        // (e.g. seed data role vs. frontend module-access classification), and
+        // we only need a valid JWT for this employeeNo, not a role assertion.
+        const res = await apiService.login(userData.employeeNo, DEMO_PASSWORD);
+        resolvedUser = { ...res.user, bidpRole, japRole: undefined };
+      } catch (err) {
+        console.error("[AuthContext] BidP demo login failed — continuing without a JWT (authenticated calls will fail):", err);
+      }
+    }
+
+    if (!resolvedUser) {
+      resolvedUser = {
+        ...(user || { employeeNo: "", name: "", department: "", area: "", plantCode: "", ntid: "", email: "" }),
+        ...userData,
+        role: baseRole,
+        bidpRole,
+        japRole: undefined,
+      } as AuthUser;
+    }
+
+    sessionStorage.setItem("bidpRole", bidpRole);
+    sessionStorage.setItem("bidpUserData", JSON.stringify(resolvedUser));
+    setUser(resolvedUser);
+  }, [user]);
 
   const setJapRole = useCallback(async (japRole: JapRole, userData: Partial<AuthUser>) => {
     const baseRole = japRole === "employee" ? "employee" : "admin";
@@ -165,7 +185,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let resolvedUser: AuthUser | null = null;
     if (userData.employeeNo) {
       try {
-        const res = await apiService.login(userData.employeeNo, JAP_DEMO_PASSWORD, baseRole);
+        const res = await apiService.login(userData.employeeNo, DEMO_PASSWORD, baseRole);
         resolvedUser = { ...res.user, japRole, bidpRole: undefined };
       } catch (err) {
         console.error("[AuthContext] JaP demo login failed — continuing without a JWT (writes will fail):", err);

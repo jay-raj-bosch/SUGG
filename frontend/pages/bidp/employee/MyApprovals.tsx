@@ -120,8 +120,8 @@ const MyApprovals = () => {
     { id: 113, plant_code: "PLT-01", employee_no: "30698702", name: "Anita Sharma", department: "BIDP1/MNT", role: "Manager", type: "Internal" },
     { id: 114, plant_code: "PLT-01", employee_no: "30698720", name: "Vijay Sharma", department: "BIDP1/ADM", role: "BPS Admin", type: "Internal" },
     { id: 115, plant_code: "PLT-01", employee_no: "30698704", name: "Priya Devi", department: "BIDP1/SAF", role: "BPS DH", type: "Internal" },
-    { id: 116, plant_code: "PLT-01", employee_no: "30698750", name: "Rajesh Kumar", department: "BIDP1/FIN", role: "CTG", type: "Internal" },
-    { id: 117, plant_code: "PLT-01", employee_no: "30698751", name: "Venkat Rao", department: "BIDP1/TEF", role: "Implementation", type: "Internal" },
+    { id: 119, plant_code: "PLT-01", employee_no: "30698749", name: "Rahul Joshi", department: "BIDP1/HRD", role: "Implementation", type: "Internal" },
+    { id: 120, plant_code: "PLT-01", employee_no: "30698752", name: "Geeta Bansal", department: "BIDP1/ADM", role: "CTG", type: "Internal" },
     { id: 118, plant_code: "PLT-01", employee_no: "30698740", name: "Deepak Verma", department: "BIDP1/ADM", role: "VS RC", type: "Internal" },
   ];
   const [sssApprovers, setSssApprovers] = useState<apiService.AuthorityAssignment[]>(FALLBACK_AUTHORITY);
@@ -392,7 +392,7 @@ const MyApprovals = () => {
   };
 
   const handleApprove = async () => {
-    if (!selected || !user || !currentLevel) {
+    if (!selected || !user) {
       toast.error("You do not have an approval role configured");
       return;
     }
@@ -402,12 +402,18 @@ const MyApprovals = () => {
     const isSFC = selected.type === "Shop Floor CIP";
     const isCTF = selected.type === "Cash The Flash";
     // CTF self-implementation: the suggester handles their own Pending Implementation step
-    // Any non-BPS role (including "employee") can be the implementer
+    // Any non-BPS role (including "employee") can be the implementer — these users have
+    // no bidpRole approval level (currentLevel is null), so they must be exempted below.
     const isSelfImpl = isCTF &&
       selected.status === "Pending Implementation" &&
       selected.employeeNo === user.employeeNo &&
       user.bidpRole !== "bps_admin" &&
       user.bidpRole !== "bps_dh";
+
+    if (!currentLevel && !isSelfImpl) {
+      toast.error("You do not have an approval role configured");
+      return;
+    }
 
     // For SSS FLM: use the calculated evaluation amount
     let amount: number;
@@ -2657,7 +2663,7 @@ const MyApprovals = () => {
                   size="sm"
                   className="gap-1.5 h-9 ml-auto"
                   onClick={handleApprove}
-                  disabled={!currentLevel || !canApprove}
+                  disabled={!canApprove}
                   title={!canApprove ? "Fill all required fields to enable" : undefined}>
                   <Send className="h-3.5 w-3.5" />
                   {currentLevel === "FLM" ? "Evaluate & Forward" : "Approve & Forward"}

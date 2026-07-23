@@ -96,8 +96,9 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
 
   /** Re-fetch from backend; falls back to current local state */
   const refreshSuggestions = useCallback(async (): Promise<Suggestion[]> => {
+    if (!plant) return suggestionsRef.current;
     try {
-      const result = await apiService.fetchSuggestions({ limit: 2000, plantCode: plant ?? undefined });
+      const result = await apiService.fetchSuggestions(plant, { limit: 2000 });
       if (result.data?.length) {
         setSuggestions(result.data);
         suggestionsRef.current = result.data;
@@ -141,7 +142,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
     // Try backend — if available, overwrite with real data.
     // Only accept the response if it actually contains suggestions for this plant.
     const expectedPlantCode = plant === "jap" ? "PLT-02" : "PLT-01";
-    apiService.fetchSuggestions({ limit: 500, plantCode: plant })
+    apiService.fetchSuggestions(plant, { limit: 500 })
       .then(result => {
         if (result.data.length) {
           // Guard: the JWT user may belong to a different plant, so the backend
@@ -192,7 +193,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
         "Improvement Suggestion": "JAP",
       };
       const typeCode = typeCodeMap[suggestion.type] ?? "SSS";
-      const created = await apiService.createSuggestion({
+      const created = await apiService.createSuggestion((plant ?? "bidp") as "bidp" | "jap", {
         typeCode,
         subject: suggestion.subject,
         category: suggestion.category,
@@ -237,7 +238,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
       return updated;
     });
     try {
-      await apiService.updateSuggestion(id, updates as Record<string, unknown>);
+      await apiService.updateSuggestion((plant ?? "bidp") as "bidp" | "jap", id, updates as Record<string, unknown>);
     } catch (err) {
       // Rollback the optimistic update so the UI does not drift from the server
       console.error("[SuggestionContext] updateSuggestion failed, rolling back:", err);

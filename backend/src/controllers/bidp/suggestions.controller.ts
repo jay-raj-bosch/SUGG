@@ -77,7 +77,6 @@ export const createSuggestion = asyncHandler(async (req: Request, res: Response)
     // choose which FLM to submit to during the suggestion form.
     assignedFlm: body.assignedFlm,
     approvalLevel: body.approvalLevel,
-    suggestionDepartment: body.suggestionDepartment,
   });
   res.status(201).json(created);
 });

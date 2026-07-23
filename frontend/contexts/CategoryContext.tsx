@@ -41,20 +41,19 @@ export const CategoryProvider = ({ children }: { children: ReactNode }) => {
   const { plant } = usePlant();
   const [categories, setCategories] = useState<string[]>(() => restore() || []);
 
-  /** Fetch from backend and apply on success. Returns whether it succeeded. */
+  /**
+   * Fetch from backend and apply on success. Returns whether it succeeded.
+   * Always OVERWRITES local state with the backend's list — the dropdown must
+   * stay a true mirror of the BPS admin's Category Master, never a merge with
+   * stale/local-only names left over from a previous failed sync.
+   */
   const fetchAndApply = useCallback(async (): Promise<boolean> => {
     if (!plant) return false;
     try {
       const cats = await apiService.fetchCategories(plant as "bidp" | "jap");
-      const names = cats.map(c => c.name);
-      // Merge: keep any session-only categories that the backend doesn't know about
-      const saved = restore() || [];
-      const backendSet = new Set(names);
-      const merged = [...names, ...saved.filter(s => !backendSet.has(s))];
-      // Deduplicate
-      const unique = Array.from(new Set(merged));
-      setCategories(unique);
-      persist(unique);
+      const names = Array.from(new Set(cats.map(c => c.name)));
+      setCategories(names);
+      persist(names);
       return true;
     } catch {
       return false;

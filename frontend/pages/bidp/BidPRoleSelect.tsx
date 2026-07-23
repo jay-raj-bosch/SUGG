@@ -49,12 +49,12 @@ const BidPRoleSelect = () => {
   const [leaving, setLeaving] = useState(false);
   const [selected, setSelected] = useState<BidpRole | null>(null);
 
-  const handleSelect = (option: RoleOption) => {
+  const handleSelect = async (option: RoleOption) => {
     if (leaving) return;
     setSelected(option.role);
     setLeaving(true);
 
-    setBidpRole(option.role, {
+    await setBidpRole(option.role, {
       employeeNo: option.employeeNo,
       name: option.name,
       department: option.department,

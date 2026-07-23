@@ -28,7 +28,7 @@ export const bidpEmployees: SeedEmployee[] = [
   { employee_no: "30698665", name: "Karthik",      department: "BIDP1/TEF", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "karthik",  email: "karthik@company.com",       is_active: true },
   { employee_no: "30698701", name: "Suresh Patil", department: "BIDP2/QAL", area: "RBIN/BIDP2", plant_code: "PLT-01", role: "employee", ntid: "spatil",   email: "suresh.patil@company.com",  is_active: true },
   { employee_no: "30698702", name: "Anita Sharma", department: "BIDP1/MNT", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "asharma",  email: "anita.sharma@company.com",  is_active: true },
-  { employee_no: "30698704", name: "Priya Devi",   department: "BIDP1/SAF", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "pdevi",    email: "priya.devi@company.com",    is_active: true },
+  { employee_no: "30698704", name: "Priya Devi",   department: "BIDP1/SAF", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "admin",    ntid: "pdevi",    email: "priya.devi@company.com",    is_active: true },
   { employee_no: "30698706", name: "Kavitha Nair", department: "BIDP2/QAL", area: "RBIN/BIDP3", plant_code: "PLT-01", role: "employee", ntid: "knair",    email: "kavitha.nair@company.com",  is_active: true },
   // FLM / BPS authority employees
   { employee_no: "30698710", name: "Suresh M",     department: "BIDP1/TEF", area: "RBIN/BIDP1", plant_code: "PLT-01", role: "employee", ntid: "ssuresh",  email: "suresh@company.com",        is_active: true },

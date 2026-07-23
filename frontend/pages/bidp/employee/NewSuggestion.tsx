@@ -802,13 +802,18 @@ const NewSuggestion = () => {
                     }`}>
                       {/* Animated icon */}
                       <div className={`relative h-7 w-7 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 ${
-                        voiceEngine.isListening ? "bg-rose-500 shadow-sm shadow-rose-500/30"
+                        voiceEngine.isTranslating ? "bg-violet-500 shadow-sm shadow-violet-500/30"
+                          : voiceEngine.isListening ? "bg-rose-500 shadow-sm shadow-rose-500/30"
                           : voiceEngine.status?.ok ? "bg-emerald-500/15" : "bg-primary/10"
                       }`}>
-                        {voiceEngine.isListening && (
-                          <span className="absolute inset-0 rounded-full animate-ping pointer-events-none bg-rose-400/30" />
+                        {(voiceEngine.isListening || voiceEngine.isTranslating) && (
+                          <span className={`absolute inset-0 rounded-full animate-ping pointer-events-none ${
+                            voiceEngine.isTranslating ? "bg-violet-400/30" : "bg-rose-400/30"
+                          }`} />
                         )}
-                        {voiceEngine.isListening
+                        {voiceEngine.isTranslating
+                          ? <span className="text-white text-[10px] font-bold relative z-10">AI</span>
+                          : voiceEngine.isListening
                           ? <Mic className="h-3.5 w-3.5 text-white relative z-10" />
                           : voiceEngine.status?.ok
                             ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
@@ -817,7 +822,16 @@ const NewSuggestion = () => {
                       </div>
                       {/* Status text */}
                       <div className="flex-1 min-w-0">
-                        {voiceEngine.isListening ? (
+                        {voiceEngine.isTranslating ? (
+                          <p className="font-semibold text-violet-600 truncate">
+                            Translating captured speech to English…
+                            {voiceEngine.originalText && (
+                              <span className="block text-[10px] font-normal text-muted-foreground/70 mt-0.5 italic truncate">
+                                "{voiceEngine.originalText}"
+                              </span>
+                            )}
+                          </p>
+                        ) : voiceEngine.isListening ? (
                           <p className="font-semibold text-foreground truncate">
                             Listening&nbsp;&mdash;&nbsp;
                             <span className="text-rose-500 font-bold">{ALL_VOICE_FIELD_LOOKUP[listeningField ?? ""]?.label ?? listeningField}</span>

@@ -59,7 +59,7 @@ const KioskLogin = () => {
       // If API login fails, fall back to demo credentials
       const demoEmp = DEMO_EMPLOYEES.find(e => e.empNo === emp);
       if (demoEmp && password === DEMO_PASSWORD) {
-        setBidpRole("employee", {
+        await setBidpRole("employee", {
           employeeNo: demoEmp.empNo,
           name: demoEmp.name,
           department: demoEmp.dept,
@@ -77,7 +77,7 @@ const KioskLogin = () => {
       // Network/server down — try offline demo fallback
       const demoEmp = DEMO_EMPLOYEES.find(e => e.empNo === emp);
       if (demoEmp && password === DEMO_PASSWORD) {
-        setBidpRole("employee", {
+        await setBidpRole("employee", {
           employeeNo: demoEmp.empNo,
           name: demoEmp.name,
           department: demoEmp.dept,

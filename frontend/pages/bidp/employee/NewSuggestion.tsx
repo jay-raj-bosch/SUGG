@@ -12,14 +12,14 @@ import { suggestionTypes, categories } from "@/lib/mockData";
 import { schemaMap } from "@/lib/bidp/suggestionSchemas";
 import { flmOptions, moderatorOptions, kaizenThemes } from "@/lib/bidp/suggestionConstants";
 import SuggestionCombobox from "@/components/SuggestionCombobox";
-import { useVoiceEngine } from "@/hooks/useVoiceEngine";
+import { useVoiceEngine, VOICE_LANGUAGES } from "@/hooks/useVoiceEngine";
 import VoiceHighlight from "@/components/VoiceHighlight";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useDeptMappings } from "@/contexts/DeptMappingContext";
 import { toast } from "sonner";
-import { Save, Send, FileText, RotateCcw, Upload, X, Info, Paperclip, Mic, MicOff, CheckCircle2 } from "lucide-react";
+import { Save, Send, FileText, RotateCcw, Upload, X, Info, Paperclip, Mic, MicOff, CheckCircle2, Languages } from "lucide-react";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { ZodError } from "zod";
 
@@ -251,6 +251,7 @@ const NewSuggestion = () => {
 
   // ── Per-field voice controller ─────────────────────────────────────────
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceLang, setVoiceLang] = useState("en-IN");
   const [listeningField, setListeningField] = useState<string | null>(null);
   const listeningFieldRef = useRef<string | null>(null);
   const suggestionTypeRef = useRef(suggestionType);
@@ -349,7 +350,11 @@ const NewSuggestion = () => {
     listeningFieldRef.current = null;
   }, []);
 
-  const voiceEngine = useVoiceEngine(handleVoiceResult, { voiceLang: "en-IN", autoTranslate: false }, handleListeningStopped);
+  const voiceEngine = useVoiceEngine(
+    handleVoiceResult,
+    { voiceLang, autoTranslate: true, translationProvider: "web", translationFallbackProvider: null },
+    handleListeningStopped,
+  );
 
   const startVoiceForField = (key: string) => {
     if (!voiceEnabled) return;
@@ -378,6 +383,7 @@ const NewSuggestion = () => {
   const voiceMode = voiceEnabled && !!VOICE_FIELDS_MAP[suggestionType];
   const activeVoiceField = voiceEngine.isListening ? listeningField : null;
   const onActivateVoice = startVoiceForField;
+  const isNonEnglish = !voiceLang.startsWith("en");
   const [teamMembers, setTeamMembers] = useState<string[]>(saved.teamMembers || []);
   const [teamMemberShares, setTeamMemberShares] = useState<Record<string, string>>(saved.teamMemberShares || {});
   const [sameAsMyDepartment, setSameAsMyDepartment] = useState(saved.sameAsMyDepartment ?? true);
@@ -790,6 +796,28 @@ const NewSuggestion = () => {
               {!!VOICE_FIELDS_MAP[suggestionType] && voiceEngine.supported && (
                 voiceEnabled ? (
                   <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-muted-foreground">Voice language:</span>
+                      <Select value={voiceLang} onValueChange={setVoiceLang}>
+                        <SelectTrigger className="h-8 w-[220px] text-xs">
+                          <SelectValue placeholder="Select language" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {VOICE_LANGUAGES.map(lang => (
+                            <SelectItem key={lang.code} value={lang.code}>
+                              {lang.flag} {lang.label} {lang.nativeName !== lang.label ? `(${lang.nativeName})` : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {isNonEnglish && (
+                        <span className="flex items-center gap-1 text-[10px] font-medium text-violet-600 bg-violet-500/[0.08] border border-violet-400/20 px-2 py-1 rounded-lg">
+                          <Languages className="h-3 w-3" />
+                          Web translate to English enabled
+                        </span>
+                      )}
+                    </div>
+
                     {/* ── Main status bar ── */}
                     <div className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-xs transition-all duration-300 ${
                       voiceEngine.isListening

@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { login, getMe } from "../controllers/auth.controller";
 import { listNotifications, createNotification, markRead, markAllRead } from "../controllers/notifications.controller";
-import { translate } from "../controllers/translate.controller";
 import { authenticate } from "../middleware/auth";
 import { rateLimit } from "../middleware/rateLimiter";
 import bidpRouter from "./bidp";
@@ -12,10 +11,6 @@ const router = Router();
 // ── Auth (shared — cross-plant) ───────────────────────────────────────────────
 router.post("/auth/login", rateLimit(5, 15 * 60 * 1000), login);
 router.get("/auth/me", authenticate, getMe);
-
-// ── Translation (shared — voice capture on both plants) ──────────────────────
-// Rate-limited since each call may hit a paid third-party API.
-router.post("/translate", authenticate, rateLimit(60, 5 * 60 * 1000), translate);
 
 // ── Notifications (shared — user-scoped, not plant-scoped) ───────────────────
 router.get("/notifications", authenticate, listNotifications);

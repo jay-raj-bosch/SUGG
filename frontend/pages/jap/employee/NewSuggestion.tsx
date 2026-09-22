@@ -226,21 +226,12 @@ const JaPNewSuggestion = () => {
   const superiors = authorities.filter(a => a.role === "BPS" || a.role === "Admin");
 
   // -- Voice engine ——————————————————————————————————————————————————————————
+  // JaP always captures Hindi speech and translates it to English via Azure —
+  // no language picker here (unlike BidP, which supports multiple languages).
   const [voiceEnabled,   setVoiceEnabled]   = useState(false);
-  const [voiceLang,      setVoiceLang]      = useState("hi-IN");
-  const [showLangPicker, setShowLangPicker] = useState(false);
+  const voiceLang = "hi-IN";
   const [listeningField, setListeningField] = useState<string | null>(null);
   const listeningFieldRef = useRef<string | null>(null);
-  const langPickerRef     = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (langPickerRef.current && !langPickerRef.current.contains(e.target as Node))
-        setShowLangPicker(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
 
   const currentLangOption = VOICE_LANGUAGES.find(l => l.code === voiceLang) ?? VOICE_LANGUAGES[0];
   const isNonEnglish = !voiceLang.startsWith("en");
@@ -268,7 +259,16 @@ const JaPNewSuggestion = () => {
     listeningFieldRef.current = null;
   }, []);
 
-  const voiceEngine = useVoiceEngine(handleVoiceResult, { voiceLang, autoTranslate: true }, handleListeningStopped);
+  const voiceEngine = useVoiceEngine(
+    handleVoiceResult,
+    {
+      voiceLang,
+      autoTranslate: true,
+      translationProvider: "azure",
+      translationFallbackProvider: null,
+    },
+    handleListeningStopped,
+  );
 
   const startVoiceForField = (key: string) => {
     if (!voiceEnabled) return;
@@ -632,53 +632,12 @@ const JaPNewSuggestion = () => {
             </div>
           ) : voiceEnabled ? (
             <div className="space-y-2">
-              {/* Language picker row */}
+              {/* Fixed language badge — JaP is always Hindi speech → Azure English translation */}
               <div className="flex flex-wrap items-center gap-2">
-                <div className="relative" ref={langPickerRef}>
-                  <button
-                    type="button"
-                    onClick={() => setShowLangPicker(v => !v)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border/50 bg-background hover:bg-muted/50 text-xs font-medium transition-colors"
-                  >
-                    <span>{currentLangOption.flag}</span>
-                    <span>{currentLangOption.label}</span>
-                    <Languages className="h-3 w-3 text-muted-foreground ml-0.5" />
-                  </button>
-                  {showLangPicker && (
-                    <div className="absolute top-full left-0 mt-1 z-50 w-52 bg-popover border border-border rounded-xl shadow-lg py-1 overflow-hidden">
-                      {VOICE_LANGUAGES.map(lang => (
-                        <button
-                          key={lang.code}
-                          type="button"
-                          onClick={() => { setVoiceLang(lang.code); setShowLangPicker(false); }}
-                          className="w-full flex items-center justify-between px-3 py-1.5 text-xs hover:bg-muted/60 transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span>{lang.flag}</span>
-                            <span className="font-medium">{lang.label}</span>
-                            {lang.nativeName !== lang.label && (
-                              <span className="text-muted-foreground/60">{lang.nativeName}</span>
-                            )}
-                          </div>
-                          {voiceLang === lang.code && <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />}
-                        </button>
-                      ))}
-                      {isNonEnglish && (
-                        <div className="px-3 py-1.5 mt-1 border-t border-border/50">
-                          <p className="text-[10px] text-violet-500 flex items-center gap-1">
-                            <Languages className="h-3 w-3" /> Auto-translates to English
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                {isNonEnglish && (
-                  <span className="flex items-center gap-1 text-[10px] font-medium text-violet-600 bg-violet-500/[0.08] border border-violet-400/20 px-2 py-1 rounded-lg">
-                    <Languages className="h-3 w-3" />
-                    Speak in {currentLangOption.nativeName} — auto-translates to English
-                  </span>
-                )}
+                <span className="flex items-center gap-1 text-[10px] font-medium text-violet-600 bg-violet-500/[0.08] border border-violet-400/20 px-2 py-1 rounded-lg">
+                  <Languages className="h-3 w-3" />
+                  Speak in {currentLangOption.nativeName} — auto-translates to English (Azure)
+                </span>
               </div>
 
               {/* Status bar */}

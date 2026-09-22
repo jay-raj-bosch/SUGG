@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { translateText as translateViaBackend } from "@/lib/apiService";
+import { FrontendTranslationProvider, translateInFrontend } from "@/lib/frontendTranslationService";
 
 declare global {
   interface Window {
@@ -43,40 +43,17 @@ function langCodeToTranslateCode(bcp47: string): string {
 }
 
 /**
- * Translate text to English.
- * Primary: our backend's /api/translate, which proxies the internal
- * translation API (credentials stay server-side — see
- * backend/src/services/translationService.ts). Falls back to Google
- * Translate's unofficial web endpoint if the backend call fails or the
- * internal API isn't configured yet, then MyMemory, then the original text.
+ * Translate text to English using frontend providers.
  */
-async function translateToEnglish(text: string, sourceLang: string): Promise<{ translated: string; didTranslate: boolean }> {
+async function translateToEnglish(
+  text: string,
+  sourceLang: string,
+  provider: FrontendTranslationProvider,
+  fallbackProvider: FrontendTranslationProvider | null,
+): Promise<{ translated: string; didTranslate: boolean; failed?: boolean }> {
   const src = langCodeToTranslateCode(sourceLang);
   if (src === "en") return { translated: text, didTranslate: false };
-
-  // Primary: our backend (internal translation API)
-  try {
-    const result = await translateViaBackend(text, src, "en");
-    if (result.didTranslate) return result;
-  } catch { /* backend unreachable or internal API not yet configured — fall through */ }
-
-  // Fallback: Google Translate unofficial API — high accuracy, neural MT
-  try {
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${src}&tl=en&dt=t&q=${encodeURIComponent(text)}`;
-    const res = await fetch(url);
-    if (res.ok) {
-      const data = await res.json();
-      // Response: [[[ "translated" , "original" , ...], ...], ...]
-      if (data && Array.isArray(data[0])) {
-        const translated = data[0].map((seg: any) => seg[0]).join("");
-        if (translated && translated.trim().toLowerCase() !== text.trim().toLowerCase()) {
-          return { translated: translated.trim(), didTranslate: true };
-        }
-      }
-    }
-  } catch { /* translation failed */ }
-
-  return { translated: text, didTranslate: false };
+  return translateInFrontend(text, src, "en", provider, fallbackProvider);
 }
 
 export interface VoiceEngineOptions {
@@ -84,6 +61,10 @@ export interface VoiceEngineOptions {
   voiceLang?: string;
   /** Whether to auto-translate non-English speech to English (default: true) */
   autoTranslate?: boolean;
+  /** Translation provider to use from frontend */
+  translationProvider?: FrontendTranslationProvider;
+  /** Optional fallback provider when primary fails. null disables fallback. */
+  translationFallbackProvider?: FrontendTranslationProvider | null;
 }
 
 /**
@@ -98,7 +79,12 @@ export function useVoiceEngine(
   options: VoiceEngineOptions = {},
   onListeningStopped?: () => void,
 ) {
-  const { voiceLang = "en-US", autoTranslate = true } = options;
+  const {
+    voiceLang = "en-US",
+    autoTranslate = true,
+    translationProvider = "web",
+    translationFallbackProvider = "web",
+  } = options;
 
   const [supported,      setSupported]      = useState(false);
   const [isListening,    setIsListening]    = useState(false);
@@ -114,6 +100,8 @@ export function useVoiceEngine(
   const onStopRef    = useRef(onListeningStopped);
   const langRef      = useRef(voiceLang);
   const translateRef = useRef(autoTranslate);
+  const providerRef = useRef(translationProvider);
+  const fallbackProviderRef = useRef(translationFallbackProvider);
   /** Tracks whether a final result was delivered in this session */
   const gotResultRef = useRef(false);
 
@@ -121,6 +109,8 @@ export function useVoiceEngine(
   useEffect(() => { onStopRef.current = onListeningStopped; }, [onListeningStopped]);
   useEffect(() => { langRef.current = voiceLang; }, [voiceLang]);
   useEffect(() => { translateRef.current = autoTranslate; }, [autoTranslate]);
+  useEffect(() => { providerRef.current = translationProvider; }, [translationProvider]);
+  useEffect(() => { fallbackProviderRef.current = translationFallbackProvider; }, [translationFallbackProvider]);
 
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -233,13 +223,15 @@ export function useVoiceEngine(
           setStatus({ text: "Translating captured speech to English…", ok: true });
           setOriginalText(trimmed);
           setIsTranslating(true);
-          translateToEnglish(trimmed, lang).then(({ translated, didTranslate }) => {
+          translateToEnglish(trimmed, lang, providerRef.current, fallbackProviderRef.current).then(({ translated, didTranslate, failed }) => {
             if (sessionRef.current < capturedSession - 1) return; // stale
             setIsTranslating(false);
             setOriginalText(didTranslate ? trimmed : null);
-            setStatus(didTranslate
-              ? { text: `✓ Translated to English`, ok: true }
-              : { text: "✓ Speech captured", ok: true });
+            setStatus(failed
+              ? { text: "⚠ Translation unavailable (network/key issue) — showing original text", ok: false }
+              : didTranslate
+                ? { text: `✓ Translated to English`, ok: true }
+                : { text: "✓ Speech captured", ok: true });
             cbRef.current(translated);
           });
         } else {

@@ -26,5 +26,9 @@ dist-ssr
 
 # Build artifacts
 dist.zip
+*.zip
 bun.lock
 bun.lockb
+
+# Local environment configuration
+.env

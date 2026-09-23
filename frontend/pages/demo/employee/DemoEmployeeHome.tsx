@@ -12,6 +12,9 @@ import {
   Star,
   IndianRupee,
   XCircle,
+  Sliders,
+  Layers,
+  Building2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +27,7 @@ import {
   STATUS_TO_PHASE,
 } from "@/lib/jap/workflowPipeline";
 import { usePlant } from "@/contexts/PlantContext";
+import { getDemoSelection, DEMO_PLANTS_CONFIG } from "@/lib/demoConfig";
 
 const ACTIVE_STATUSES = [
   JAP_STATUSES.PENDING_FEASIBILITY,
@@ -38,6 +42,8 @@ const DemoEmployeeHome = () => {
   const { user } = useAuth();
   const { suggestions } = useSuggestions();
   const { plantPrefix } = usePlant();
+  const demoSelection = getDemoSelection();
+  const activePlantConfig = demoSelection?.plant ? DEMO_PLANTS_CONFIG[demoSelection.plant] : null;
 
   const mySuggestions = useMemo(
     () =>
@@ -99,14 +105,38 @@ const DemoEmployeeHome = () => {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-          <MapPin className="h-5 w-5 text-primary" />
-          Demo Plant — Employee Portal
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          डेमो संयंत्र — कर्मचारी पोर्टल · Welcome, {user?.name ?? "Alex Morgan"}
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-primary" />
+            Demo Application — Employee Portal
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            डेमो एप्लिकेशन — कर्मचारी पोर्टल · Welcome, {user?.name ?? "Alex Morgan"}
+          </p>
+        </div>
+
+        {/* Active Environment configuration chip with switch link */}
+        <div className="flex items-center gap-2 bg-muted/60 border rounded-lg px-3 py-1.5 self-start sm:self-auto">
+          <div className="text-xs">
+            <span className="text-muted-foreground text-[10px] block">Active Scheme / Plant</span>
+            <div className="flex items-center gap-1.5 font-medium">
+              <Building2 className="h-3 w-3 text-primary" />
+              <span>{demoSelection?.plant ?? "JaP"}</span>
+              <span className="text-muted-foreground">·</span>
+              <Layers className="h-3 w-3 text-indigo-500" />
+              <span className="capitalize">{demoSelection?.scheme ?? "suggestion"}</span>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[11px] gap-1 ml-1"
+            onClick={() => navigate("/demo/setup")}
+          >
+            <Sliders className="h-3 w-3" /> Change
+          </Button>
+        </div>
       </div>
 
       {/* Quick action */}

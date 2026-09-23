@@ -1,6 +1,6 @@
-// Demo Plant — New Suggestion (Employee)
-// Exact clone of Jaipur Plant's rich suggestion module tailored for Demo Plant.
-import { useState, useEffect, useRef, useCallback } from "react";
+// Demo Application — New Suggestion (Employee)
+// Implements plant & scheme customized line items (5 through 22).
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -21,8 +21,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { useSuggestions } from "@/contexts/SuggestionContext";
 import { usePlant } from "@/contexts/PlantContext";
-import * as apiService from "@/lib/apiService";
-import type { AuthorityAssignment } from "@/lib/apiService";
 import { useVoiceEngine, VOICE_LANGUAGES } from "@/hooks/useVoiceEngine";
 import VoiceHighlight from "@/components/VoiceHighlight";
 import { toast } from "sonner";
@@ -30,96 +28,240 @@ import DuplicateAlertDialog from "@/components/bidp/DuplicateAlertDialog";
 import { detectDuplicatesFull, type DuplicateMatch, type PendingMatch } from "@/lib/bidp/duplicateDetector";
 import { registerPending, unregisterPending, getActivePending, createPendingId, clearExpiredPending } from "@/lib/bidp/pendingSubmissionsStore";
 import {
-  FilePlus, User, Building2, Wrench, Lightbulb, CheckCircle2,
-  Hash, Tag, Users, RefreshCw, Mic, MicOff, Languages, X, Search, UserPlus, Save,
-  Paperclip, ImageIcon, FileText as FileTextIcon, Trash2,
+  FilePlus,
+  User,
+  Building2,
+  Wrench,
+  Lightbulb,
+  CheckCircle2,
+  Hash,
+  Tag,
+  Users,
+  Mic,
+  MicOff,
+  Languages,
+  X,
+  Search,
+  UserPlus,
+  Save,
+  Paperclip,
+  Upload,
+  Calendar,
+  Layers,
+  MapPin,
+  Check,
+  FileText,
+  Sliders,
+  Sparkles,
 } from "lucide-react";
 import { teamMemberOptions } from "@/lib/jap/suggestionConstants";
 import { getInputMethodSettings } from "@/lib/jap/inputMethodStore";
+import { getDemoSelection, type DemoPlantKey } from "@/lib/demoConfig";
+import { mockEmployees } from "@/lib/mockData";
 
-// -- Theme masters — identical to Jaipur plant theme catalog ——————————————
-const DEMO_THEMES = [
-  { value: "safety",           label: "Safety Improvement",           labelHi: "सुरक्षा सुधार" },
-  { value: "quality",          label: "Quality Enhancement",          labelHi: "गुणवत्ता सुधार" },
-  { value: "cost",             label: "Cost Reduction",               labelHi: "लागत कटौती" },
-  { value: "productivity",     label: "Productivity Improvement",     labelHi: "उत्पादकता सुधार" },
-  { value: "energy",           label: "Energy Conservation",          labelHi: "ऊर्जा संरक्षण" },
-  { value: "5s",               label: "5S & Workplace Organization",  labelHi: "5S एवं कार्यस्थल व्यवस्था" },
-  { value: "environment",      label: "Environment & Sustainability", labelHi: "पर्यावरण एवं स्थिरता" },
-  { value: "delivery",         label: "Delivery & Logistics",         labelHi: "डिलीवरी एवं लॉजिस्टिक्स" },
-  { value: "customer",         label: "Customer Satisfaction",        labelHi: "ग्राहक संतुष्टि" },
-  { value: "innovation",       label: "Innovation & Technology",      labelHi: "नवाचार एवं प्रौद्योगिकी" },
-  { value: "skill",            label: "Skill Development",            labelHi: "कौशल विकास" },
-  { value: "kaizen",           label: "Kaizen",                       labelHi: "कैज़न" },
-  { value: "standardization",  label: "Standardization",              labelHi: "मानकीकरण" },
-  { value: "power_saving",     label: "Power Saving",                 labelHi: "बिजली बचत" },
-  { value: "motion_waste",     label: "Motion Waste",                 labelHi: "गति अपव्यय" },
-  { value: "time_saving",      label: "Time Saving",                  labelHi: "समय बचत" },
-];
-
+// ── Item 10: Demo manufacturing areas / operations ─────────────────────────────
 const DEMO_AREAS = [
-  "Pilot Assembly",
-  "Quality Testing Lab",
-  "Component Audit",
-  "Barrier Audit",
-  "Cleanroom Stage",
-  "Machining Cell 1",
-  "Machining Cell 2",
-  "Automation & Robotics",
-  "Packaging & Dispatch",
-  "Subassembly Line",
-  "Tool & Die Room",
-  "Maintenance Shop",
-  "Additive Manufacturing",
-  "Inspection Booth",
+  "Assembly Line 1 - Final Inspection",
+  "Assembly Line 2 - Main Chassis",
+  "Press Shop - Stamping & Blanking",
+  "Machine Shop - CNC Machining Cell 03",
+  "Paint & Surface Treatment Booth",
+  "Robotic Welding Bay 4",
+  "Packaging & End-of-Line Dispatch",
+  "Quality Control Lab & Metrology",
+  "Maintenance & Tool Room",
 ];
 
-// Fallback authorities if API returns empty
-const FALLBACK_AUTHORITIES: AuthorityAssignment[] = [
-  { id: 901, plant_code: "PLT-03", employee_no: "DEMO-2001", name: "Sarah Jenkins", role: "FLM", department: "Quality & Safety" },
-  { id: 902, plant_code: "PLT-03", employee_no: "DEMO-3001", name: "David Chen", role: "BPS", department: "Operations" },
-];
-
-// Voice field keys
-const VOICE_FIELDS = ["presentMethod", "proposedMethod", "benefits"] as const;
-type VoiceFieldKey = (typeof VOICE_FIELDS)[number];
-
-const VOICE_FIELD_LABELS: Record<VoiceFieldKey, string> = {
-  presentMethod:  "Present Method",
-  proposedMethod: "Proposed Method",
-  benefits:       "Expected Benefits",
+// ── Item 22: Auto-mapped Area Specific Planner based on Area ───────────────────
+const AREA_PLANNER_MAP: Record<
+  string,
+  { name: string; empNo: string; department: string; designation: string }
+> = {
+  "Assembly Line 1 - Final Inspection": {
+    name: "Rajesh Kumar",
+    empNo: "PLN-101",
+    department: "Assembly Operations",
+    designation: "Area Planner - Final Line",
+  },
+  "Assembly Line 2 - Main Chassis": {
+    name: "Sunil Verma",
+    empNo: "PLN-102",
+    department: "Assembly Operations",
+    designation: "Area Planner - Chassis Assembly",
+  },
+  "Press Shop - Stamping & Blanking": {
+    name: "Anil Sharma",
+    empNo: "PLN-103",
+    department: "Press & Stamping",
+    designation: "Area Planner - Press Shop",
+  },
+  "Machine Shop - CNC Machining Cell 03": {
+    name: "Vikram Patel",
+    empNo: "PLN-104",
+    department: "Machining Division",
+    designation: "Area Planner - CNC Machining",
+  },
+  "Paint & Surface Treatment Booth": {
+    name: "Priya Nair",
+    empNo: "PLN-105",
+    department: "Paint & Surface Finishing",
+    designation: "Area Planner - Paint Shop",
+  },
+  "Robotic Welding Bay 4": {
+    name: "Deepak Joshi",
+    empNo: "PLN-106",
+    department: "Welding & Body Shop",
+    designation: "Area Planner - Welding Bay",
+  },
+  "Packaging & End-of-Line Dispatch": {
+    name: "Kavita Rao",
+    empNo: "PLN-107",
+    department: "Packaging & Logistics",
+    designation: "Area Planner - Dispatch & Packing",
+  },
+  "Quality Control Lab & Metrology": {
+    name: "Meera Iyer",
+    empNo: "PLN-108",
+    department: "Quality Assurance",
+    designation: "Area Planner - QA & Metrology",
+  },
+  "Maintenance & Tool Room": {
+    name: "Harish Gowda",
+    empNo: "PLN-109",
+    department: "Plant Maintenance",
+    designation: "Area Planner - Tool Room",
+  },
 };
 
-type MachineRefType = "name" | "number" | "na";
+// ── Item 21: Auto-populated Superior Details based on Department ───────────────
+const DEPT_SUPERIOR_MAP: Record<
+  string,
+  { name: string; empNo: string; department: string; designation: string }
+> = {
+  "Innovation & Ops": {
+    name: "David Chen",
+    empNo: "SUP-201",
+    department: "Innovation & Ops",
+    designation: "Head of Operations & Innovation",
+  },
+  Manufacturing: {
+    name: "Ramesh Kulkarni",
+    empNo: "SUP-202",
+    department: "Manufacturing",
+    designation: "General Manager - Production",
+  },
+  "Quality Assurance": {
+    name: "Sunita Deshmukh",
+    empNo: "SUP-203",
+    department: "Quality Assurance",
+    designation: "Head of Quality & Compliance",
+  },
+  Assembly: {
+    name: "Arun Swaminathan",
+    empNo: "SUP-204",
+    department: "Assembly Operations",
+    designation: "Production Head - Assembly",
+  },
+  "Plant Maintenance": {
+    name: "K. Narayanan",
+    empNo: "SUP-205",
+    department: "Plant Maintenance",
+    designation: "Chief Plant Engineer",
+  },
+  default: {
+    name: "David Chen",
+    empNo: "SUP-201",
+    department: "Plant Leadership",
+    designation: "Reporting Manager / HOD",
+  },
+};
 
-function generateSuggNo(): string {
+// ── Item 15: Categories ────────────────────────────────────────────────────────
+const CATEGORY_OPTIONS = [
+  { value: "Safety Improvement", label: "Safety Improvement", labelHi: "सुरक्षा सुधार" },
+  { value: "Quality Enhancement", label: "Quality Enhancement", labelHi: "गुणवत्ता सुधार" },
+  { value: "Cost Reduction", label: "Cost Reduction", labelHi: "लागत कटौती" },
+  { value: "Productivity Improvement", label: "Productivity Improvement", labelHi: "उत्पादकता सुधार" },
+  { value: "5S & Workplace Organization", label: "5S & Workplace Organization", labelHi: "5S एवं कार्यस्थल व्यवस्था" },
+  { value: "Environment & Sustainability", label: "Environment & Sustainability", labelHi: "पर्यावरण एवं संधारणीयता" },
+  { value: "Energy Conservation", label: "Energy Conservation", labelHi: "ऊर्जा संरक्षण" },
+  { value: "Ergonomics & Work Ease", label: "Ergonomics & Work Ease", labelHi: "सुगमता एवं सहजता" },
+];
+
+// ── Item 16: Campaign / Theme Master Options ──────────────────────────────────
+const THEME_OPTIONS = [
+  { value: "safety_month", label: "Safety Month Campaign", labelHi: "सुरक्षा माह अभियान" },
+  { value: "zero_defect", label: "Zero Defect Mission", labelHi: "शून्य दोष मिशन" },
+  { value: "cost_optimization", label: "Cost Optimization Drive", labelHi: "लागत अनुकूलन अभियान" },
+  { value: "energy_saving", label: "Energy Conservation Sprint", labelHi: "ऊर्जा बचत अभियान" },
+  { value: "5s_blitz", label: "5S Kaizen Blitz", labelHi: "5S कैज़न अभियान" },
+  { value: "productivity_boost", label: "Productivity Acceleration", labelHi: "उत्पादकता वृद्धि अभियान" },
+  { value: "ergonomics_care", label: "Operator Ergonomics Care", labelHi: "कार्य सुगमता अभियान" },
+];
+
+type MachineRefType = "name" | "number" | "na";
+type VoiceFieldKey = "subject" | "presentMethod" | "proposedMethod" | "benefits";
+
+const VOICE_FIELD_LABELS: Record<VoiceFieldKey, string> = {
+  subject: "Subject",
+  presentMethod: "Present Method",
+  proposedMethod: "Proposed Method",
+  benefits: "Expected Benefits",
+};
+
+function generateSuggNo(plant: string): string {
   const year = new Date().getFullYear();
   const rand = String(Math.floor(100 + Math.random() * 900));
-  return `DEMO-${year}-${rand}`;
+  return `${plant.toUpperCase()}-${year}-${rand}`;
 }
 
 interface FormErrors {
+  subject?: string;
   presentMethod?: string;
   proposedMethod?: string;
   benefits?: string;
   machineRef?: string;
   themeName?: string;
+  implementationDate?: string;
+  suggestionArea?: string;
+  category?: string;
+  mainSuggestor?: string;
 }
 
-// -- Read-only labelled field helper —————————————————————————————————————————
+interface FileUploadItem {
+  name: string;
+  size: number;
+  type: string;
+  dataUrl?: string;
+}
+
+// ── Read-only labelled field helper ───────────────────────────────────────────
 const ReadonlyField = ({
-  icon: Icon, label, labelHi, value,
+  icon: Icon,
+  label,
+  labelHi,
+  value,
+  badge,
 }: {
-  icon: React.ElementType; label: string; labelHi: string; value: string;
+  icon: React.ElementType;
+  label: string;
+  labelHi?: string;
+  value: string;
+  badge?: string;
 }) => (
-  <div className="flex items-center gap-3 px-3 py-2.5 border-b last:border-0">
+  <div className="flex items-center gap-2.5 py-2 px-3 bg-muted/30 rounded-lg border text-xs">
     <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
     <div className="flex-1 min-w-0">
-      <p className="text-[10px] text-muted-foreground">
-        {label} <span className="opacity-60">/ {labelHi}</span>
-      </p>
-      <p className="text-sm font-medium text-foreground">{value || "—"}</p>
+      <span className="text-[10px] text-muted-foreground block leading-tight">
+        {label} {labelHi && <span className="opacity-70 font-normal">/ {labelHi}</span>}
+      </span>
+      <span className="font-medium text-foreground truncate block">{value || "—"}</span>
     </div>
+    {badge && (
+      <Badge variant="outline" className="text-[10px] text-muted-foreground shrink-0">
+        {badge}
+      </Badge>
+    )}
   </div>
 );
 
@@ -131,246 +273,345 @@ const DemoNewSuggestion = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
+  // Active configuration (Plant & Scheme)
+  const demoSelection = getDemoSelection();
+  const activePlant: DemoPlantKey = (demoSelection?.plant as DemoPlantKey) || "JaP";
+  const activeScheme = (demoSelection?.scheme || "suggestion").toLowerCase();
+
+  const isKaizenScheme = activeScheme.includes("kaizen");
+  const isNaP = activePlant === "NaP";
+  const isJaP = activePlant === "JaP";
+
+  // Item 13 condition:
+  // JaP: Shown and required only when Scheme = "Kaizen"
+  // BidP & NaP: Visible and applicable across all categories/schemes
+  const showImplementationDate = isJaP ? isKaizenScheme : true;
+
   // BPS input method control
   const inputMethodSettings = getInputMethodSettings();
 
   // If we have ?draft=<id>, load that draft for editing
   const draftId = searchParams.get("draft");
   const draftSuggestion = draftId
-    ? suggestions.find(s => s.id === draftId && s.status === "Draft")
+    ? suggestions.find((s) => s.id === draftId && s.status === "Draft")
     : null;
 
-  const [suggNo] = useState(() => draftSuggestion?.suggestionNo ?? generateSuggNo());
+  // ── Item 5: Sugg No. (Auto generated by default) ───────────────────────────
+  const [suggNo] = useState(() => draftSuggestion?.suggestionNo ?? generateSuggNo(activePlant));
 
-  // -- Core form fields (pre-fill from draft data if editing) ————————————————
-  const [presentMethod,  setPresentMethod]  = useState(draftSuggestion?.presentMethod ?? "");
-  const [proposedMethod, setProposedMethod] = useState(draftSuggestion?.proposedMethod ?? "");
-  const [benefits,       setBenefits]       = useState(draftSuggestion?.benefits ?? "");
+  // ── Item 12: Suggestion Date (Auto populated current date) ─────────────────
+  const today = useMemo(() => new Date().toISOString().split("T")[0], []);
 
-  // Machine reference
-  const [machineRefType,  setMachineRefType]  = useState<MachineRefType>(
-    (draftSuggestion?.formData as any)?.machineRefType ?? "na",
+  // ── Item 6: Self or On Behalf of others ─────────────────────────────────────
+  const [suggestionFor, setSuggestionFor] = useState<"self" | "behalf">(
+    (draftSuggestion?.formData as any)?.suggestionFor ?? "self"
+  );
+  const [selectedOnBehalfEmpNo, setSelectedOnBehalfEmpNo] = useState<string>(
+    (draftSuggestion?.formData as any)?.onBehalfEmpNo ?? ""
+  );
+  const [onBehalfSearch, setOnBehalfSearch] = useState("");
+
+  // Resolve suggestor based on suggestionFor
+  const selectedBehalfEmployee = useMemo(
+    () => mockEmployees.find((e) => e.employeeNo === selectedOnBehalfEmpNo),
+    [selectedOnBehalfEmpNo]
+  );
+
+  // ── Item 20: Suggestor details (auto-fetched) ──────────────────────────────
+  const suggestorName =
+    suggestionFor === "behalf" && selectedBehalfEmployee
+      ? selectedBehalfEmployee.name
+      : user?.name ?? "Alex Morgan";
+
+  const suggestorEmpNo =
+    suggestionFor === "behalf" && selectedBehalfEmployee
+      ? selectedBehalfEmployee.employeeNo
+      : user?.employeeNo ?? "DEMO-1001";
+
+  const suggestorDept =
+    suggestionFor === "behalf" && selectedBehalfEmployee
+      ? selectedBehalfEmployee.department
+      : user?.department ?? "Innovation & Ops";
+
+  const suggestorCategory =
+    suggestionFor === "behalf" && selectedBehalfEmployee
+      ? selectedBehalfEmployee.category ?? "Management & Staff (M&SS)"
+      : "Management & Staff (M&SS)";
+
+  const suggestorMobile =
+    suggestionFor === "behalf" && selectedBehalfEmployee
+      ? (selectedBehalfEmployee as any).mobile ?? "+91 98765 43210"
+      : "+91 98765 43210";
+
+  // ── Item 7: Suggestion Subject (clean text box, no AI) ──────────────────────
+  const [subject, setSubject] = useState(
+    draftSuggestion?.subject ?? (draftSuggestion?.formData as any)?.subject ?? ""
+  );
+
+  // ── Item 8: Machine No. (JaP style: Name, Number, N/A) ──────────────────────
+  const [machineRefType, setMachineRefType] = useState<MachineRefType>(
+    (draftSuggestion?.formData as any)?.machineRefType ?? "na"
   );
   const [machineRefValue, setMachineRefValue] = useState(
     (draftSuggestion?.formData as any)?.machineRefType === "na"
       ? ""
-      : ((draftSuggestion?.formData as any)?.machineRef ?? "").replace(/^(Name|No\.): /, ""),
+      : ((draftSuggestion?.formData as any)?.machineRef ?? "").replace(/^(Name|No\.): /, "")
   );
 
-  // Theme
-  const [themeBased, setThemeBased] = useState(
-    !!(draftSuggestion?.formData as any)?.themeBased,
-  );
-  const [themeName, setThemeName] = useState(() => {
-    const tn = (draftSuggestion?.formData as any)?.themeName;
-    if (!tn) return "";
-    return DEMO_THEMES.find(t => t.label === tn)?.value ?? "";
-  });
-
-  // Suggestion area
-  const [suggestionArea, setSuggestionArea] = useState(
-    (draftSuggestion?.formData as any)?.suggestionArea ?? "",
+  // ── Item 9: Component / Tool No. (JaP style) ───────────────────────────────
+  const [componentToolNo, setComponentToolNo] = useState(
+    (draftSuggestion?.formData as any)?.componentToolNo ?? ""
   );
 
-  // Co-suggestors
+  // ── Item 10: Suggestion Area / Operation (Demo dropdown) ───────────────────
+  const [suggestionArea, setSuggestionArea] = useState<string>(
+    (draftSuggestion?.formData as any)?.suggestionArea ?? "Assembly Line 1 - Final Inspection"
+  );
+
+  // ── Item 11: Workshop / Dept. Name (Auto fetch) ────────────────────────────
+  // Auto-derived from suggestor's department
+  const workshopDeptName = suggestorDept;
+
+  // ── Item 13: Idea Implementation Date ──────────────────────────────────────
+  const [implementationDate, setImplementationDate] = useState<string>(
+    (draftSuggestion?.formData as any)?.implementationDate ?? ""
+  );
+
+  // ── Item 15: Suggestion Category (Dropdown) ────────────────────────────────
+  const [category, setCategory] = useState<string>(
+    draftSuggestion?.category ?? "Productivity Improvement"
+  );
+
+  // ── Item 16: Theme / Campaign-based Idea ───────────────────────────────────
+  const [themeBased, setThemeBased] = useState<"yes" | "no">(
+    (draftSuggestion?.formData as any)?.themeBased ? "yes" : "no"
+  );
+  const [themeName, setThemeName] = useState<string>(
+    (draftSuggestion?.formData as any)?.themeName ?? ""
+  );
+
+  // ── Item 17 & 18: Present Method & Proposed Method ─────────────────────────
+  const [presentMethod, setPresentMethod] = useState(draftSuggestion?.presentMethod ?? "");
+  const [proposedMethod, setProposedMethod] = useState(draftSuggestion?.proposedMethod ?? "");
+
+  // NaP Dual Mode: Write vs Upload
+  const [presentInputMode, setPresentInputMode] = useState<"write" | "upload">("write");
+  const [proposedInputMode, setProposedInputMode] = useState<"write" | "upload">("write");
+  const [presentMethodFiles, setPresentMethodFiles] = useState<FileUploadItem[]>(
+    (draftSuggestion?.formData as any)?.presentMethodFiles ?? []
+  );
+  const [proposedMethodFiles, setProposedMethodFiles] = useState<FileUploadItem[]>(
+    (draftSuggestion?.formData as any)?.proposedMethodFiles ?? []
+  );
+
+  // ── Item 19: Advantages / Benefits ─────────────────────────────────────────
+  const [benefits, setBenefits] = useState(draftSuggestion?.benefits ?? "");
+
+  // ── Item 21: Superior Details (Auto populated) ─────────────────────────────
+  const superiorDetails = useMemo(() => {
+    return DEPT_SUPERIOR_MAP[suggestorDept] || DEPT_SUPERIOR_MAP.default;
+  }, [suggestorDept]);
+
+  // ── Item 22: Area Specific Planner Details (Auto mapped from Item 10 Area) ─
+  const plannerDetails = useMemo(() => {
+    if (!suggestionArea) return null;
+    return AREA_PLANNER_MAP[suggestionArea] || null;
+  }, [suggestionArea]);
+
+  // Co-suggestors / Team members
   const [isGroupSuggestion, setIsGroupSuggestion] = useState(
-    !!(draftSuggestion?.formData as any)?.isGroupSuggestion,
+    !!(draftSuggestion?.formData as any)?.isGroupSuggestion
   );
   const [coSuggestors, setCoSuggestors] = useState<string[]>(
-    ((draftSuggestion?.formData as any)?.coSuggestors ?? []).map((c: any) => c.empNo ?? c),
+    ((draftSuggestion?.formData as any)?.coSuggestors ?? []).map((c: any) => c.empNo ?? c)
   );
   const [coSuggestorSearch, setCoSuggestorSearch] = useState("");
 
-  // Attachments (photos/documents)
-  interface Attachment { name: string; type: string; size: number; dataUrl: string }
-  const [attachments, setAttachments] = useState<Attachment[]>(() => {
-    return (draftSuggestion?.formData as any)?.attachments ?? [];
-  });
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // General attachments
+  const [attachments, setAttachments] = useState<FileUploadItem[]>(
+    (draftSuggestion?.formData as any)?.attachments ?? []
+  );
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Form errors
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
+
+  // Duplicate detection state
+  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatch[]>([]);
+  const [pendingMatchList, setPendingMatchList] = useState<PendingMatch[]>([]);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const pendingIdRef = useRef<string | null>(null);
+  const pendingSubmitRef = useRef(false);
+
+  // Voice engine
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [listeningField, setListeningField] = useState<VoiceFieldKey | null>(null);
+  const listeningFieldRef = useRef<VoiceFieldKey | null>(null);
+
+  const handleVoiceResult = useCallback((text: string) => {
+    const key = listeningFieldRef.current;
+    if (!key) return;
+    if (key === "subject") setSubject((prev) => (prev ? `${prev} ${text}` : text));
+    else if (key === "presentMethod") setPresentMethod((prev) => (prev ? `${prev} ${text}` : text));
+    else if (key === "proposedMethod") setProposedMethod((prev) => (prev ? `${prev} ${text}` : text));
+    else if (key === "benefits") setBenefits((prev) => (prev ? `${prev} ${text}` : text));
+    setErrors((err) => ({ ...err, [key]: undefined }));
+  }, []);
+
+  const voiceEngine = useVoiceEngine({
+    lang: "hi-IN",
+    onResult: handleVoiceResult,
+    enableTranslation: true,
+  });
+
+  const startVoiceForField = (field: VoiceFieldKey) => {
+    if (!inputMethodSettings.voiceEnabled) return;
+    if (listeningField === field && voiceEngine.isListening) {
+      voiceEngine.stopListening();
+      setListeningField(null);
+      listeningFieldRef.current = null;
+      return;
+    }
+    setListeningField(field);
+    listeningFieldRef.current = field;
+    voiceEngine.startListening();
+  };
+
+  const disableVoice = () => {
+    voiceEngine.stopListening();
+    setListeningField(null);
+    listeningFieldRef.current = null;
+    setVoiceEnabled(false);
+  };
+
+  // Helper file uploader
+  const handleSingleFileUpload = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setter: React.Dispatch<React.SetStateAction<FileUploadItem[]>>
+  ) => {
     const files = e.target.files;
-    if (!files) return;
-    Array.from(files).forEach(file => {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error(`${file.name} exceeds 5 MB limit`);
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach((file) => {
+      if (file.size > 8 * 1024 * 1024) {
+        toast.error(`${file.name} exceeds 8MB limit`);
         return;
       }
       const reader = new FileReader();
       reader.onload = () => {
-        setAttachments(prev => [...prev, {
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          dataUrl: reader.result as string,
-        }]);
+        setter((prev) => [
+          ...prev,
+          {
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            dataUrl: reader.result as string,
+          },
+        ]);
+        toast.success(`Attached ${file.name}`);
       };
       reader.readAsDataURL(file);
     });
     e.target.value = "";
   };
 
-  const removeAttachment = (idx: number) => setAttachments(prev => prev.filter((_, i) => i !== idx));
-
-  // -- Authority data ————————————————————————————————————————————————————————
-  const [authorities, setAuthorities] = useState<AuthorityAssignment[]>(FALLBACK_AUTHORITIES);
-  useEffect(() => {
-    apiService.fetchAuthority("demo").then(res => {
-      if (res && res.length > 0) {
-        setAuthorities(res);
-      }
-    }).catch(() => {
-      // keep fallback
-    });
-  }, []);
-  const planners  = authorities.filter(a => a.role === "FLM");
-  const superiors = authorities.filter(a => a.role === "BPS" || a.role === "Admin");
-
-  // -- Voice engine ——————————————————————————————————————————————————————————
-  const [voiceEnabled,   setVoiceEnabled]   = useState(false);
-  const voiceLang = "hi-IN";
-  const [listeningField, setListeningField] = useState<string | null>(null);
-  const listeningFieldRef = useRef<string | null>(null);
-
-  const currentLangOption = VOICE_LANGUAGES.find(l => l.code === voiceLang) ?? VOICE_LANGUAGES[0];
-  const isNonEnglish = !voiceLang.startsWith("en");
-
-  const fieldSetters: Record<VoiceFieldKey, React.Dispatch<React.SetStateAction<string>>> = {
-    presentMethod:  setPresentMethod,
-    proposedMethod: setProposedMethod,
-    benefits:       setBenefits,
-  };
-
-  const handleVoiceResult = useCallback((text: string) => {
-    const key = listeningFieldRef.current as VoiceFieldKey | null;
-    if (!key || !(key in fieldSetters)) return;
-    fieldSetters[key](prev => prev ? `${prev} ${text}` : text);
-    setErrors(err => ({ ...err, [key]: undefined }));
-    voiceEngine.setStatus({ text: `✓ ${VOICE_FIELD_LABELS[key] ?? key} filled`, ok: true });
-    voiceEngine.stopListening();
-    setListeningField(null);
-    listeningFieldRef.current = null;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleListeningStopped = useCallback(() => {
-    setListeningField(null);
-    listeningFieldRef.current = null;
-  }, []);
-
-  const voiceEngine = useVoiceEngine(
-    handleVoiceResult,
-    {
-      voiceLang,
-      autoTranslate: true,
-      translationProvider: "azure",
-      translationFallbackProvider: null,
-    },
-    handleListeningStopped,
-  );
-
-  const startVoiceForField = (key: string) => {
-    if (!voiceEnabled) return;
-    if (voiceEngine.isListening) {
-      voiceEngine.stopListening();
-      if (listeningFieldRef.current === key) {
-        setListeningField(null);
-        listeningFieldRef.current = null;
-        return;
-      }
-    }
-    listeningFieldRef.current = key;
-    setListeningField(key);
-    voiceEngine.setStatus(null);
-    voiceEngine.startListening();
-  };
-
-  const disableVoice = () => {
-    voiceEngine.stopListening();
-    setVoiceEnabled(false);
-    setListeningField(null);
-    listeningFieldRef.current = null;
-    voiceEngine.setStatus(null);
-  };
-
-  const activeVoiceField = (voiceEngine.isListening || voiceEngine.isTranslating) ? listeningField : null;
-
-  // -- Validation & submission ————————————————————————————————————————————————
-  const [errors, setErrors] = useState<FormErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [draftSaved, setDraftSaved] = useState(false);
-  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatch[]>([]);
-  const [pendingMatchList, setPendingMatchList] = useState<PendingMatch[]>([]);
-  const [showDuplicateAlert, setShowDuplicateAlert] = useState(false);
-  const pendingSubmitRef = useRef(false);
-  const pendingIdRef = useRef<string | null>(null);
-
-  // Keep pending-submission registry clean for live conflict detection
-  useEffect(() => {
-    clearExpiredPending();
-    return () => {
-      if (pendingIdRef.current) {
-        unregisterPending(pendingIdRef.current);
-        pendingIdRef.current = null;
-      }
-    };
-  }, []);
-
+  // Validation
   const validate = (): boolean => {
-    const e: FormErrors = {};
-    if (!presentMethod.trim())  e.presentMethod  = "Present method is required / वर्तमान विधि अनिवार्य है";
-    if (!proposedMethod.trim()) e.proposedMethod = "Proposed method is required / प्रस्तावित विधि अनिवार्य है";
-    if (!benefits.trim())       e.benefits       = "Expected benefits are required / अपेक्षित लाभ अनिवार्य हैं";
-    if (machineRefType !== "na" && !machineRefValue.trim())
-      e.machineRef = "Please enter the machine name / number";
-    if (themeBased && !themeName)
-      e.themeName = "Please select a theme / कृपया विषय-वस्तु चुनें";
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    const errs: FormErrors = {};
+
+    if (!subject.trim()) {
+      errs.subject = "Suggestion subject is required / विषय आवश्यक है";
+    }
+
+    if (suggestionFor === "behalf" && !selectedOnBehalfEmpNo) {
+      errs.mainSuggestor = "Please select an employee / कर्मचारी चुनें";
+    }
+
+    // Present method check
+    if (isNaP && presentInputMode === "upload") {
+      if (presentMethodFiles.length === 0 && !presentMethod.trim()) {
+        errs.presentMethod = "Please upload a document or enter text for present method";
+      }
+    } else if (!presentMethod.trim()) {
+      errs.presentMethod = "Present method is required / वर्तमान विधि आवश्यक है";
+    }
+
+    // Proposed method check
+    if (isNaP && proposedInputMode === "upload") {
+      if (proposedMethodFiles.length === 0 && !proposedMethod.trim()) {
+        errs.proposedMethod = "Please upload a document or enter text for proposed method";
+      }
+    } else if (!proposedMethod.trim()) {
+      errs.proposedMethod = "Proposed method is required / प्रस्तावित विधि आवश्यक है";
+    }
+
+    if (!benefits.trim()) {
+      errs.benefits = "Expected benefits are required / अपेक्षित लाभ आवश्यक है";
+    }
+
+    if (themeBased === "yes" && !themeName) {
+      errs.themeName = "Please select a theme / विषय-वस्तु चुनें";
+    }
+
+    if (showImplementationDate && isKaizenScheme && isJaP && !implementationDate) {
+      errs.implementationDate = "Implementation date is mandatory for Kaizen / कैज़न के लिए आवश्यक है";
+    }
+
+    if (!suggestionArea) {
+      errs.suggestionArea = "Please select suggestion area / क्षेत्र चुनें";
+    }
+
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
-  /** Build the common payload used by both save-draft and submit */
-  const buildPayload = (status: string, pendingWith?: string) => {
-    const selectedTheme = DEMO_THEMES.find(t => t.value === themeName);
-    const machineRef = machineRefType === "na"
-      ? "N/A"
-      : `${machineRefType === "name" ? "Name" : "No."}: ${machineRefValue}`;
+  const buildPayload = (status: string) => {
     return {
       suggestionNo: suggNo,
-      subject: proposedMethod.slice(0, 120) || presentMethod.slice(0, 120) || "Untitled Draft",
-      type: "Improvement Suggestion" as const,
-      category: selectedTheme ? selectedTheme.label : "General",
+      type: isKaizenScheme ? "Kaizen" : "Improvement Suggestion",
+      category,
+      subject: subject.trim() || "Untitled Suggestion",
       status,
-      date: new Date().toISOString().slice(0, 10),
-      pendingWith,
+      date: today,
       daysPending: 0,
-      employeeNo:   user?.employeeNo ?? "DEMO-1001",
-      employeeName: user?.name       ?? "Alex Morgan",
-      department:   user?.department ?? "Innovation & Ops",
+      employeeNo: suggestorEmpNo,
+      employeeName: suggestorName,
+      department: workshopDeptName,
       plantCode: "PLT-03",
-      presentMethod,
-      proposedMethod,
+      presentMethod: presentMethod || (presentMethodFiles[0]?.name ? `Attached: ${presentMethodFiles[0].name}` : ""),
+      proposedMethod: proposedMethod || (proposedMethodFiles[0]?.name ? `Attached: ${proposedMethodFiles[0].name}` : ""),
       benefits,
       formData: {
+        suggestionFor,
+        onBehalfEmpNo: suggestionFor === "behalf" ? selectedOnBehalfEmpNo : "",
+        suggestorCategory,
+        suggestorMobile,
+        subject,
         machineRefType,
-        machineRef,
-        themeBased,
-        themeName:   selectedTheme?.label   ?? "",
-        themeNameHi: selectedTheme?.labelHi ?? "",
-        planners:  planners.map(p  => ({ empNo: p.employee_no, name: p.name })),
-        superiors: superiors.map(s => ({ empNo: s.employee_no, name: s.name })),
-        suggesterEmpNo: user?.employeeNo ?? "DEMO-1001",
-        suggesterName:  user?.name       ?? "Alex Morgan",
-        teamName:       user?.department  ?? "Innovation & Ops",
+        machineRef:
+          machineRefType === "name"
+            ? `Name: ${machineRefValue}`
+            : machineRefType === "number"
+            ? `No.: ${machineRefValue}`
+            : "N/A",
+        componentToolNo,
+        suggestionArea,
+        workshopDeptName,
+        suggestionDate: today,
+        implementationDate,
+        themeBased: themeBased === "yes",
+        themeName,
+        presentMethodFiles,
+        proposedMethodFiles,
+        superiorDetails,
+        plannerDetails,
         isGroupSuggestion,
-        coSuggestors: coSuggestors.map(id => ({
+        coSuggestors: coSuggestors.map((id) => ({
           empNo: id,
-          name: teamMemberOptions.find(o => o.value === id)?.label ?? id,
+          name: teamMemberOptions.find((o) => o.value === id)?.label ?? id,
         })),
         attachments,
-        suggestionArea,
       },
     };
   };
@@ -380,10 +621,8 @@ const DemoNewSuggestion = () => {
     try {
       const payload = buildPayload("Draft");
       if (draftId && draftSuggestion) {
-        // Update existing draft
         updateSuggestion(draftId, payload);
       } else {
-        // Create new draft
         await addSuggestion(payload);
       }
       setDraftSaved(true);
@@ -399,26 +638,27 @@ const DemoNewSuggestion = () => {
 
   const handleSubmit = async () => {
     if (isSubmitting || isScanning) return;
-    if (!validate()) { toast.error("Please fill all required fields"); return; }
+    if (!validate()) {
+      toast.error("Please fill all required fields correctly");
+      return;
+    }
 
-    // Duplicate detection phase scoped to Demo Plant suggestions
     if (!pendingSubmitRef.current) {
       if (!pendingIdRef.current) pendingIdRef.current = createPendingId();
 
-      const selectedTheme = DEMO_THEMES.find(t => t.value === themeName);
       const duplicateInput = {
-        subject: proposedMethod.slice(0, 120) || presentMethod.slice(0, 120) || "Untitled Suggestion",
+        subject,
         presentMethod,
         proposedMethod,
         benefits,
-        category: selectedTheme ? selectedTheme.label : "General",
-        suggestionType: "Improvement Suggestion",
+        category,
+        suggestionType: isKaizenScheme ? "Kaizen" : "Improvement Suggestion",
       };
 
       registerPending({
         id: pendingIdRef.current,
-        employeeNo: user?.employeeNo,
-        employeeName: user?.name,
+        employeeNo: suggestorEmpNo,
+        employeeName: suggestorName,
         registeredAt: Date.now(),
         subject: duplicateInput.subject,
         presentMethod: duplicateInput.presentMethod,
@@ -429,11 +669,11 @@ const DemoNewSuggestion = () => {
       });
 
       setIsScanning(true);
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 600));
 
       const snapshot = getSuggestionsSnapshot();
       const demoSuggestions = snapshot.filter(
-        s => (s.plantCode ?? (s as any).plant_code) === "PLT-03"
+        (s) => (s.plantCode ?? (s as any).plant_code) === "PLT-03"
       );
 
       const detection = detectDuplicatesFull(
@@ -446,561 +686,210 @@ const DemoNewSuggestion = () => {
       if (detection.hasConflict) {
         setDuplicateMatches(detection.saved);
         setPendingMatchList(detection.pending);
-        setShowDuplicateAlert(true);
+        setShowDuplicateModal(true);
         return;
       }
     }
 
-    pendingSubmitRef.current = false;
+    // Submit workflow
     setIsSubmitting(true);
     try {
-      const payload = buildPayload("Pending Feasibility Review", "Superior");
+      const payload = buildPayload("In Evaluation");
       if (draftId && draftSuggestion) {
         updateSuggestion(draftId, payload);
       } else {
         await addSuggestion(payload);
       }
 
-      setSubmitted(true);
-      toast.success("Suggestion submitted successfully / सुझाव सफलतापूर्वक जमा किया गया", {
-        description: `${suggNo} — submitted for planner review`,
+      addNotification({
+        title: "Suggestion Submitted / सुझाव जमा हुआ",
+        message: `${suggNo} (${subject}) routed to superior ${superiorDetails.name} and area planner ${plannerDetails?.name ?? "Assigned Planner"}`,
+        type: "info",
+        suggestionId: suggNo,
       });
-      addNotification(`Demo suggestion ${suggNo} submitted — pending review`, "success");
 
       if (pendingIdRef.current) {
         unregisterPending(pendingIdRef.current);
         pendingIdRef.current = null;
       }
+      clearExpiredPending();
+
+      toast.success("Suggestion Submitted Successfully!", {
+        description: `${suggNo} is now registered under ${activePlant} (${activeScheme}).`,
+      });
+      navigate(`${plantPrefix}/employee/my-suggestions`);
     } catch {
-      toast.error("Submission failed — please try again");
-      if (pendingIdRef.current) {
-        unregisterPending(pendingIdRef.current);
-        pendingIdRef.current = null;
-      }
+      toast.error("Failed to submit suggestion — please try again");
     } finally {
       setIsSubmitting(false);
+      pendingSubmitRef.current = false;
     }
   };
 
-  const handleReset = () => {
-    setPresentMethod(""); setProposedMethod(""); setBenefits("");
-    setMachineRefType("na"); setMachineRefValue("");
-    setThemeBased(false); setThemeName("");
-    setIsGroupSuggestion(false); setCoSuggestors([]); setCoSuggestorSearch("");
-    setAttachments([]);
-    setErrors({}); setSubmitted(false);
-    disableVoice();
+  const handleDuplicateProceed = () => {
+    setShowDuplicateModal(false);
+    pendingSubmitRef.current = true;
+    handleSubmit();
   };
 
-  const today = new Date().toLocaleDateString("en-IN", {
-    day: "2-digit", month: "short", year: "numeric",
-  });
+  const handleDuplicateCancel = () => {
+    setShowDuplicateModal(false);
+    if (pendingIdRef.current) {
+      unregisterPending(pendingIdRef.current);
+      pendingIdRef.current = null;
+    }
+  };
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="max-w-3xl space-y-5 pb-12">
+      {/* ── Page Header & Environment Badge ───────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-muted/30 border rounded-xl p-4">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+            <FilePlus className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+              {draftSuggestion ? "Edit Draft Suggestion" : "New Suggestion Form"}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Customized line items (5–22) active for {activePlant} · Scheme: {activeScheme}
+            </p>
+          </div>
+        </div>
 
-      {/* Page header */}
-      <div className="flex items-center gap-3">
-        <FilePlus className="h-6 w-6 text-primary" />
-        <div>
-          <h2 className="text-xl font-bold text-foreground">
-            {draftSuggestion ? "Edit Draft" : "New Suggestion"}{" "}
-            <span className="text-sm font-normal text-muted-foreground">
-              / {draftSuggestion ? "ड्राफ्ट संपादित करें" : "नया सुझाव"}
-            </span>
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            {draftSuggestion
-              ? `Editing draft ${suggNo} — complete and submit or save again`
-              : "Submit a new improvement suggestion for Demo Plant / डेमो संयंत्र के लिए नया सुझाव जमा करें"}
-          </p>
+        {/* Plant & Scheme Chip with switch link */}
+        <div className="flex items-center gap-2 bg-background border rounded-lg px-3 py-1.5 shadow-sm">
+          <div className="text-xs">
+            <span className="text-muted-foreground text-[10px] block">Active Configuration</span>
+            <div className="flex items-center gap-1.5 font-semibold text-foreground">
+              <Building2 className="h-3 w-3 text-primary" />
+              <span>{activePlant}</span>
+              <span className="text-muted-foreground">·</span>
+              <Layers className="h-3 w-3 text-indigo-500" />
+              <span className="capitalize">{activeScheme}</span>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-[11px] gap-1 px-2 text-primary hover:text-primary"
+            onClick={() => navigate("/demo/setup")}
+          >
+            <Sliders className="h-3 w-3" /> Change
+          </Button>
         </div>
       </div>
 
-      {/* Section 1: Suggestion Reference & Theme */}
-      <Card className="card-shadow">
+      {/* ══════════════════════════════════════════════════════════════════════════
+          CARD 1: REFERENCE & SUBMISSION MODE (Items 5, 12, 6, 7)
+          ══════════════════════════════════════════════════════════════════════════ */}
+      <Card className="card-shadow border-primary/20">
         <CardContent className="pt-5 space-y-4">
-          <p className="text-xs font-semibold text-primary uppercase tracking-wide flex items-center gap-2 pl-0.5">
-            <Hash className="h-3.5 w-3.5 shrink-0" /> Suggestion Reference / सुझाव संदर्भ
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-primary uppercase tracking-wide flex items-center gap-2">
+              <Hash className="h-3.5 w-3.5" /> Suggestion Reference & Subject / संदर्भ एवं विषय
+            </p>
+            <Badge variant="outline" className="text-[10px] font-mono">
+              Points 5, 6, 7, 12
+            </Badge>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* ── Item 5: Sugg No. ── */}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">
-                Suggestion No <span className="text-[10px] text-muted-foreground font-normal">/ सुझाव संख्या</span>
+                5. Suggestion No. <span className="text-[10px] text-muted-foreground font-normal">/ सुझाव संख्या (Auto)</span>
               </Label>
               <div className="flex items-center gap-2">
-                <Input readOnly value={suggNo} className="font-mono text-sm bg-muted/50 text-muted-foreground cursor-default" />
-                <Badge className="text-[10px] bg-blue-100 text-blue-700 border-blue-200 shrink-0">Auto</Badge>
+                <Input
+                  readOnly
+                  value={suggNo}
+                  className="font-mono text-sm bg-muted/60 text-muted-foreground cursor-default font-medium"
+                />
+                <Badge className="text-[10px] bg-blue-100 text-blue-700 border-blue-200 shrink-0">
+                  By default from app
+                </Badge>
               </div>
             </div>
+
+            {/* ── Item 12: Suggestion Date ── */}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">
-                Date of Application <span className="text-[10px] text-muted-foreground font-normal">/ आवेदन की तिथि</span>
+                12. Suggestion Date <span className="text-[10px] text-muted-foreground font-normal">/ सुझाव तिथि</span>
               </Label>
-              <Input readOnly value={today} className="bg-muted/50 text-muted-foreground cursor-default text-sm" />
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <Checkbox
-                id="themeBased"
-                checked={themeBased}
-                onCheckedChange={v => {
-                  setThemeBased(!!v);
-                  if (!v) { setThemeName(""); setErrors(e => ({ ...e, themeName: undefined })); }
-                }}
-              />
-              <Label htmlFor="themeBased" className="text-sm cursor-pointer">
-                Theme Based Suggestion{" "}
-                <span className="text-[10px] text-muted-foreground font-normal">/ विषय-आधारित सुझाव</span>
-              </Label>
-              {themeBased && (
-                <Badge className="text-[9px] bg-purple-100 text-purple-700 border-purple-200">Theme Active</Badge>
-              )}
-            </div>
-
-            {themeBased && (
-              <div className="space-y-1.5 pl-7">
-                <Label className="text-xs font-medium">
-                  Select Theme <span className="text-destructive">*</span>{" "}
-                  <span className="text-[10px] text-muted-foreground font-normal">/ विषय-वस्तु चुनें</span>
-                </Label>
-                <Select value={themeName} onValueChange={v => { setThemeName(v); setErrors(e => ({ ...e, themeName: undefined })); }}>
-                  <SelectTrigger className={`text-sm ${errors.themeName ? "border-destructive" : ""}`}>
-                    <SelectValue placeholder="Select a theme..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DEMO_THEMES.map(t => (
-                      <SelectItem key={t.value} value={t.value}>
-                        <span>{t.label}</span>
-                        <span className="ml-2 text-[10px] text-muted-foreground">/ {t.labelHi}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.themeName && <p className="text-xs text-destructive">{errors.themeName}</p>}
-              </div>
-            )}
-          </div>
-
-          <Separator />
-
-          {/* Suggestion Area */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">
-              Suggestion Area{" "}
-              <span className="text-[10px] text-muted-foreground font-normal">/ सुझाव क्षेत्र</span>
-            </Label>
-            <Select value={suggestionArea} onValueChange={setSuggestionArea}>
-              <SelectTrigger className="text-sm">
-                <SelectValue placeholder="Select area..." />
-              </SelectTrigger>
-              <SelectContent>
-                {DEMO_AREAS.map(area => (
-                  <SelectItem key={area} value={area}>{area}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Section 2: Improvement Details + Voice */}
-      <Card className="card-shadow">
-        <CardContent className="pt-5 space-y-5">
-          <p className="text-xs font-semibold text-primary uppercase tracking-wide flex items-center gap-2 pl-0.5">
-            <Lightbulb className="h-3.5 w-3.5 shrink-0" /> Improvement Details / सुधार विवरण
-          </p>
-
-          {/* Voice toolbar */}
-          {!inputMethodSettings.voiceEnabled ? (
-            <div className="px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-700">
-              <Mic className="inline h-3 w-3 mr-1" /> Voice input has been disabled by BPS admin / वॉइस इनपुट अक्षम
-            </div>
-          ) : voiceEnabled ? (
-            <div className="space-y-2">
-              {/* Fixed language badge — Hindi speech → Azure English translation */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="flex items-center gap-1 text-[10px] font-medium text-violet-600 bg-violet-500/[0.08] border border-violet-400/20 px-2 py-1 rounded-lg">
-                  <Languages className="h-3 w-3" />
-                  Speak in {currentLangOption.nativeName} — auto-translates to English (Azure)
-                </span>
-              </div>
-
-              {/* Status bar */}
-              <div className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-xs transition-all duration-300 ${
-                voiceEngine.isTranslating
-                  ? "border-violet-400/40 bg-violet-500/[0.05] shadow-sm shadow-violet-500/5"
-                  : voiceEngine.isListening
-                    ? "border-rose-400/35 bg-rose-500/[0.04] shadow-sm shadow-rose-500/5"
-                    : voiceEngine.status?.ok
-                      ? "border-emerald-400/30 bg-emerald-500/[0.04]"
-                      : voiceEngine.status
-                        ? "border-amber-400/30 bg-amber-500/[0.04]"
-                        : "border-primary/15 bg-primary/[0.03]"
-              }`}>
-                <div className={`relative h-7 w-7 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 ${
-                  voiceEngine.isTranslating ? "bg-violet-500 shadow-sm shadow-violet-500/30"
-                    : voiceEngine.isListening ? "bg-rose-500 shadow-sm shadow-rose-500/30"
-                    : voiceEngine.status?.ok ? "bg-emerald-500/15" : "bg-primary/10"
-                }`}>
-                  {(voiceEngine.isListening || voiceEngine.isTranslating) && (
-                    <span className={`absolute inset-0 rounded-full animate-ping pointer-events-none ${
-                      voiceEngine.isTranslating ? "bg-violet-400/30" : "bg-rose-400/30"
-                    }`} />
-                  )}
-                  {voiceEngine.isTranslating
-                    ? <Languages className="h-3.5 w-3.5 text-white relative z-10 animate-pulse" />
-                    : voiceEngine.isListening
-                      ? <Mic className="h-3.5 w-3.5 text-white relative z-10" />
-                      : voiceEngine.status?.ok
-                        ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                        : <Mic className="h-3.5 w-3.5 text-primary" />
-                  }
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  {voiceEngine.isTranslating ? (
-                    <p className="font-semibold text-violet-600 truncate">
-                      Translating from {currentLangOption.label} to English…
-                      {voiceEngine.originalText && (
-                        <span className="block text-[10px] font-normal text-muted-foreground/70 mt-0.5 italic truncate">
-                          "{voiceEngine.originalText}"
-                        </span>
-                      )}
-                    </p>
-                  ) : voiceEngine.isListening ? (
-                    <p className="font-semibold text-foreground truncate">
-                      Listening —{" "}
-                      <span className="text-rose-500 font-bold">
-                        {VOICE_FIELD_LABELS[activeVoiceField as VoiceFieldKey] ?? activeVoiceField}
-                      </span>
-                      <span className="font-normal text-muted-foreground/60 ml-1">
-                        {voiceEngine.interimText
-                          ? "typing in field…"
-                          : isNonEnglish
-                            ? `speak in ${currentLangOption.nativeName}…`
-                            : "speak now…"}
-                      </span>
-                    </p>
-                  ) : voiceEngine.status ? (
-                    <div>
-                      <p className={`font-medium ${voiceEngine.status.ok ? "text-emerald-600" : "text-amber-600"}`}>
-                        {voiceEngine.status.text}
-                      </p>
-                      {voiceEngine.status.ok && voiceEngine.originalText && isNonEnglish && (
-                        <p className="text-[10px] text-violet-500 mt-0.5 flex items-center gap-1">
-                          <Languages className="h-2.5 w-2.5" /> Translated from: "{voiceEngine.originalText}"
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground/70">
-                      Tap{" "}
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-muted border border-border/50 text-foreground font-medium">
-                        <Mic className="h-2.5 w-2.5" /> speak
-                      </span>{" "}
-                      on any field below to fill it by voice
-                      {isNonEnglish && (
-                        <span className="ml-1 text-violet-500">({currentLangOption.label} → English)</span>
-                      )}
-                    </p>
-                  )}
-                </div>
-
-                {voiceEngine.isListening || voiceEngine.isTranslating ? (
-                  <button
-                    type="button"
-                    onClick={() => { voiceEngine.stopListening(); setListeningField(null); listeningFieldRef.current = null; }}
-                    className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg border transition-colors ${
-                      voiceEngine.isTranslating
-                        ? "bg-violet-500/10 border-violet-400/25 text-violet-500 hover:bg-violet-500/20"
-                        : "bg-rose-500/10 border-rose-400/25 text-rose-500 hover:bg-rose-500/20"
-                    }`}
-                  >
-                    <MicOff className="h-3 w-3" />
-                    <span className="text-[10px] font-medium">stop</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={disableVoice}
-                    className="shrink-0 p-1.5 rounded-lg text-muted-foreground/40 hover:text-foreground hover:bg-muted/60 transition-colors"
-                    title="Exit voice mode"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => { setVoiceEnabled(true); voiceEngine.setStatus(null); }}
-              className="group flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/40 bg-background hover:bg-primary/5 hover:border-primary/25 text-muted-foreground hover:text-primary text-[11px] font-medium transition-all w-fit shadow-sm"
-            >
-              <div className="h-5 w-5 rounded-full bg-muted group-hover:bg-primary/10 flex items-center justify-center transition-colors shrink-0">
-                <Mic className="h-3 w-3" />
-              </div>
-              Voice input
-              <span className="text-[10px] text-muted-foreground/40 font-normal">
-                — speak in any language, auto-translates to English
-              </span>
-            </button>
-          )}
-
-          {/* Present Method */}
-          <div className="space-y-1.5">
-            <Label htmlFor="presentMethod" className="text-xs font-medium">
-              Present Method <span className="text-destructive">*</span>{" "}
-              <span className="text-[10px] text-muted-foreground font-normal">/ वर्तमान विधि — कैसे काम हो रहा है अभी?</span>
-            </Label>
-            <VoiceHighlight
-              active={activeVoiceField === "presentMethod"}
-              voiceMode={voiceEnabled}
-              onActivate={() => startVoiceForField("presentMethod")}
-              isTranslating={voiceEngine.isTranslating && activeVoiceField === "presentMethod"}
-              translatingLang={isNonEnglish ? currentLangOption.nativeName : undefined}
-            >
-              <Textarea
-                id="presentMethod"
-                rows={4}
-                value={presentMethod}
-                onChange={e => { setPresentMethod(e.target.value); setErrors(err => ({ ...err, presentMethod: undefined })); }}
-                placeholder="Describe the current method or problem as it stands today..."
-                className={errors.presentMethod ? "border-destructive" : ""}
-              />
-            </VoiceHighlight>
-            {errors.presentMethod && <p className="text-xs text-destructive">{errors.presentMethod}</p>}
-          </div>
-
-          {/* Proposed Method */}
-          <div className="space-y-1.5">
-            <Label htmlFor="proposedMethod" className="text-xs font-medium">
-              Proposed Method <span className="text-destructive">*</span>{" "}
-              <span className="text-[10px] text-muted-foreground font-normal">/ प्रस्तावित विधि — क्या बदलाव करना चाहते हैं?</span>
-            </Label>
-            <VoiceHighlight
-              active={activeVoiceField === "proposedMethod"}
-              voiceMode={voiceEnabled}
-              onActivate={() => startVoiceForField("proposedMethod")}
-              isTranslating={voiceEngine.isTranslating && activeVoiceField === "proposedMethod"}
-              translatingLang={isNonEnglish ? currentLangOption.nativeName : undefined}
-            >
-              <Textarea
-                id="proposedMethod"
-                rows={4}
-                value={proposedMethod}
-                onChange={e => { setProposedMethod(e.target.value); setErrors(err => ({ ...err, proposedMethod: undefined })); }}
-                placeholder="Describe the proposed improvement or solution..."
-                className={errors.proposedMethod ? "border-destructive" : ""}
-              />
-            </VoiceHighlight>
-            {errors.proposedMethod && <p className="text-xs text-destructive">{errors.proposedMethod}</p>}
-          </div>
-
-          {/* Expected Benefits */}
-          <div className="space-y-1.5">
-            <Label htmlFor="benefits" className="text-xs font-medium">
-              Expected Benefits <span className="text-destructive">*</span>{" "}
-              <span className="text-[10px] text-muted-foreground font-normal">/ अपेक्षित लाभ — क्या सुधार होगा?</span>
-            </Label>
-            <VoiceHighlight
-              active={activeVoiceField === "benefits"}
-              voiceMode={voiceEnabled}
-              onActivate={() => startVoiceForField("benefits")}
-              isTranslating={voiceEngine.isTranslating && activeVoiceField === "benefits"}
-              translatingLang={isNonEnglish ? currentLangOption.nativeName : undefined}
-            >
-              <Textarea
-                id="benefits"
-                rows={3}
-                value={benefits}
-                onChange={e => { setBenefits(e.target.value); setErrors(err => ({ ...err, benefits: undefined })); }}
-                placeholder="Describe the expected benefits (safety, cost, quality, productivity, etc.)..."
-                className={errors.benefits ? "border-destructive" : ""}
-              />
-            </VoiceHighlight>
-            {errors.benefits && <p className="text-xs text-destructive">{errors.benefits}</p>}
-          </div>
-
-          <Separator />
-
-          {/* Machine Reference */}
-          <div className="space-y-2.5">
-            <Label className="text-xs font-medium">
-              Machine Reference <span className="text-[10px] text-muted-foreground font-normal">/ मशीन संदर्भ</span>
-            </Label>
-            <div className="flex flex-wrap gap-2">
-              {(["name", "number", "na"] as MachineRefType[]).map(opt => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => {
-                    setMachineRefType(opt);
-                    if (opt === "na") setMachineRefValue("");
-                    setErrors(e => ({ ...e, machineRef: undefined }));
-                  }}
-                  className={`px-3 py-1.5 rounded-md text-xs border transition-colors ${
-                    machineRefType === opt
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background border-input text-foreground hover:bg-muted/50"
-                  }`}
-                >
-                  {opt === "name"   && <><Wrench className="inline h-3 w-3 mr-1" />Machine Name</>}
-                  {opt === "number" && <><Hash   className="inline h-3 w-3 mr-1" />Machine Number</>}
-                  {opt === "na"     && "N/A"}
-                </button>
-              ))}
-            </div>
-            {machineRefType !== "na" && (
-              <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
                 <Input
-                  value={machineRefValue}
-                  onChange={e => { setMachineRefValue(e.target.value); setErrors(err => ({ ...err, machineRef: undefined })); }}
-                  placeholder={
-                    machineRefType === "name"
-                      ? "Enter machine name / मशीन का नाम दर्ज करें"
-                      : "Enter machine number / मशीन नंबर दर्ज करें"
-                  }
-                  className={errors.machineRef ? "border-destructive" : ""}
+                  readOnly
+                  value={today}
+                  className="bg-muted/60 text-muted-foreground cursor-default text-sm"
                 />
-                {errors.machineRef && <p className="text-xs text-destructive">{errors.machineRef}</p>}
+                <Badge variant="secondary" className="text-[10px] shrink-0">
+                  Current Date
+                </Badge>
               </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Section 3: Suggestor & Team Information */}
-      <Card className="card-shadow">
-        <CardContent className="pt-5 space-y-4">
-          <p className="text-xs font-semibold text-primary uppercase tracking-wide flex items-center gap-2 pl-0.5">
-            <Users className="h-3.5 w-3.5 shrink-0" /> Suggestor & Team Information / सुझावकर्ता एवं टीम जानकारी
-          </p>
-
-          <div className="border rounded-lg divide-y">
-            <ReadonlyField
-              icon={User}
-              label="Suggestor's Name"  labelHi="सुझावकर्ता का नाम"
-              value={`${user?.name ?? "Alex Morgan"}${user?.employeeNo ? ` (${user.employeeNo})` : " (DEMO-1001)"}`}
-            />
-            <ReadonlyField
-              icon={Building2}
-              label="Team / Department" labelHi="टीम / विभाग"
-              value={user?.department ?? "Innovation & Ops"}
-            />
-          </div>
-
-          {/* Group / Team Suggestion */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <Checkbox
-                id="isGroupSuggestion"
-                checked={isGroupSuggestion}
-                onCheckedChange={v => {
-                  setIsGroupSuggestion(!!v);
-                  if (!v) { setCoSuggestors([]); setCoSuggestorSearch(""); }
-                }}
-              />
-              <Label htmlFor="isGroupSuggestion" className="text-sm cursor-pointer">
-                Group / Team Suggestion{" "}
-                <span className="text-[10px] text-muted-foreground font-normal">/ सामूहिक सुझाव</span>
-              </Label>
-              {isGroupSuggestion && (
-                <Badge className="text-[9px] bg-indigo-100 text-indigo-700 border-indigo-200">Group Active</Badge>
-              )}
             </div>
+          </div>
 
-            {isGroupSuggestion && (
-              <div className="pl-7 space-y-2.5">
-                <Label className="text-xs font-medium">
-                  Co-Suggestors{" "}
-                  <span className="text-[10px] text-muted-foreground font-normal">/ सह-सुझावकर्ता</span>
+          <Separator />
+
+          {/* ── Item 6: Self or On behalf of others (BidP style) ── */}
+          <div className="space-y-2">
+            <Label className="text-xs font-medium">
+              6. Self or On Behalf of Others <span className="text-destructive">*</span>{" "}
+              <span className="text-[10px] text-muted-foreground font-normal">/ स्वयं या दूसरों की ओर से</span>
+            </Label>
+            <RadioGroup
+              value={suggestionFor}
+              onValueChange={(val: "self" | "behalf") => setSuggestionFor(val)}
+              className="flex items-center gap-6 pt-1"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="self" id="opt-self" />
+                <Label htmlFor="opt-self" className="text-xs cursor-pointer font-medium">
+                  Self <span className="text-muted-foreground font-normal">({user?.name ?? "Alex Morgan"})</span>
                 </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="behalf" id="opt-behalf" />
+                <Label htmlFor="opt-behalf" className="text-xs cursor-pointer font-medium">
+                  On Behalf of Others <span className="text-muted-foreground font-normal">/ अन्य कर्मचारी</span>
+                </Label>
+              </div>
+            </RadioGroup>
 
-                {coSuggestors.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {coSuggestors.map(id => {
-                      const member = teamMemberOptions.find(m => m.value === id);
-                      return (
-                        <Badge key={id} variant="secondary" className="text-[11px] gap-1 pl-2 pr-1">
-                          <UserPlus className="h-2.5 w-2.5 text-indigo-500 shrink-0" />
-                          {member?.label || id}
-                          <button
-                            type="button"
-                            onClick={() => setCoSuggestors(cs => cs.filter(c => c !== id))}
-                            className="ml-0.5 hover:text-destructive"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div className="border rounded-md">
-                  <div className="flex items-center gap-2 px-3 py-2 border-b">
-                    <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <input
-                      type="text"
-                      value={coSuggestorSearch}
-                      onChange={e => setCoSuggestorSearch(e.target.value)}
-                      placeholder="Search by name or employee ID..."
-                      className="w-full text-xs bg-transparent outline-none placeholder:text-muted-foreground"
-                    />
-                  </div>
-                  <div className="max-h-[140px] overflow-y-auto p-1.5 space-y-0.5">
-                    {(() => {
-                      const filtered = teamMemberOptions.filter(
-                        m =>
-                          m.value !== user?.employeeNo &&
-                          (!coSuggestorSearch.trim() ||
-                            m.label.toLowerCase().includes(coSuggestorSearch.toLowerCase()))
-                      );
-                      return filtered.length > 0 ? (
-                        filtered.map(m => {
-                          const selected = coSuggestors.includes(m.value);
-                          return (
-                            <div
-                              key={m.value}
-                              onClick={() =>
-                                setCoSuggestors(cs =>
-                                  selected ? cs.filter(c => c !== m.value) : [...cs, m.value]
-                                )
-                              }
-                              className={`flex items-center gap-2 px-2.5 py-1.5 rounded cursor-pointer text-xs transition-colors ${
-                                selected
-                                  ? "bg-indigo-500/10 text-indigo-700 font-medium"
-                                  : "hover:bg-muted"
-                              }`}
-                            >
-                              <div
-                                className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${
-                                  selected ? "bg-indigo-500 border-indigo-500" : "border-muted-foreground/40"
-                                }`}
-                              >
-                                {selected && <span className="text-white text-[9px]">✓</span>}
-                              </div>
-                              {m.label}
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <p className="text-xs text-muted-foreground text-center py-2">No employees found</p>
-                      );
-                    })()}
-                  </div>
+            {/* On behalf employee picker */}
+            {suggestionFor === "behalf" && (
+              <div className="p-3 bg-muted/40 border border-indigo-200/60 rounded-lg space-y-2 mt-2 animate-fade-in">
+                <Label className="text-xs font-medium text-indigo-900 dark:text-indigo-300">
+                  Select Employee on whose behalf suggestion is submitted <span className="text-destructive">*</span>
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={selectedOnBehalfEmpNo}
+                    onValueChange={(empNo) => {
+                      setSelectedOnBehalfEmpNo(empNo);
+                      setErrors((e) => ({ ...e, mainSuggestor: undefined }));
+                    }}
+                  >
+                    <SelectTrigger className="text-xs bg-background">
+                      <SelectValue placeholder="Search or select employee..." />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-56">
+                      {mockEmployees.map((emp) => (
+                        <SelectItem key={emp.employeeNo} value={emp.employeeNo}>
+                          {emp.name} ({emp.employeeNo}) — {emp.department}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-
-                {coSuggestors.length === 0 && (
-                  <p className="text-[10px] text-muted-foreground">
-                    Select one or more co-suggestors from the list above
+                {errors.mainSuggestor && (
+                  <p className="text-xs text-destructive">{errors.mainSuggestor}</p>
+                )}
+                {selectedBehalfEmployee && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Selected: <strong className="text-foreground">{selectedBehalfEmployee.name}</strong> ({selectedBehalfEmployee.employeeNo}) · Dept: {selectedBehalfEmployee.department}
                   </p>
                 )}
               </div>
@@ -1009,188 +898,864 @@ const DemoNewSuggestion = () => {
 
           <Separator />
 
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-              <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
-              Planners <span className="text-[10px] font-normal text-muted-foreground">/ योजनाकार — Auto-mapped from Authority</span>
-            </p>
-            {planners.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic pl-5">No planners assigned for Demo Plant</p>
-            ) : (
-              <div className="flex flex-wrap gap-2 pl-5">
-                {planners.map(p => (
-                  <div key={p.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] border bg-blue-50 border-blue-200 text-blue-700">
-                    <User className="h-3 w-3" />
-                    <span className="font-medium">{p.name}</span>
-                    <span className="font-mono opacity-70">({p.employee_no})</span>
-                    {p.department && <span className="opacity-60">· {p.department}</span>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-              <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-              Superiors <span className="text-[10px] font-normal text-muted-foreground">/ वरिष्ठ अधिकारी — Auto-mapped from Authority</span>
-            </p>
-            {superiors.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic pl-5">No superiors assigned for Demo Plant</p>
-            ) : (
-              <div className="flex flex-wrap gap-2 pl-5">
-                {superiors.map(s => (
-                  <div key={s.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] border bg-amber-50 border-amber-200 text-amber-700">
-                    <User className="h-3 w-3" />
-                    <span className="font-medium">{s.name}</span>
-                    <span className="font-mono opacity-70">({s.employee_no})</span>
-                    {s.department && <span className="opacity-60">· {s.department}</span>}
-                  </div>
-                ))}
-              </div>
-            )}
+          {/* ── Item 7: Suggestion Subject (Text box, no AI) ── */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="subject" className="text-xs font-medium">
+                7. Suggestion Subject <span className="text-destructive">*</span>{" "}
+                <span className="text-[10px] text-muted-foreground font-normal">/ सुझाव का विषय</span>
+              </Label>
+              <span className="text-[10px] text-muted-foreground">Standard text input</span>
+            </div>
+            <Input
+              id="subject"
+              value={subject}
+              onChange={(e) => {
+                setSubject(e.target.value);
+                setErrors((err) => ({ ...err, subject: undefined }));
+              }}
+              placeholder="e.g. Automated optical sensor for conveyor belt indexing"
+              className={errors.subject ? "border-destructive text-sm" : "text-sm"}
+            />
+            {errors.subject && <p className="text-xs text-destructive">{errors.subject}</p>}
           </div>
         </CardContent>
       </Card>
 
-      {/* Section 4: Attachments — Photos / Documents */}
-      {inputMethodSettings.fileUploadEnabled ? (
+      {/* ══════════════════════════════════════════════════════════════════════════
+          CARD 2: MACHINE, COMPONENT & AREA (Items 8, 9, 10, 11)
+          ══════════════════════════════════════════════════════════════════════════ */}
       <Card className="card-shadow">
         <CardContent className="pt-5 space-y-4">
-          <p className="text-xs font-semibold text-primary uppercase tracking-wide flex items-center gap-2 pl-0.5">
-            <Paperclip className="h-3.5 w-3.5 shrink-0" /> Attachments / संलग्नक <span className="text-[10px] font-normal text-muted-foreground">(optional / वैकल्पिक)</span>
-          </p>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="flex flex-col items-center gap-2 p-6 border-2 border-dashed border-muted-foreground/25 rounded-lg cursor-pointer hover:border-primary/40 hover:bg-primary/[0.02] transition-colors"
-          >
-            <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-              <ImageIcon className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <p className="text-xs text-muted-foreground text-center">
-              Click to upload photos or documents<br />
-              <span className="text-[10px]">फ़ोटो या दस्तावेज़ अपलोड करें — Max 5 MB each — JPG, PNG, PDF, DOC, XLS</span>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-primary uppercase tracking-wide flex items-center gap-2">
+              <Wrench className="h-3.5 w-3.5" /> Machine, Tool & Location Details / मशीन एवं स्थान
             </p>
+            <Badge variant="outline" className="text-[10px] font-mono">
+              Points 8, 9, 10, 11
+            </Badge>
           </div>
 
-          {attachments.length > 0 && (
-            <div className="space-y-1.5">
-              {attachments.map((att, idx) => (
-                <div key={idx} className="flex items-center gap-2 px-3 py-2 border rounded-md bg-muted/30">
-                  {att.type.startsWith("image/") ? (
-                    <ImageIcon className="h-4 w-4 text-blue-500 shrink-0" />
-                  ) : (
-                    <FileTextIcon className="h-4 w-4 text-amber-500 shrink-0" />
-                  )}
-                  <span className="text-xs font-medium flex-1 truncate">{att.name}</span>
-                  <span className="text-[10px] text-muted-foreground shrink-0">
-                    {(att.size / 1024).toFixed(0)} KB
-                  </span>
-                  <button type="button" onClick={() => removeAttachment(idx)} className="text-muted-foreground hover:text-destructive">
-                    <Trash2 className="h-3.5 w-3.5" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* ── Item 8: Machine No. (JaP module style) ── */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">
+                  8. Machine Reference <span className="text-[10px] text-muted-foreground font-normal">(Non-mandatory)</span>
+                </Label>
+                <Badge variant="secondary" className="text-[9px]">JaP Style</Badge>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(["name", "number", "na"] as MachineRefType[]).map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => {
+                      setMachineRefType(opt);
+                      if (opt === "na") setMachineRefValue("");
+                    }}
+                    className={`px-2.5 py-1 rounded text-xs border transition-colors ${
+                      machineRefType === opt
+                        ? "bg-primary text-primary-foreground border-primary font-medium"
+                        : "bg-background border-input text-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    {opt === "name" && "Machine Name"}
+                    {opt === "number" && "Machine No."}
+                    {opt === "na" && "N/A"}
                   </button>
-                </div>
-              ))}
+                ))}
+              </div>
+              {machineRefType !== "na" && (
+                <Input
+                  value={machineRefValue}
+                  onChange={(e) => setMachineRefValue(e.target.value)}
+                  placeholder={
+                    machineRefType === "name"
+                      ? "Enter Machine Name (e.g. CNC Mill HP-02)"
+                      : "Enter Machine Number (e.g. MC-704)"
+                  }
+                  className="text-xs h-9"
+                />
+              )}
             </div>
-          )}
+
+            {/* ── Item 9: Component / Tool No. (JaP style) ── */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">
+                  9. Component / Tool No. <span className="text-[10px] text-muted-foreground font-normal">(Non-mandatory)</span>
+                </Label>
+                <Badge variant="secondary" className="text-[9px]">JaP Style</Badge>
+              </div>
+              <Input
+                value={componentToolNo}
+                onChange={(e) => setComponentToolNo(e.target.value)}
+                placeholder="e.g. TL-4402 / DIE-B-09 / FIXTURE-03"
+                className="text-xs h-9"
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* ── Item 10: Suggestion Area / Operation (Demo dropdown) ── */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">
+                  10. Suggestion Area / Operation <span className="text-destructive">*</span>
+                </Label>
+                <span className="text-[10px] text-muted-foreground font-mono">Drives Item 22</span>
+              </div>
+              <Select
+                value={suggestionArea}
+                onValueChange={(val) => {
+                  setSuggestionArea(val);
+                  setErrors((e) => ({ ...e, suggestionArea: undefined }));
+                }}
+              >
+                <SelectTrigger className={`text-xs h-10 ${errors.suggestionArea ? "border-destructive" : ""}`}>
+                  <SelectValue placeholder="Choose plant area / operation..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {DEMO_AREAS.map((area) => (
+                    <SelectItem key={area} value={area} className="text-xs">
+                      {area}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.suggestionArea && (
+                <p className="text-xs text-destructive">{errors.suggestionArea}</p>
+              )}
+            </div>
+
+            {/* ── Item 11: Workshop / Dept. Name (Auto fetch) ── */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                11. Workshop / Dept. Name <span className="text-[10px] text-muted-foreground font-normal">/ कार्यशाला / विभाग</span>
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={workshopDeptName}
+                  className="bg-muted/60 text-muted-foreground cursor-default text-xs h-10 font-medium"
+                />
+                <Badge className="text-[10px] bg-slate-100 text-slate-700 border-slate-200 shrink-0">
+                  Auto-fetched
+                </Badge>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
-      ) : (
-        <div className="px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-700">
-          <Paperclip className="inline h-3 w-3 mr-1" /> File upload has been disabled by BPS admin / फ़ाइल अपलोड अक्षम
-        </div>
-      )}
 
-      {/* Success banner */}
-      {submitted && (
-        <div className="border border-green-300 bg-green-50 rounded-lg p-4 flex items-start gap-3">
-          <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-green-800">
-              Suggestion Submitted! / सुझाव सफलतापूर्वक जमा हुआ!
+      {/* ══════════════════════════════════════════════════════════════════════════
+          CARD 3: CATEGORY, THEME & IMPLEMENTATION DATE (Items 15, 16, 13)
+          ══════════════════════════════════════════════════════════════════════════ */}
+      <Card className="card-shadow">
+        <CardContent className="pt-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-primary uppercase tracking-wide flex items-center gap-2">
+              <Tag className="h-3.5 w-3.5" /> Category & Theme Classification / श्रेणी एवं थीम
             </p>
-            <p className="text-xs text-green-700">
-              {suggNo} — submitted for planner review. Track it under{" "}
-              <button className="underline font-medium" onClick={() => navigate(`${plantPrefix}/employee/my-suggestions`)}>
-                My Suggestions
-              </button>.
-            </p>
+            <Badge variant="outline" className="text-[10px] font-mono">
+              Points 13, 15, 16
+            </Badge>
           </div>
-        </div>
-      )}
 
-      {/* Draft saved banner */}
-      {draftSaved && !submitted && (
-        <div className="border border-amber-300 bg-amber-50 rounded-lg p-4 flex items-start gap-3">
-          <Save className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-amber-800">
-              Draft Saved! / ड्राफ्ट सहेजा गया!
-            </p>
-            <p className="text-xs text-amber-700">
-              {suggNo} — saved as draft. Resume editing from{" "}
-              <button className="underline font-medium" onClick={() => navigate(`${plantPrefix}/employee/my-suggestions`)}>
-                My Suggestions
-              </button>.
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* ── Item 15: Suggestion Category ── */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                15. Suggestion Category <span className="text-destructive">*</span>{" "}
+                <span className="text-[10px] text-muted-foreground font-normal">/ सुझाव श्रेणी</span>
+              </Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger className="text-xs h-10">
+                  <SelectValue placeholder="Select category..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORY_OPTIONS.map((c) => (
+                    <SelectItem key={c.value} value={c.value} className="text-xs">
+                      <span>{c.label}</span>
+                      <span className="text-muted-foreground ml-1.5 text-[10px]">/ {c.labelHi}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* ── Item 13: Idea Implementation Date ── */}
+            {/* JaP: Only for kaizen; BidP & NaP: For all schemes */}
+            {showImplementationDate ? (
+              <div className="space-y-1.5 animate-fade-in">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-primary" />
+                    13. Implementation Date{" "}
+                    {isJaP && isKaizenScheme ? (
+                      <span className="text-destructive">*</span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground font-normal">(Optional)</span>
+                    )}
+                  </Label>
+                  <Badge variant="outline" className="text-[9px]">
+                    {isJaP ? "JaP Kaizen" : `${activePlant} Visible`}
+                  </Badge>
+                </div>
+                <Input
+                  type="date"
+                  value={implementationDate}
+                  onChange={(e) => {
+                    setImplementationDate(e.target.value);
+                    setErrors((err) => ({ ...err, implementationDate: undefined }));
+                  }}
+                  className={`text-xs h-10 ${errors.implementationDate ? "border-destructive" : ""}`}
+                />
+                {errors.implementationDate && (
+                  <p className="text-xs text-destructive">{errors.implementationDate}</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-1.5 opacity-60">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  13. Implementation Date
+                </Label>
+                <div className="p-2.5 rounded-lg border bg-muted/30 text-[11px] text-muted-foreground italic">
+                  Hidden for JaP standard suggestions (active for Kaizen only).
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
 
-      {/* Action buttons */}
-      <div className="flex gap-2 pb-4">
-        <Button onClick={handleSubmit} disabled={isSubmitting || isScanning || submitted} className="gap-1.5">
-          {isScanning
-            ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Checking duplicates…</>
-            : isSubmitting
-            ? <><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Submitting…</>
-            : <><FilePlus className="h-3.5 w-3.5" /> Submit Suggestion / सुझाव जमा करें</>
-          }
-        </Button>
+          <Separator />
+
+          {/* ── Item 16: Theme / Campaign-based Idea (Radio Yes/No) ── */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium">
+                16. Theme / Campaign-based Idea{" "}
+                <span className="text-[10px] text-muted-foreground font-normal">/ थीम अथवा अभियान आधारित</span>
+              </Label>
+              <RadioGroup
+                value={themeBased}
+                onValueChange={(val: "yes" | "no") => {
+                  setThemeBased(val);
+                  if (val === "no") setThemeName("");
+                }}
+                className="flex items-center gap-4"
+              >
+                <div className="flex items-center gap-1.5">
+                  <RadioGroupItem value="yes" id="theme-yes" />
+                  <Label htmlFor="theme-yes" className="text-xs cursor-pointer">
+                    Yes
+                  </Label>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <RadioGroupItem value="no" id="theme-no" />
+                  <Label htmlFor="theme-no" className="text-xs cursor-pointer">
+                    No
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {themeBased === "yes" && (
+              <div className="pl-4 pt-1 space-y-1.5 border-l-2 border-primary/30 animate-fade-in">
+                <Label className="text-xs font-medium">
+                  Select Campaign / Theme <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={themeName}
+                  onValueChange={(v) => {
+                    setThemeName(v);
+                    setErrors((e) => ({ ...e, themeName: undefined }));
+                  }}
+                >
+                  <SelectTrigger className={`text-xs h-10 ${errors.themeName ? "border-destructive" : ""}`}>
+                    <SelectValue placeholder="Choose campaign or theme..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {THEME_OPTIONS.map((t) => (
+                      <SelectItem key={t.value} value={t.value} className="text-xs">
+                        {t.label} <span className="text-muted-foreground text-[10px]">/ {t.labelHi}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.themeName && <p className="text-xs text-destructive">{errors.themeName}</p>}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ══════════════════════════════════════════════════════════════════════════
+          CARD 4: METHODS & BENEFITS (Items 17, 18, 19)
+          ══════════════════════════════════════════════════════════════════════════ */}
+      <Card className="card-shadow">
+        <CardContent className="pt-5 space-y-5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-primary uppercase tracking-wide flex items-center gap-2">
+              <Lightbulb className="h-3.5 w-3.5" /> Improvement Methods & Benefits / सुधार विधि एवं लाभ
+            </p>
+            <div className="flex items-center gap-2">
+              {isNaP && (
+                <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px]">
+                  NaP Dual Mode: Write / Upload
+                </Badge>
+              )}
+              <Badge variant="outline" className="text-[10px] font-mono">
+                Points 17, 18, 19
+              </Badge>
+            </div>
+          </div>
+
+          {/* Voice Engine Toolbar */}
+          {inputMethodSettings.voiceEnabled && (
+            <div className="flex items-center justify-between p-2 rounded-lg border bg-muted/30 text-xs">
+              <div className="flex items-center gap-2">
+                <Mic className="h-3.5 w-3.5 text-primary" />
+                <span className="text-muted-foreground text-[11px]">
+                  Voice Dictation: tap mic on fields to speak in Hindi/English
+                </span>
+              </div>
+              {voiceEngine.isListening && (
+                <Badge className="bg-rose-500 text-white text-[9px] animate-pulse">
+                  Listening...
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {/* ── Item 17: Present Method ── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium">
+                17. Present Method <span className="text-destructive">*</span>{" "}
+                <span className="text-[10px] text-muted-foreground font-normal">/ वर्तमान विधि — अभी कार्य कैसे हो रहा है?</span>
+              </Label>
+
+              {/* NaP Mode Toggle */}
+              {isNaP && (
+                <div className="flex items-center gap-1 bg-muted p-0.5 rounded-md border text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setPresentInputMode("write")}
+                    className={`px-2 py-0.5 rounded ${
+                      presentInputMode === "write"
+                        ? "bg-background text-foreground shadow-xs font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Write Text
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPresentInputMode("upload")}
+                    className={`px-2 py-0.5 rounded ${
+                      presentInputMode === "upload"
+                        ? "bg-background text-foreground shadow-xs font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Upload Document / File
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* If write mode (or JaP/BidP) */}
+            {(!isNaP || presentInputMode === "write") && (
+              <div className="relative">
+                <Textarea
+                  rows={3}
+                  value={presentMethod}
+                  onChange={(e) => {
+                    setPresentMethod(e.target.value);
+                    setErrors((err) => ({ ...err, presentMethod: undefined }));
+                  }}
+                  placeholder="Describe the current baseline method, difficulties, or observed bottlenecks..."
+                  className={`text-xs ${errors.presentMethod ? "border-destructive" : ""}`}
+                />
+                {inputMethodSettings.voiceEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => startVoiceForField("presentMethod")}
+                    className="absolute right-2.5 bottom-2.5 p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-muted"
+                    title="Speak Present Method"
+                  >
+                    <Mic className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* If upload mode (NaP) */}
+            {isNaP && presentInputMode === "upload" && (
+              <div className="p-4 border-2 border-dashed rounded-lg bg-muted/20 text-center space-y-2">
+                <Upload className="h-6 w-6 text-muted-foreground mx-auto" />
+                <p className="text-xs font-medium text-foreground">
+                  Upload file for Present Method (PDF, Word, Excel, or Photo)
+                </p>
+                <input
+                  type="file"
+                  id="presentMethodFile"
+                  className="hidden"
+                  onChange={(e) => handleSingleFileUpload(e, setPresentMethodFiles)}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  type="button"
+                  onClick={() => document.getElementById("presentMethodFile")?.click()}
+                  className="text-xs gap-1.5"
+                >
+                  <Paperclip className="h-3.5 w-3.5" /> Choose Document
+                </Button>
+                {presentMethodFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 justify-center pt-2">
+                    {presentMethodFiles.map((f, i) => (
+                      <Badge key={i} variant="secondary" className="text-[11px] gap-1.5 py-1 px-2.5">
+                        <FileText className="h-3 w-3 text-primary" />
+                        <span>{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setPresentMethodFiles((pf) => pf.filter((_, idx) => idx !== i))}
+                          className="hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {errors.presentMethod && <p className="text-xs text-destructive">{errors.presentMethod}</p>}
+          </div>
+
+          <Separator />
+
+          {/* ── Item 18: Proposed Method ── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium">
+                18. Proposed Method <span className="text-destructive">*</span>{" "}
+                <span className="text-[10px] text-muted-foreground font-normal">/ प्रस्तावित विधि — क्या बदलाव करना चाहते हैं?</span>
+              </Label>
+
+              {/* NaP Mode Toggle */}
+              {isNaP && (
+                <div className="flex items-center gap-1 bg-muted p-0.5 rounded-md border text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setProposedInputMode("write")}
+                    className={`px-2 py-0.5 rounded ${
+                      proposedInputMode === "write"
+                        ? "bg-background text-foreground shadow-xs font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Write Text
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProposedInputMode("upload")}
+                    className={`px-2 py-0.5 rounded ${
+                      proposedInputMode === "upload"
+                        ? "bg-background text-foreground shadow-xs font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Upload Document / File
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* If write mode (or JaP/BidP) */}
+            {(!isNaP || proposedInputMode === "write") && (
+              <div className="relative">
+                <Textarea
+                  rows={3}
+                  value={proposedMethod}
+                  onChange={(e) => {
+                    setProposedMethod(e.target.value);
+                    setErrors((err) => ({ ...err, proposedMethod: undefined }));
+                  }}
+                  placeholder="Describe your suggested modification, fixture improvement, or new process..."
+                  className={`text-xs ${errors.proposedMethod ? "border-destructive" : ""}`}
+                />
+                {inputMethodSettings.voiceEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => startVoiceForField("proposedMethod")}
+                    className="absolute right-2.5 bottom-2.5 p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-muted"
+                    title="Speak Proposed Method"
+                  >
+                    <Mic className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* If upload mode (NaP) */}
+            {isNaP && proposedInputMode === "upload" && (
+              <div className="p-4 border-2 border-dashed rounded-lg bg-muted/20 text-center space-y-2">
+                <Upload className="h-6 w-6 text-muted-foreground mx-auto" />
+                <p className="text-xs font-medium text-foreground">
+                  Upload file for Proposed Method (PDF, Word, CAD snapshot, or Photo)
+                </p>
+                <input
+                  type="file"
+                  id="proposedMethodFile"
+                  className="hidden"
+                  onChange={(e) => handleSingleFileUpload(e, setProposedMethodFiles)}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  type="button"
+                  onClick={() => document.getElementById("proposedMethodFile")?.click()}
+                  className="text-xs gap-1.5"
+                >
+                  <Paperclip className="h-3.5 w-3.5" /> Choose Document
+                </Button>
+                {proposedMethodFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 justify-center pt-2">
+                    {proposedMethodFiles.map((f, i) => (
+                      <Badge key={i} variant="secondary" className="text-[11px] gap-1.5 py-1 px-2.5">
+                        <FileText className="h-3 w-3 text-primary" />
+                        <span>{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setProposedMethodFiles((pf) => pf.filter((_, idx) => idx !== i))}
+                          className="hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {errors.proposedMethod && <p className="text-xs text-destructive">{errors.proposedMethod}</p>}
+          </div>
+
+          <Separator />
+
+          {/* ── Item 19: Advantages / Benefits (Text field) ── */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="benefits" className="text-xs font-medium">
+                19. Advantages / Benefits <span className="text-destructive">*</span>{" "}
+                <span className="text-[10px] text-muted-foreground font-normal">/ अपेक्षित लाभ (सुरक्षा, गुणवत्ता, समय या लागत)</span>
+              </Label>
+              <span className="text-[10px] text-muted-foreground">Input in text field</span>
+            </div>
+            <div className="relative">
+              <Textarea
+                id="benefits"
+                rows={3}
+                value={benefits}
+                onChange={(e) => {
+                  setBenefits(e.target.value);
+                  setErrors((err) => ({ ...err, benefits: undefined }));
+                }}
+                placeholder="Specify anticipated savings in time, cost, safety improvements, or scrap reduction..."
+                className={`text-xs ${errors.benefits ? "border-destructive" : ""}`}
+              />
+              {inputMethodSettings.voiceEnabled && (
+                <button
+                  type="button"
+                  onClick={() => startVoiceForField("benefits")}
+                  className="absolute right-2.5 bottom-2.5 p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-muted"
+                  title="Speak Benefits"
+                >
+                  <Mic className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {errors.benefits && <p className="text-xs text-destructive">{errors.benefits}</p>}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ══════════════════════════════════════════════════════════════════════════
+          CARD 5: STAKEHOLDERS (Items 20, 21, 22)
+          ══════════════════════════════════════════════════════════════════════════ */}
+      <Card className="card-shadow">
+        <CardContent className="pt-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-primary uppercase tracking-wide flex items-center gap-2">
+              <Users className="h-3.5 w-3.5" /> Stakeholders & Approval Routing / हितधारक एवं अनुमोदन
+            </p>
+            <Badge variant="outline" className="text-[10px] font-mono">
+              Points 20, 21, 22
+            </Badge>
+          </div>
+
+          {/* ── Item 20: Suggestor Details (Auto fetched) ── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5 text-primary" />
+                20. Suggestor Details <span className="text-[10px] text-muted-foreground font-normal">(Auto-fetched from login / selection)</span>
+              </Label>
+              <Badge className="text-[9px] bg-emerald-100 text-emerald-800 border-emerald-300">
+                Verified
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+              <ReadonlyField
+                icon={User}
+                label="Suggestor Name"
+                labelHi="सुझावकर्ता"
+                value={suggestorName}
+              />
+              <ReadonlyField
+                icon={Hash}
+                label="Employee No."
+                labelHi="कर्मचारी संख्या"
+                value={suggestorEmpNo}
+              />
+              <ReadonlyField
+                icon={Building2}
+                label="Department"
+                labelHi="विभाग"
+                value={workshopDeptName}
+              />
+              <ReadonlyField
+                icon={Tag}
+                label="Emp. Category"
+                labelHi="श्रेणी"
+                value={suggestorCategory}
+              />
+              {isJaP && (
+                <ReadonlyField
+                  icon={Sparkles}
+                  label="Mobile No."
+                  labelHi="मोबाइल"
+                  value={suggestorMobile}
+                  badge="JaP Specific"
+                />
+              )}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* ── Item 21: Superior Details (Auto populated) ── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Tag className="h-3.5 w-3.5 text-indigo-500" />
+                21. Superior Details <span className="text-[10px] text-muted-foreground font-normal">(Auto-populated for first-level review)</span>
+              </Label>
+              <Badge variant="outline" className="text-[10px]">
+                Auto Mapped
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <ReadonlyField
+                icon={User}
+                label="Superior Name"
+                labelHi="वरिष्ठ अधिकारी"
+                value={superiorDetails.name}
+              />
+              <ReadonlyField
+                icon={Hash}
+                label="Superior E.No."
+                labelHi="कर्मचारी संख्या"
+                value={superiorDetails.empNo}
+              />
+              <ReadonlyField
+                icon={Building2}
+                label="Superior Dept."
+                labelHi="विभाग"
+                value={`${superiorDetails.department} (${superiorDetails.designation})`}
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* ── Item 22: Area Specific Planner Details (Auto mapped from Item 10) ── */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Wrench className="h-3.5 w-3.5 text-blue-500" />
+                22. Area Specific Planner Details <span className="text-[10px] text-muted-foreground font-normal">(Auto-mapped based on Area #10)</span>
+              </Label>
+              <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-[10px]">
+                Area Driven
+              </Badge>
+            </div>
+
+            {plannerDetails ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 animate-fade-in">
+                <ReadonlyField
+                  icon={User}
+                  label="Planner Name"
+                  labelHi="योजनाकार"
+                  value={plannerDetails.name}
+                />
+                <ReadonlyField
+                  icon={Hash}
+                  label="Planner E.No."
+                  labelHi="कर्मचारी संख्या"
+                  value={plannerDetails.empNo}
+                />
+                <ReadonlyField
+                  icon={Building2}
+                  label="Planner Dept & Role"
+                  labelHi="विभाग"
+                  value={`${plannerDetails.department} · ${plannerDetails.designation}`}
+                />
+              </div>
+            ) : (
+              <div className="p-3 bg-muted/40 rounded-lg text-xs text-muted-foreground border italic">
+                Select a Suggestion Area (Item 10) to automatically map the Area Planner.
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Optional Group / Team Co-suggestors */}
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="groupSuggestToggle"
+                checked={isGroupSuggestion}
+                onChange={(e) => {
+                  setIsGroupSuggestion(e.target.checked);
+                  if (!e.target.checked) setCoSuggestors([]);
+                }}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <Label htmlFor="groupSuggestToggle" className="text-xs cursor-pointer font-medium">
+                Include Group Co-Suggestors / समूह सह-सुझावकर्ता जोड़ें
+              </Label>
+            </div>
+
+            {isGroupSuggestion && (
+              <div className="p-3 bg-muted/30 border rounded-lg space-y-2 animate-fade-in">
+                <div className="flex items-center gap-2">
+                  <Select
+                    onValueChange={(val) => {
+                      if (!coSuggestors.includes(val)) {
+                        setCoSuggestors((prev) => [...prev, val]);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="text-xs bg-background h-9">
+                      <SelectValue placeholder="Add co-suggestor from employee list..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mockEmployees
+                        .filter((e) => e.employeeNo !== suggestorEmpNo)
+                        .map((emp) => (
+                          <SelectItem key={emp.employeeNo} value={emp.employeeNo} className="text-xs">
+                            {emp.name} ({emp.employeeNo}) — {emp.department}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {coSuggestors.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {coSuggestors.map((id) => {
+                      const emp = mockEmployees.find((e) => e.employeeNo === id);
+                      return (
+                        <Badge key={id} variant="secondary" className="text-[11px] gap-1 py-1 px-2">
+                          <UserPlus className="h-3 w-3 text-primary" />
+                          <span>{emp?.name ?? id} ({id})</span>
+                          <button
+                            type="button"
+                            onClick={() => setCoSuggestors((cs) => cs.filter((c) => c !== id))}
+                            className="ml-1 hover:text-destructive"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ══════════════════════════════════════════════════════════════════════════
+          ACTION BUTTONS
+          ══════════════════════════════════════════════════════════════════════════ */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
         <Button
+          type="button"
           variant="outline"
           onClick={handleSaveDraft}
-          disabled={isSubmitting || isScanning || submitted}
-          className="gap-1.5"
+          disabled={isSubmitting || isScanning}
+          className="w-full sm:w-auto text-xs gap-1.5"
         >
-          <Save className="h-3.5 w-3.5" /> Save Draft / ड्राफ्ट सहेजें
+          <Save className="h-3.5 w-3.5" />
+          Save as Draft / ड्राफ्ट सहेजें
         </Button>
-        <Button variant="outline" onClick={handleReset} disabled={isSubmitting || isScanning}>
-          Reset / रीसेट
-        </Button>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => navigate(`${plantPrefix}/employee/my-suggestions`)}
+            disabled={isSubmitting || isScanning}
+            className="w-1/2 sm:w-auto text-xs"
+          >
+            Cancel
+          </Button>
+
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            disabled={isSubmitting || isScanning}
+            className="w-1/2 sm:w-auto text-xs gap-1.5 shadow-md hover:shadow-lg font-medium"
+          >
+            {isScanning ? (
+              <>
+                <span className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                Scanning Duplicates...
+              </>
+            ) : isSubmitting ? (
+              <>
+                <span className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              <>
+                <Check className="h-3.5 w-3.5" />
+                Submit Suggestion / सुझाव जमा करें
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
+      {/* Duplicate alert dialog */}
       <DuplicateAlertDialog
-        open={showDuplicateAlert}
+        open={showDuplicateModal}
         matches={duplicateMatches}
         pendingMatches={pendingMatchList}
-        onCancel={() => {
-          setShowDuplicateAlert(false);
-          setDuplicateMatches([]);
-          setPendingMatchList([]);
-          pendingSubmitRef.current = false;
-          if (pendingIdRef.current) {
-            unregisterPending(pendingIdRef.current);
-            pendingIdRef.current = null;
-          }
-        }}
-        onProceed={() => {
-          setShowDuplicateAlert(false);
-          setDuplicateMatches([]);
-          setPendingMatchList([]);
-          pendingSubmitRef.current = true;
-          handleSubmit();
-        }}
+        onProceed={handleDuplicateProceed}
+        onCancel={handleDuplicateCancel}
       />
     </div>
   );

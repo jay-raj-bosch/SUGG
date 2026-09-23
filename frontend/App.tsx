@@ -63,6 +63,7 @@ import JaPMyRewards     from "./pages/jap/employee/MyRewards";
 import JaPRoleSelect    from "./pages/jap/JaPRoleSelect";
 
 // ── Demo — Employee pages ──────────────────────────────────────────────────
+import DemoSetupScreen   from "./pages/demo/DemoSetupScreen";
 import DemoEmployeeHome from "./pages/demo/employee/DemoEmployeeHome";
 import DemoNewSuggestion from "./pages/demo/employee/DemoNewSuggestion";
 import DemoMySuggestions from "./pages/demo/employee/DemoMySuggestions";
@@ -187,8 +188,9 @@ const App = () => (
                       <Route path="bps-settings"          element={<JaPBpsSettings />} />
                     </Route>
 
-                    {/* ══ Demo Plant ══════════════════════════════════════════════════ */}
-                    <Route path="/demo" element={<Navigate to="/demo/employee" replace />} />
+                    {/* ══ Demo Application ════════════════════════════════════════════ */}
+                    <Route path="/demo" element={<Navigate to="/demo/setup" replace />} />
+                    <Route path="/demo/setup" element={<DemoSetupScreen />} />
                     <Route path="/demo/employee" element={
                       <PlantGuard><EmployeeLayout /></PlantGuard>
                     }>

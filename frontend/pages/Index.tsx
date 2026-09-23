@@ -22,13 +22,13 @@ const Index = () => {
     setLeaving(true);
     setPlant(plantCode);
     setLanguage(plantCode === "jap" ? "hindi" : "kannada");
-    // BidP goes to role selection; JaP uses role selection; Demo goes to employee portal
+    // BidP goes to role selection; JaP uses role selection; Demo Application goes to plant & scheme setup
     const destination =
       plantCode === "bidp"
         ? "/bidp/select-role"
         : plantCode === "jap"
           ? "/jap/select-role"
-          : "/demo/employee";
+          : "/demo/setup";
     setTimeout(() => navigate(destination), 320);
   };
 

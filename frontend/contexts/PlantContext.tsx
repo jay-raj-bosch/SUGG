@@ -28,9 +28,9 @@ export const PLANTS: Record<PlantCode, PlantInfo> = {
   demo: {
     code: "demo",
     name: "Demo",
-    fullName: "Demo Plant",
-    city: "Innovation Hub",
-    regionalLabel: "Demo",
+    fullName: "Demo Application",
+    city: "Multi-Plant Scheme Sandbox",
+    regionalLabel: "Demo Application",
   },
 };
 

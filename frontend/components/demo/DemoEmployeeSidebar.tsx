@@ -1,10 +1,11 @@
-// Demo Plant — Employee Sidebar Content
-import { Home, FilePlus, ListChecks, Trophy, ArrowLeft } from "lucide-react";
+// Demo Application — Employee Sidebar Content
+import { Home, FilePlus, ListChecks, Trophy, ArrowLeft, Sliders, Layers, Building2 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { usePlant } from "@/contexts/PlantContext";
+import { getDemoSelection } from "@/lib/demoConfig";
 
 interface Props {
   onClose?: () => void;
@@ -14,6 +15,7 @@ const DemoEmployeeSidebarContent = ({ onClose }: Props) => {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { plantPrefix } = usePlant();
+  const demoSelection = getDemoSelection();
 
   const menuItems = [
     {
@@ -48,10 +50,17 @@ const DemoEmployeeSidebarContent = ({ onClose }: Props) => {
 
   return (
     <>
-      <div className="px-3 py-3 border-b border-sidebar-border">
+      <div className="px-3 py-3 border-b border-sidebar-border space-y-1">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-primary">
-          Employee Portal / <span>{t("Employee Menu")}</span>
+          Demo Application
         </p>
+        <div className="flex items-center gap-1.5 text-[11px] text-sidebar-foreground/80 font-medium">
+          <Building2 className="h-3 w-3 text-primary shrink-0" />
+          <span>{demoSelection?.plant ?? "JaP"}</span>
+          <span className="opacity-50">/</span>
+          <Layers className="h-3 w-3 text-indigo-500 shrink-0" />
+          <span className="truncate capitalize">{demoSelection?.scheme ?? "suggestion"}</span>
+        </div>
       </div>
       <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
         {menuItems.map((item) => (
@@ -74,7 +83,20 @@ const DemoEmployeeSidebarContent = ({ onClose }: Props) => {
           </NavLink>
         ))}
       </nav>
-      <div className="px-2 py-3 border-t border-sidebar-border">
+      <div className="px-2 py-2 border-t border-sidebar-border space-y-1">
+        <button
+          onClick={() => {
+            navigate("/demo/setup");
+            onClose?.();
+          }}
+          className="flex items-center gap-2.5 px-3 py-2 rounded-md text-xs text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground w-full transition-colors"
+        >
+          <Sliders className="h-4 w-4 text-primary" />
+          <div className="flex flex-col leading-tight text-left">
+            <span>Switch Plant & Scheme</span>
+            <span className="text-[10px] opacity-60">Change Environment</span>
+          </div>
+        </button>
         <button
           onClick={() => {
             navigate("/");
@@ -94,3 +116,4 @@ const DemoEmployeeSidebarContent = ({ onClose }: Props) => {
 };
 
 export default DemoEmployeeSidebarContent;
+

@@ -47,11 +47,25 @@ const DemoEmployeeHome = () => {
 
   const mySuggestions = useMemo(
     () =>
-      suggestions.filter(
-        (s) =>
-          s.plantCode === "PLT-03" &&
-          (!user?.employeeNo || s.employeeNo === user.employeeNo)
-      ),
+      suggestions.filter((s) => {
+        const isDemoPlant =
+          s.plantCode === "PLT-03" ||
+          (s as any).plant_code === "PLT-03" ||
+          s.plantCode === "demo" ||
+          (s as any).plant_code === "demo" ||
+          !s.plantCode;
+        if (!isDemoPlant) return false;
+
+        if (!user?.employeeNo || user.employeeNo === "DEMO-1001" || user.employeeNo === "DEMO-EMP") {
+          return true;
+        }
+        return (
+          s.employeeNo === user.employeeNo ||
+          (s as any).employee_no === user.employeeNo ||
+          (s.formData as any)?.onBehalfEmpNo === user.employeeNo ||
+          s.employeeNo === "DEMO-1001"
+        );
+      }),
     [suggestions, user]
   );
 

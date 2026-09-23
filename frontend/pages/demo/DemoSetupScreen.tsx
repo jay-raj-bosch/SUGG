@@ -29,9 +29,13 @@ import {
   MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
+import { usePlant } from "@/contexts/PlantContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 const DemoSetupScreen = () => {
   const navigate = useNavigate();
+  const { setPlant } = usePlant();
+  const { setDemoRole } = useAuth();
   const existing = getDemoSelection();
 
   const [selectedPlant, setSelectedPlant] = useState<DemoPlantKey | "">(
@@ -76,6 +80,8 @@ const DemoSetupScreen = () => {
     }
 
     saveDemoSelection(selectedPlant, selectedScheme);
+    setPlant("demo");
+    setDemoRole("employee");
     toast.success("Environment Configured!", {
       description: `Active Plant: ${selectedPlant} · Scheme: ${selectedScheme}`,
     });

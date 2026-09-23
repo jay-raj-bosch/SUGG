@@ -24,19 +24,6 @@ import { usePlant } from "@/contexts/PlantContext";
 import { useVoiceEngine, VOICE_LANGUAGES } from "@/hooks/useVoiceEngine";
 import VoiceHighlight from "@/components/VoiceHighlight";
 import { toast } from "sonner";
-import DuplicateAlertDialog from "@/components/bidp/DuplicateAlertDialog";
-import {
-  detectDuplicatesFull,
-  type DuplicateMatch,
-  type PendingMatch,
-} from "@/lib/bidp/duplicateDetector";
-import {
-  registerPending,
-  unregisterPending,
-  getActivePending,
-  createPendingId,
-  clearExpiredPending,
-} from "@/lib/bidp/pendingSubmissionsStore";
 import {
   FilePlus,
   User,
@@ -489,14 +476,6 @@ const DemoNewSuggestion = () => {
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Duplicate detection state
-  const [duplicateMatches, setDuplicateMatches] = useState<DuplicateMatch[]>([]);
-  const [pendingMatchList, setPendingMatchList] = useState<PendingMatch[]>([]);
-  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-  const pendingIdRef = useRef<string | null>(null);
-  const pendingSubmitRef = useRef(false);
-
   // Voice Engine — matching JaP New Suggestion
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceLang, setVoiceLang] = useState("hi-IN");
@@ -745,65 +724,17 @@ const DemoNewSuggestion = () => {
   };
 
   const handleSubmit = async () => {
-    if (isSubmitting || isScanning) return;
+    if (isSubmitting) return;
     if (!validate()) {
       toast.error("Please fill all required fields correctly");
       return;
     }
 
-    if (!pendingSubmitRef.current) {
-      if (!pendingIdRef.current) pendingIdRef.current = createPendingId();
-
-      const duplicateInput = {
-        subject,
-        presentMethod,
-        proposedMethod,
-        benefits,
-        category,
-        suggestionType: isKaizenScheme ? "Kaizen" : "Improvement Suggestion",
-      };
-
-      registerPending({
-        id: pendingIdRef.current,
-        employeeNo: suggestorEmpNo,
-        employeeName: suggestorName,
-        registeredAt: Date.now(),
-        subject: duplicateInput.subject,
-        presentMethod: duplicateInput.presentMethod,
-        proposedMethod: duplicateInput.proposedMethod,
-        benefits: duplicateInput.benefits,
-        category: duplicateInput.category,
-        suggestionType: duplicateInput.suggestionType,
-      });
-
-      setIsScanning(true);
-      await new Promise((r) => setTimeout(r, 600));
-
-      const snapshot = getSuggestionsSnapshot();
-      const demoSuggestions = snapshot.filter(
-        (s) => (s.plantCode ?? (s as any).plant_code) === "PLT-03"
-      );
-
-      const detection = detectDuplicatesFull(
-        duplicateInput,
-        demoSuggestions,
-        getActivePending(pendingIdRef.current)
-      );
-      setIsScanning(false);
-
-      if (detection.hasConflict) {
-        setDuplicateMatches(detection.saved);
-        setPendingMatchList(detection.pending);
-        setShowDuplicateModal(true);
-        return;
-      }
-    }
-
     setIsSubmitting(true);
     try {
-      const payload = buildPayload("In Evaluation");
+      const payload = buildPayload("Pending Feasibility Review");
       if (draftId && draftSuggestion) {
-        updateSuggestion(draftId, payload);
+        await updateSuggestion(draftId, payload);
       } else {
         await addSuggestion(payload);
       }
@@ -815,12 +746,6 @@ const DemoNewSuggestion = () => {
         suggestionId: suggNo,
       });
 
-      if (pendingIdRef.current) {
-        unregisterPending(pendingIdRef.current);
-        pendingIdRef.current = null;
-      }
-      clearExpiredPending();
-
       toast.success("Suggestion Submitted Successfully", {
         description: `${suggNo} is now registered under ${activePlant} (${activeScheme.toUpperCase()}).`,
       });
@@ -829,21 +754,6 @@ const DemoNewSuggestion = () => {
       toast.error("Failed to submit suggestion");
     } finally {
       setIsSubmitting(false);
-      pendingSubmitRef.current = false;
-    }
-  };
-
-  const handleDuplicateProceed = () => {
-    setShowDuplicateModal(false);
-    pendingSubmitRef.current = true;
-    handleSubmit();
-  };
-
-  const handleDuplicateCancel = () => {
-    setShowDuplicateModal(false);
-    if (pendingIdRef.current) {
-      unregisterPending(pendingIdRef.current);
-      pendingIdRef.current = null;
     }
   };
 
@@ -1912,7 +1822,7 @@ const DemoNewSuggestion = () => {
           type="button"
           variant="outline"
           onClick={handleSaveDraft}
-          disabled={isSubmitting || isScanning}
+          disabled={isSubmitting}
           className="w-full sm:w-auto text-xs gap-1.5"
         >
           <Save className="h-3.5 w-3.5" />
@@ -1924,7 +1834,7 @@ const DemoNewSuggestion = () => {
             type="button"
             variant="ghost"
             onClick={() => navigate(`${plantPrefix}/employee/my-suggestions`)}
-            disabled={isSubmitting || isScanning}
+            disabled={isSubmitting}
             className="w-1/2 sm:w-auto text-xs"
           >
             Cancel
@@ -1933,15 +1843,10 @@ const DemoNewSuggestion = () => {
           <Button
             type="button"
             onClick={handleSubmit}
-            disabled={isSubmitting || isScanning}
+            disabled={isSubmitting}
             className="w-1/2 sm:w-auto text-xs gap-1.5 shadow-sm font-medium"
           >
-            {isScanning ? (
-              <>
-                <span className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                Validating Duplicates...
-              </>
-            ) : isSubmitting ? (
+            {isSubmitting ? (
               <>
                 <span className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
                 Submitting...
@@ -1955,15 +1860,6 @@ const DemoNewSuggestion = () => {
           </Button>
         </div>
       </div>
-
-      {/* Duplicate alert dialog */}
-      <DuplicateAlertDialog
-        open={showDuplicateModal}
-        matches={duplicateMatches}
-        pendingMatches={pendingMatchList}
-        onProceed={handleDuplicateProceed}
-        onCancel={handleDuplicateCancel}
-      />
     </div>
   );
 };

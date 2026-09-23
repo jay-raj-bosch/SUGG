@@ -28,7 +28,7 @@ interface SuggestionContextType {
 const SuggestionContext = createContext<SuggestionContextType | undefined>(undefined);
 
 // Bump this version whenever mock data structure changes to force a fresh seed.
-const MOCK_DATA_VERSION = "v13";
+const MOCK_DATA_VERSION = "v14";
 
 // ── Stale-cache eviction ─────────────────────────────────────────────────────
 // Scans all bidp_db_ data keys; removes any whose version tag is missing or stale.
@@ -183,6 +183,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
       auditTrail: [...(suggestion.auditTrail || []), initialAuditEntry],
     };
 
+    const targetPlantCode = plant === "demo" ? "PLT-03" : plant === "jap" ? "PLT-02" : "PLT-01";
     try {
       const typeCodeMap: Record<string, string> = {
         "Simple Suggestion Scheme": "SSS",
@@ -191,9 +192,10 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
         "Daily CIP": "DCP",
         "Cash The Flash": "CTF",
         "Improvement Suggestion": "JAP",
+        "Kaizen": "JAP",
       };
-      const typeCode = typeCodeMap[suggestion.type] ?? "SSS";
-      const created = await apiService.createSuggestion((plant ?? "bidp") as "bidp" | "jap", {
+      const typeCode = typeCodeMap[suggestion.type] ?? "JAP";
+      const created = await apiService.createSuggestion((plant ?? "bidp") as "bidp" | "jap" | "demo", {
         typeCode,
         subject: suggestion.subject,
         category: suggestion.category,
@@ -209,16 +211,35 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
         benefits: suggestion.benefits,
         assignedFlm: suggestion.assignedFlm,
         approvalLevel: suggestion.approvalLevel,
-        plantCode: plant,
+        plantCode: suggestion.plantCode || targetPlantCode,
         ...((suggestion as any).formData ?? {}),
       });
-      newEntry = { ...suggestionWithAudit, plantCode: suggestion.plantCode ?? plant ?? "", id: String(created.id), suggestionNo: created.suggestionNo ?? suggestion.suggestionNo };
+      newEntry = {
+        ...suggestionWithAudit,
+        ...created,
+        plantCode: created.plantCode || suggestion.plantCode || targetPlantCode,
+        id: String(created.id),
+        suggestionNo: created.suggestionNo ?? suggestion.suggestionNo,
+      };
     } catch {
       const id = String(Date.now());
-      const prefix = { "Simple Suggestion Scheme": "SSS", "Shop Floor CIP": "SFC", "My Idea Card": "MIC", "Daily CIP": "DCP", "Cash The Flash": "CTF", "Improvement Suggestion": "JAP" }[suggestion.type] ?? "SUG";
+      const prefix = {
+        "Simple Suggestion Scheme": "SSS",
+        "Shop Floor CIP": "SFC",
+        "My Idea Card": "MIC",
+        "Daily CIP": "DCP",
+        "Cash The Flash": "CTF",
+        "Improvement Suggestion": "DEMO",
+        "Kaizen": "KAIZEN",
+      }[suggestion.type] ?? (plant === "demo" ? "DEMO" : "SUG");
       const year = new Date().getFullYear();
       const suggestionNo = suggestion.suggestionNo || `${prefix}-${year}-${String(Math.floor(Math.random() * 999)).padStart(3, "0")}`;
-      newEntry = { ...suggestionWithAudit, plantCode: suggestion.plantCode ?? plant ?? "", id, suggestionNo };
+      newEntry = {
+        ...suggestionWithAudit,
+        plantCode: suggestion.plantCode || targetPlantCode,
+        id,
+        suggestionNo,
+      };
     }
     setSuggestions(prev => {
       const updated = [newEntry, ...prev];

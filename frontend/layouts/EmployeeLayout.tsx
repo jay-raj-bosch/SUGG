@@ -21,9 +21,9 @@ const EmployeeLayout = () => {
     }
   }, [plant, location.pathname, setPlant]);
 
-  // Auto-assign employee role if not authenticated (direct URL access)
+  // Auto-assign employee role if not authenticated (direct URL access) or plant context changed
   useEffect(() => {
-    if (!user) {
+    if (!user || (plant === "demo" && user.plantCode !== "PLT-03")) {
       if (plant === "demo") {
         setDemoRole("employee");
       } else {

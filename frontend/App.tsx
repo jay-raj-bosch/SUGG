@@ -1,4 +1,4 @@
-﻿import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -61,6 +61,12 @@ import JaPNewSuggestion from "./pages/jap/employee/NewSuggestion";
 import JaPMySuggestions from "./pages/jap/employee/MySuggestions";
 import JaPMyRewards     from "./pages/jap/employee/MyRewards";
 import JaPRoleSelect    from "./pages/jap/JaPRoleSelect";
+
+// ── Demo — Employee pages ──────────────────────────────────────────────────
+import DemoEmployeeHome from "./pages/demo/employee/DemoEmployeeHome";
+import DemoNewSuggestion from "./pages/demo/employee/DemoNewSuggestion";
+import DemoMySuggestions from "./pages/demo/employee/DemoMySuggestions";
+import DemoMyRewards     from "./pages/demo/employee/DemoMyRewards";
 
 // ── JaP — Admin pages ──────────────────────────────────────────────────────
 import JaPAdminHome          from "./pages/jap/admin/JaPAdminHome";
@@ -179,6 +185,17 @@ const App = () => (
                       <Route path="reopen-suggestion"     element={<JaPReopenSuggestion />} />
                       <Route path="approval-inbox"        element={<JaPApprovalInbox />} />
                       <Route path="bps-settings"          element={<JaPBpsSettings />} />
+                    </Route>
+
+                    {/* ══ Demo Plant ══════════════════════════════════════════════════ */}
+                    <Route path="/demo" element={<Navigate to="/demo/employee" replace />} />
+                    <Route path="/demo/employee" element={
+                      <PlantGuard><EmployeeLayout /></PlantGuard>
+                    }>
+                      <Route index element={<DemoEmployeeHome />} />
+                      <Route path="new-suggestion" element={<DemoNewSuggestion />} />
+                      <Route path="my-suggestions" element={<DemoMySuggestions />} />
+                      <Route path="my-rewards"     element={<DemoMyRewards />} />
                     </Route>
 
                     {/* â”€â”€ Legacy redirects â€” keeps old bookmarks working â”€â”€â”€ */}

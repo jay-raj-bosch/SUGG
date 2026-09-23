@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 
-export type PlantCode = "bidp" | "jap";
+export type PlantCode = "bidp" | "jap" | "demo";
 
 export interface PlantInfo {
   code: PlantCode;
@@ -24,6 +24,13 @@ export const PLANTS: Record<PlantCode, PlantInfo> = {
     fullName: "Jaipur Plant",
     city: "Jaipur, Rajasthan",
     regionalLabel: "हिंदी",
+  },
+  demo: {
+    code: "demo",
+    name: "Demo",
+    fullName: "Demo Plant",
+    city: "Innovation Hub",
+    regionalLabel: "Demo",
   },
 };
 

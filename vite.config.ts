@@ -4,31 +4,17 @@ import path from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
-  base: '/SuggestionPOC/'
-,
-  // .env files live in frontend/ (not the workspace root where this config
-  // lives), so Vite must be told to read them from there — otherwise
-  // VITE_* vars (e.g. VITE_AZURE_TRANSLATOR_KEY) silently resolve to undefined.
-  envDir: path.resolve(__dirname, "./frontend"),
+  base: "/",
   server: {
-    host: "::",
-    port: 8080,
+    host: "0.0.0.0",
+    port: 3000,
     strictPort: true,
-    hmr: {
-      overlay: false,
-    },
-    proxy: {
-      "/api": {
-        target: "http://localhost:4000",
-        changeOrigin: true,
-      },
-    },
+    hmr: false,
   },
   plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./frontend"),
+      "@": path.resolve(import.meta.dirname, "./frontend"),
     },
   },
-  
 }));

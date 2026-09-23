@@ -22,6 +22,7 @@
 import bcrypt from "bcryptjs";
 import { bidpEmployees, bidpSuggestions, bidpDeptStats, bidpCategoryStats, bidpAuthorityAssignments } from "./seed/bidp";
 import { japEmployees, japSuggestions, japDeptStats, japCategoryStats, japAuthorityAssignments } from "./seed/jap";
+import { demoEmployees, demoSuggestions, demoDeptStats, demoCategoryStats, demoAuthorityAssignments } from "./seed/demo";
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -218,15 +219,17 @@ const DEFAULT_HASH = bcrypt.hashSync("password123", 10);
 const employees: Employee[] = [
   ...bidpEmployees.map(e => ({ ...e, password_hash: DEFAULT_HASH })),
   ...japEmployees.map(e => ({ ...e, password_hash: DEFAULT_HASH })),
+  ...demoEmployees.map(e => ({ ...e, password_hash: DEFAULT_HASH })),
 ];
 
 const suggestions: Suggestion[] = [
   ...(bidpSuggestions as unknown as Suggestion[]),
   ...(japSuggestions  as unknown as Suggestion[]),
+  ...(demoSuggestions as unknown as Suggestion[]),
 ];
 nextSuggestionId = suggestions.reduce((max, s) => Math.max(max, s.id), 0) + 1;
 
-// ── Default categories seeded for both plants ────────────────────────────────
+// ── Default categories seeded for all plants ────────────────────────────────
 const DEFAULT_CATEGORIES = [
   "Safety",
   "Quality",
@@ -240,7 +243,7 @@ const DEFAULT_CATEGORIES = [
 
 const categories: Category[] = [];
 let _catSeedId = 1;
-for (const plantCode of ["PLT-01", "PLT-02"]) {
+for (const plantCode of ["PLT-01", "PLT-02", "PLT-03"]) {
   for (const name of DEFAULT_CATEGORIES) {
     categories.push({
       id: _catSeedId++,
@@ -259,8 +262,9 @@ nextDeptMappingId = 9;
 const authorityAssignments: AuthorityAssignment[] = [
   ...japAuthorityAssignments,
   ...bidpAuthorityAssignments,
+  ...demoAuthorityAssignments,
 ];
-nextAuthorityId = 200;
+nextAuthorityId = 310;
 
 const notifications: Notification[] = [];
 nextNotificationId = 8;
@@ -286,10 +290,12 @@ nextAwardId = awards.length + 1;
 const deptStatsByPlant: Record<string, DeptStat[]> = {
   "PLT-01": bidpDeptStats,
   "PLT-02": japDeptStats,
+  "PLT-03": demoDeptStats,
 };
 const categoryStatsByPlant: Record<string, CategoryStat[]> = {
   "PLT-01": bidpCategoryStats,
   "PLT-02": japCategoryStats,
+  "PLT-03": demoDeptStats ? demoCategoryStats : [],
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════

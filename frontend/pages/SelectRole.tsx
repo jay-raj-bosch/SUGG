@@ -49,6 +49,9 @@ const SelectRole = () => {
   if (resolvedPlant === "jap") {
     return <Navigate to="/jap/select-role" replace />;
   }
+  if (resolvedPlant === "demo") {
+    return <Navigate to="/demo/employee" replace />;
+  }
 
   const handleRoleSelect = (role: "employee" | "admin") => {
     if (leaving) return;

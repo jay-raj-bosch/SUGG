@@ -1,0 +1,6 @@
+{
+  "name": "Suggestion Management System",
+  "description": "Multi-plant employee suggestion scheme and CIP management platform for manufacturing operations",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

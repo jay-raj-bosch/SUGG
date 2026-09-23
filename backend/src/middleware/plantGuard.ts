@@ -28,3 +28,13 @@ export function requireJaP(req: Request, res: Response, next: NextFunction): voi
   }
   next();
 }
+
+export function requireDemo(req: Request, res: Response, next: NextFunction): void {
+  if (req.user?.plantCode !== "PLT-03" && req.user?.plantCode !== "PLT-DEMO") {
+    res.status(403).json({
+      error: "Access denied: this endpoint is for Demo Plant (PLT-03) only",
+    });
+    return;
+  }
+  next();
+}

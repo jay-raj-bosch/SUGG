@@ -22,8 +22,13 @@ const Index = () => {
     setLeaving(true);
     setPlant(plantCode);
     setLanguage(plantCode === "jap" ? "hindi" : "kannada");
-    // BidP goes to role selection; JaP still uses role selection
-    const destination = plantCode === "bidp" ? "/bidp/select-role" : `/${plantCode}`;
+    // BidP goes to role selection; JaP uses role selection; Demo goes to employee portal
+    const destination =
+      plantCode === "bidp"
+        ? "/bidp/select-role"
+        : plantCode === "jap"
+          ? "/jap/select-role"
+          : "/demo/employee";
     setTimeout(() => navigate(destination), 320);
   };
 
@@ -47,7 +52,7 @@ const Index = () => {
 
       <p className="text-sm text-muted-foreground mb-6 animate-fade-in">Select your plant to continue</p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl w-full">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full">
         {Object.values(PLANTS).map((info, index) => (
           <div
             key={info.code}

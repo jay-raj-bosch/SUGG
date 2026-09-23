@@ -208,6 +208,8 @@ export async function getMe(): Promise<AuthUser> {
 
 // ─── Suggestions ─────────────────────────────────────────────────────────────
 
+export type PlantKey = "bidp" | "jap" | "demo";
+
 export interface SuggestionFilters {
   status?: string;
   type?: string;
@@ -216,7 +218,7 @@ export interface SuggestionFilters {
   limit?: number;
 }
 
-export async function fetchSuggestions(plant: "bidp" | "jap", filters: SuggestionFilters = {}): Promise<PaginatedSuggestions> {
+export async function fetchSuggestions(plant: PlantKey, filters: SuggestionFilters = {}): Promise<PaginatedSuggestions> {
   const params = new URLSearchParams();
   if (filters.status)      params.set("status",      filters.status);
   if (filters.type)        params.set("type",         filters.type);
@@ -227,20 +229,20 @@ export async function fetchSuggestions(plant: "bidp" | "jap", filters: Suggestio
   return api.get<PaginatedSuggestions>(`/${plant}/suggestions${query ? `?${query}` : ""}`);
 }
 
-export async function fetchSuggestion(plant: "bidp" | "jap", id: string | number): Promise<Suggestion> {
+export async function fetchSuggestion(plant: PlantKey, id: string | number): Promise<Suggestion> {
   return api.get<Suggestion>(`/${plant}/suggestions/${id}`);
 }
 
-export async function createSuggestion(plant: "bidp" | "jap", payload: Record<string, unknown>): Promise<Suggestion> {
+export async function createSuggestion(plant: PlantKey, payload: Record<string, unknown>): Promise<Suggestion> {
   return api.post<Suggestion>(`/${plant}/suggestions`, payload);
 }
 
-export async function updateSuggestion(plant: "bidp" | "jap", id: string | number, payload: Record<string, unknown>): Promise<Suggestion> {
+export async function updateSuggestion(plant: PlantKey, id: string | number, payload: Record<string, unknown>): Promise<Suggestion> {
   return api.put<Suggestion>(`/${plant}/suggestions/${id}`, payload);
 }
 
 export async function patchSuggestionStatus(
-  plant: "bidp" | "jap",
+  plant: PlantKey,
   id: string | number,
   status: string,
   pendingWith?: string,
@@ -256,55 +258,55 @@ export async function patchSuggestionStatus(
 
 // ─── Employees ────────────────────────────────────────────────────────────────
 
-export async function fetchEmployees(plant: "bidp" | "jap", role?: string): Promise<Employee[]> {
+export async function fetchEmployees(plant: PlantKey, role?: string): Promise<Employee[]> {
   const query = role ? `?role=${role}` : "";
   return api.get<Employee[]>(`/${plant}/employees${query}`);
 }
 
 // ─── Categories ───────────────────────────────────────────────────────────────
 
-export async function fetchCategories(plant: "bidp" | "jap"): Promise<Category[]> {
+export async function fetchCategories(plant: PlantKey): Promise<Category[]> {
   return api.get<Category[]>(`/${plant}/categories`);
 }
 
-export async function addCategory(plant: "bidp" | "jap", name: string, description?: string): Promise<Category> {
+export async function addCategory(plant: PlantKey, name: string, description?: string): Promise<Category> {
   return api.post<Category>(`/${plant}/categories`, { name, description });
 }
 
-export async function removeCategory(plant: "bidp" | "jap", id: number): Promise<void> {
+export async function removeCategory(plant: PlantKey, id: number): Promise<void> {
   return api.delete(`/${plant}/categories/${id}`);
 }
 
 // ─── Dept Mappings ────────────────────────────────────────────────────────────
 
-export async function fetchDeptMappings(plant: "bidp" | "jap"): Promise<DeptMapping[]> {
+export async function fetchDeptMappings(plant: PlantKey): Promise<DeptMapping[]> {
   return api.get<DeptMapping[]>(`/${plant}/dept-mappings`);
 }
 
-export async function addDeptMapping(plant: "bidp" | "jap", deptName: string, mappedName: string): Promise<DeptMapping> {
+export async function addDeptMapping(plant: PlantKey, deptName: string, mappedName: string): Promise<DeptMapping> {
   return api.post<DeptMapping>(`/${plant}/dept-mappings`, { deptName, mappedName });
 }
 
-export async function updateDeptMapping(plant: "bidp" | "jap", id: number, mappedName: string): Promise<DeptMapping> {
+export async function updateDeptMapping(plant: PlantKey, id: number, mappedName: string): Promise<DeptMapping> {
   return api.put<DeptMapping>(`/${plant}/dept-mappings/${id}`, { mappedName });
 }
 
-export async function removeDeptMapping(plant: "bidp" | "jap", id: number): Promise<void> {
+export async function removeDeptMapping(plant: PlantKey, id: number): Promise<void> {
   return api.delete(`/${plant}/dept-mappings/${id}`);
 }
 
 // ─── Authority Assignments ────────────────────────────────────────────────────
 
-export async function fetchAuthority(plant: "bidp" | "jap", role?: string): Promise<AuthorityAssignment[]> {
+export async function fetchAuthority(plant: PlantKey, role?: string): Promise<AuthorityAssignment[]> {
   const query = role ? `?role=${role}` : "";
   return api.get<AuthorityAssignment[]>(`/${plant}/authority-assignments${query}`);
 }
 
-export async function addAuthority(plant: "bidp" | "jap", payload: Partial<AuthorityAssignment>): Promise<AuthorityAssignment> {
+export async function addAuthority(plant: PlantKey, payload: Partial<AuthorityAssignment>): Promise<AuthorityAssignment> {
   return api.post<AuthorityAssignment>(`/${plant}/authority-assignments`, payload);
 }
 
-export async function removeAuthority(plant: "bidp" | "jap", id: number): Promise<void> {
+export async function removeAuthority(plant: PlantKey, id: number): Promise<void> {
   return api.delete(`/${plant}/authority-assignments/${id}`);
 }
 
@@ -328,12 +330,12 @@ export async function markAllNotificationsRead(): Promise<void> {
 
 // ─── Awards ───────────────────────────────────────────────────────────────────
 
-export async function fetchAwards(plant: "bidp" | "jap", employeeNo?: string): Promise<Award[]> {
+export async function fetchAwards(plant: PlantKey, employeeNo?: string): Promise<Award[]> {
   const query = employeeNo ? `?employeeNo=${employeeNo}` : "";
   return api.get<Award[]>(`/${plant}/awards${query}`);
 }
 
-export async function createAward(plant: "bidp" | "jap", payload: {
+export async function createAward(plant: PlantKey, payload: {
   suggestionId: number;
   suggestionNo: string;
   employeeNo: string;
@@ -345,7 +347,7 @@ export async function createAward(plant: "bidp" | "jap", payload: {
 }
 
 export async function updateNeftStatus(
-  plant: "bidp" | "jap",
+  plant: PlantKey,
   id: number,
   neftStatus: "Pending" | "Processed" | "Failed",
   neftDate?: string
@@ -355,18 +357,18 @@ export async function updateNeftStatus(
 
 // ─── Reports ─────────────────────────────────────────────────────────────────
 
-export async function fetchReportSummary(plant: "bidp" | "jap"): Promise<ReportSummary> {
+export async function fetchReportSummary(plant: PlantKey): Promise<ReportSummary> {
   return api.get<ReportSummary>(`/${plant}/reports/summary`);
 }
 
-export async function fetchDeptStats(plant: "bidp" | "jap"): Promise<DeptStats[]> {
+export async function fetchDeptStats(plant: PlantKey): Promise<DeptStats[]> {
   return api.get<DeptStats[]>(`/${plant}/reports/dept-stats`);
 }
 
-export async function fetchCategoryStats(plant: "bidp" | "jap"): Promise<CategoryStats[]> {
+export async function fetchCategoryStats(plant: PlantKey): Promise<CategoryStats[]> {
   return api.get<CategoryStats[]>(`/${plant}/reports/category-stats`);
 }
 
-export async function fetchMemoReport(plant: "bidp" | "jap", month: string, year: string, type: string): Promise<MemoEntry[]> {
+export async function fetchMemoReport(plant: PlantKey, month: string, year: string, type: string): Promise<MemoEntry[]> {
   return api.get<MemoEntry[]>(`/${plant}/reports/memo?month=${month}&year=${year}&type=${type}`);
 }

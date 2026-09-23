@@ -47,12 +47,24 @@ const DEMO_ADMIN: AuthUser = {
   email: "demo.admin@company.com",
 };
 
+const DEMO_PLANT_EMPLOYEE: AuthUser = {
+  employeeNo: "DEMO-1001",
+  name: "Alex Morgan",
+  department: "Innovation & Ops",
+  area: "DEMO/Main",
+  plantCode: "PLT-03",
+  role: "employee",
+  ntid: "demo_amorgan",
+  email: "alex.morgan@company.com",
+};
+
 interface AuthContextType {
   user: AuthUser | null;
   /** Demo/fallback only — sets a placeholder role when no real auth is present. */
   setRole: (role: "employee" | "admin") => void;
   setBidpRole: (bidpRole: BidpRole, userData: Partial<AuthUser>) => Promise<void>;
   setJapRole: (japRole: JapRole, userData: Partial<AuthUser>) => Promise<void>;
+  setDemoRole: (role?: "employee" | "admin") => Promise<void>;
   login: (employeeNo: string, password: string, requiredRole: "employee" | "admin") => Promise<string | null>;
   /** SSO login — pass the access token received from the SSO provider redirect. */
   loginWithSsoToken: (ssoAccessToken: string) => Promise<string | null>;
@@ -75,9 +87,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const savedBidpData = sessionStorage.getItem("bidpUserData");
       const savedJapRole  = sessionStorage.getItem("japRole") as JapRole | null;
       const savedJapData  = sessionStorage.getItem("japUserData");
+      const savedDemoRole = sessionStorage.getItem("demoRole") as "employee" | "admin" | null;
+      const savedDemoData = sessionStorage.getItem("demoUserData");
 
       // Apply a saved role context on top of the resolved user
       const applyRoleContext = (baseUser: AuthUser): AuthUser => {
+        if (savedDemoRole && savedDemoData) {
+          const extra = JSON.parse(savedDemoData) as Partial<AuthUser>;
+          return { ...baseUser, ...extra, role: savedDemoRole, plantCode: "PLT-03" };
+        }
         if (savedJapRole && savedJapData) {
           const extra = JSON.parse(savedJapData) as Partial<AuthUser>;
           return { ...baseUser, ...extra, role: savedJapRole === "employee" ? "employee" : "admin", japRole: savedJapRole, bidpRole: undefined };
@@ -185,7 +203,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let resolvedUser: AuthUser | null = null;
     if (userData.employeeNo) {
       try {
-        const res = await apiService.login(userData.employeeNo, DEMO_PASSWORD, baseRole);
+        const res = await apiService.login(userData.employeeNo, DEMO_PASSWORD);
         resolvedUser = { ...res.user, japRole, bidpRole: undefined };
       } catch (err) {
         console.error("[AuthContext] JaP demo login failed — continuing without a JWT (writes will fail):", err);
@@ -207,17 +225,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(resolvedUser);
   }, [user]);
 
+  const setDemoRole = useCallback(async (role: "employee" | "admin" = "employee") => {
+    sessionStorage.removeItem("bidpRole");
+    sessionStorage.removeItem("bidpUserData");
+    sessionStorage.removeItem("japRole");
+    sessionStorage.removeItem("japUserData");
+
+    let resolvedUser: AuthUser | null = null;
+    try {
+      const res = await apiService.login("DEMO-1001", DEMO_PASSWORD);
+      resolvedUser = { ...res.user, role };
+    } catch {
+      resolvedUser = { ...DEMO_PLANT_EMPLOYEE, role };
+    }
+
+    sessionStorage.setItem("demoRole", role);
+    sessionStorage.setItem("demoUserData", JSON.stringify(resolvedUser));
+    setUser(resolvedUser);
+  }, []);
+
   const logout = useCallback(() => {
     clearToken();
     sessionStorage.removeItem("bidpRole");
     sessionStorage.removeItem("bidpUserData");
     sessionStorage.removeItem("japRole");
     sessionStorage.removeItem("japUserData");
+    sessionStorage.removeItem("demoRole");
+    sessionStorage.removeItem("demoUserData");
     setUser(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, setRole, setBidpRole, setJapRole, login, loginWithSsoToken, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, setRole, setBidpRole, setJapRole, setDemoRole, login, loginWithSsoToken, logout, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

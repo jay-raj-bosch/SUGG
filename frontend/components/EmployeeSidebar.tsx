@@ -1,6 +1,7 @@
 import { usePlant } from "@/contexts/PlantContext";
 import BidPEmployeeSidebarContent from "@/components/bidp/EmployeeSidebar";
 import JaPEmployeeSidebarContent from "@/components/jap/EmployeeSidebar";
+import DemoEmployeeSidebarContent from "@/components/demo/DemoEmployeeSidebar";
 import { cn } from "@/lib/utils";
 import { useRef, useState, useCallback, useEffect } from "react";
 
@@ -15,9 +16,9 @@ const DEFAULT_WIDTH = 224;
 
 const SidebarContent = ({ onClose }: { onClose?: () => void }) => {
   const { plant } = usePlant();
-  return plant === "jap"
-    ? <JaPEmployeeSidebarContent onClose={onClose} />
-    : <BidPEmployeeSidebarContent onClose={onClose} />;
+  if (plant === "demo") return <DemoEmployeeSidebarContent onClose={onClose} />;
+  if (plant === "jap") return <JaPEmployeeSidebarContent onClose={onClose} />;
+  return <BidPEmployeeSidebarContent onClose={onClose} />;
 };
 
 const EmployeeSidebar = ({ open, onClose }: EmployeeSidebarProps) => {

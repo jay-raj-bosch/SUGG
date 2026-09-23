@@ -28,7 +28,7 @@ interface SuggestionContextType {
 const SuggestionContext = createContext<SuggestionContextType | undefined>(undefined);
 
 // Bump this version whenever mock data structure changes to force a fresh seed.
-const MOCK_DATA_VERSION = "v12";
+const MOCK_DATA_VERSION = "v13";
 
 // ── Stale-cache eviction ─────────────────────────────────────────────────────
 // Scans all bidp_db_ data keys; removes any whose version tag is missing or stale.
@@ -128,7 +128,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
       suggestionsRef.current = restored;
     } else {
       // First visit or mock data updated — seed from fresh mock data
-      const plantKey = plant.toUpperCase().replace("BIDP", "PLT-01").replace("JAP", "PLT-02");
+      const plantKey = plant === "jap" ? "PLT-02" : plant === "demo" ? "PLT-03" : "PLT-01";
       // Suggestions without plantCode are legacy BidP data → treat as PLT-01
       const seed = initialSuggestions.filter(s => (s.plantCode || "PLT-01") === plantKey);
       setSuggestions(seed);
@@ -141,7 +141,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
     }
     // Try backend — if available, overwrite with real data.
     // Only accept the response if it actually contains suggestions for this plant.
-    const expectedPlantCode = plant === "jap" ? "PLT-02" : "PLT-01";
+    const expectedPlantCode = plant === "jap" ? "PLT-02" : plant === "demo" ? "PLT-03" : "PLT-01";
     apiService.fetchSuggestions(plant, { limit: 500 })
       .then(result => {
         if (result.data.length) {
@@ -238,7 +238,7 @@ export const SuggestionProvider = ({ children }: { children: ReactNode }) => {
       return updated;
     });
     try {
-      await apiService.updateSuggestion((plant ?? "bidp") as "bidp" | "jap", id, updates as Record<string, unknown>);
+      await apiService.updateSuggestion((plant ?? "bidp") as "bidp" | "jap" | "demo", id, updates as Record<string, unknown>);
     } catch (err) {
       // Rollback the optimistic update so the UI does not drift from the server
       console.error("[SuggestionContext] updateSuggestion failed, rolling back:", err);

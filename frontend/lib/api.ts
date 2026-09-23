@@ -6,7 +6,31 @@
  * • Throws typed ApiError on non-2xx responses.
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? "/api";
+function getBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (!envUrl || typeof envUrl !== "string" || envUrl.trim() === "") {
+    return "/api";
+  }
+
+  if (typeof window !== "undefined") {
+    // If the browser is on a remote host (e.g. Cloud Run, *.run.app) and envUrl points to localhost,
+    // or if envUrl points to obsolete separate ports like 4000/8080/5173,
+    // fallback to relative "/api" on the current origin.
+    const isRemote = window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1";
+    if (
+      isRemote ||
+      envUrl.includes("localhost:4000") ||
+      envUrl.includes("localhost:8080") ||
+      envUrl.includes("localhost:5173")
+    ) {
+      return "/api";
+    }
+  }
+
+  return envUrl.endsWith("/") ? envUrl.slice(0, -1) : envUrl;
+}
+
+const BASE_URL = getBaseUrl();
 
 export class ApiError extends Error {
   constructor(
@@ -42,7 +66,9 @@ async function request<T>(
   if (token) headers["Authorization"] = `Bearer ${token}`;
   if (body && !isFormData) headers["Content-Type"] = "application/json";
 
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const cleanBase = BASE_URL.endsWith("/") ? BASE_URL.slice(0, -1) : BASE_URL;
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  const response = await fetch(`${cleanBase}${cleanPath}`, {
     method,
     headers,
     body: isFormData

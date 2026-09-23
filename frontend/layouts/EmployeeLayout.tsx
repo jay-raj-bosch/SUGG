@@ -8,7 +8,7 @@ import ChatbotWidget from "@/components/jap/ChatbotWidget";
 import { useSlaEscalation } from "@/hooks/useSlaEscalation";
 
 const EmployeeLayout = () => {
-  const { user, setRole } = useAuth();
+  const { user, setRole, setDemoRole } = useAuth();
   const { plant, setPlant } = usePlant();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -16,7 +16,7 @@ const EmployeeLayout = () => {
   // Auto-detect plant from URL on direct access (e.g. bookmarks)
   useEffect(() => {
     if (!plant) {
-      const match = location.pathname.match(/^\/(bidp|jap)\//i);
+      const match = location.pathname.match(/^\/(bidp|jap|demo)\//i);
       if (match) setPlant(match[1].toLowerCase() as PlantCode);
     }
   }, [plant, location.pathname, setPlant]);
@@ -24,9 +24,13 @@ const EmployeeLayout = () => {
   // Auto-assign employee role if not authenticated (direct URL access)
   useEffect(() => {
     if (!user) {
-      setRole("employee");
+      if (plant === "demo") {
+        setDemoRole("employee");
+      } else {
+        setRole("employee");
+      }
     }
-  }, [user, setRole]);
+  }, [user, setRole, setDemoRole, plant]);
 
   // SLA escalation alerts for JaP
   useSlaEscalation();

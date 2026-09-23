@@ -9,7 +9,7 @@ import type { DuplicateMatch, PendingMatch } from "@/lib/bidp/duplicateDetector"
 
 interface DuplicateAlertDialogProps {
   open: boolean;
-  matches: DuplicateMatch[];
+  matches?: DuplicateMatch[];
   /** In-flight concurrent matches (from pendingSubmissionsStore) */
   pendingMatches?: PendingMatch[];
   /** Called when the user decides to proceed anyway */
@@ -185,7 +185,7 @@ function PendingMatchCard({ match }: { match: PendingMatch }) {
 
 export default function DuplicateAlertDialog({
   open,
-  matches,
+  matches = [],
   pendingMatches = [],
   onProceed,
   onCancel,

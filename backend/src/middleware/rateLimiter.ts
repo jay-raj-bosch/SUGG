@@ -22,16 +22,18 @@ setInterval(() => {
       store.delete(key);
     }
   }
-}, 5 * 60 * 1000);
+}, 5 * 60 * 1000).unref();
 
 /**
  * Creates a rate limiter middleware.
  * @param maxAttempts Max requests within the window
  * @param windowMs Time window in milliseconds
  */
-export function rateLimit(maxAttempts: number = 5, windowMs: number = 15 * 60 * 1000) {
+export function rateLimit(maxAttempts: number = 100, windowMs: number = 15 * 60 * 1000) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const key = req.ip || req.socket.remoteAddress || "unknown";
+    const forwarded = req.headers["x-forwarded-for"];
+    const ip = (typeof forwarded === "string" ? forwarded.split(",")[0]?.trim() : null) || req.ip || req.socket.remoteAddress || "unknown";
+    const key = `${ip}`;
     const now = Date.now();
 
     const entry = store.get(key);

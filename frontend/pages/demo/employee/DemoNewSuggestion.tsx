@@ -1,6 +1,6 @@
 // Demo Application — New Suggestion (Employee)
 // Clean, enterprise-grade suggestion submission form with active plant/scheme context
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,11 +56,14 @@ import {
   Sliders,
   Sparkles,
   RotateCcw,
+  Phone,
+  Pencil,
+  Search,
 } from "lucide-react";
 import { teamMemberOptions } from "@/lib/jap/suggestionConstants";
 import { getInputMethodSettings } from "@/lib/jap/inputMethodStore";
 import { getDemoSelection, type DemoPlantKey } from "@/lib/demoConfig";
-import { mockEmployees } from "@/lib/mockData";
+import { mockEmployees, type MockEmployee } from "@/lib/mockData";
 
 // Manufacturing Areas & Stations
 const DEMO_AREAS = [
@@ -75,66 +78,76 @@ const DEMO_AREAS = [
   "Maintenance & Tool Room",
 ];
 
-// Area Specific Planner mapping
-const AREA_PLANNER_MAP: Record<
-  string,
-  { name: string; empNo: string; department: string; designation: string }
-> = {
-  "Assembly Line 1 - Final Inspection": {
-    name: "Rajesh Kumar",
+// Area Planning Engineers (Feasibility Reviewers) — Dropdown selectable directory
+interface PlanningEngineer {
+  empNo: string;
+  name: string;
+  department: string;
+  designation: string;
+}
+
+const DEMO_PLANNING_ENGINEERS: PlanningEngineer[] = [
+  {
     empNo: "PLN-101",
+    name: "Rajesh Kumar",
     department: "Assembly Operations",
-    designation: "Area Planner - Final Line",
+    designation: "Area Planning Engineer - Final Line",
   },
-  "Assembly Line 2 - Main Chassis": {
-    name: "Sunil Verma",
+  {
     empNo: "PLN-102",
+    name: "Sunil Verma",
     department: "Assembly Operations",
-    designation: "Area Planner - Chassis Assembly",
+    designation: "Area Planning Engineer - Chassis Assembly",
   },
-  "Press Shop - Stamping & Blanking": {
-    name: "Anil Sharma",
+  {
     empNo: "PLN-103",
+    name: "Anil Sharma",
     department: "Press & Stamping",
-    designation: "Area Planner - Press Shop",
+    designation: "Area Planning Engineer - Press Shop",
   },
-  "Machine Shop - CNC Machining Cell 03": {
-    name: "Vikram Patel",
+  {
     empNo: "PLN-104",
+    name: "Vikram Patel",
     department: "Machining Division",
-    designation: "Area Planner - CNC Machining",
+    designation: "Area Planning Engineer - CNC Machining",
   },
-  "Paint & Surface Treatment Booth": {
-    name: "Priya Nair",
+  {
     empNo: "PLN-105",
+    name: "Priya Nair",
     department: "Paint & Surface Finishing",
-    designation: "Area Planner - Paint Shop",
+    designation: "Area Planning Engineer - Paint Shop",
   },
-  "Robotic Welding Bay 4": {
-    name: "Deepak Joshi",
+  {
     empNo: "PLN-106",
+    name: "Deepak Joshi",
     department: "Welding & Body Shop",
-    designation: "Area Planner - Welding Bay",
+    designation: "Area Planning Engineer - Welding Bay",
   },
-  "Packaging & End-of-Line Dispatch": {
-    name: "Kavita Rao",
+  {
     empNo: "PLN-107",
+    name: "Kavita Rao",
     department: "Packaging & Logistics",
-    designation: "Area Planner - Dispatch & Packing",
+    designation: "Area Planning Engineer - Dispatch & Packing",
   },
-  "Quality Control Lab & Metrology": {
-    name: "Meera Iyer",
+  {
     empNo: "PLN-108",
+    name: "Meera Iyer",
     department: "Quality Assurance",
-    designation: "Area Planner - QA & Metrology",
+    designation: "Area Planning Engineer - QA & Metrology",
   },
-  "Maintenance & Tool Room": {
-    name: "Harish Gowda",
+  {
     empNo: "PLN-109",
+    name: "Harish Gowda",
     department: "Plant Maintenance",
-    designation: "Area Planner - Tool Room",
+    designation: "Area Planning Engineer - Tool Room",
   },
-};
+  {
+    empNo: "EMP-10251",
+    name: "Anita Sharma",
+    department: "Planning",
+    designation: "Senior Planning Engineer",
+  },
+];
 
 // Department Superior mapping
 const DEPT_SUPERIOR_MAP: Record<
@@ -228,6 +241,7 @@ interface FormErrors {
   implementationDate?: string;
   suggestionArea?: string;
   mainSuggestor?: string;
+  planner?: string;
 }
 
 interface FileUploadItem {
@@ -236,6 +250,234 @@ interface FileUploadItem {
   type: string;
   dataUrl?: string;
 }
+
+// Highlight matched search substring inside employee suggestions
+function highlightMatch(text: string, query: string) {
+  if (!query.trim()) return text;
+  const q = query.trim().toLowerCase();
+  const idx = text.toLowerCase().indexOf(q);
+  if (idx === -1) return text;
+  const before = text.slice(0, idx);
+  const match = text.slice(idx, idx + q.length);
+  const after = text.slice(idx + q.length);
+  return (
+    <span>
+      {before}
+      <span className="font-bold text-primary underline decoration-primary/50 underline-offset-2">
+        {match}
+      </span>
+      {after}
+    </span>
+  );
+}
+
+// Searchable Employee Select Component with Real-Time Suggestions
+interface EmployeeSearchSelectProps {
+  placeholder?: string;
+  selectedEmployee?: MockEmployee | null;
+  onSelect: (employee: MockEmployee) => void;
+  onClear?: () => void;
+  excludeEmpNos?: string[];
+  clearOnSelect?: boolean;
+}
+
+const EmployeeSearchSelect = ({
+  placeholder = "Type name or Employee No (e.g. Suresh, Ganesh, EMP-10201)...",
+  selectedEmployee,
+  onSelect,
+  onClear,
+  excludeEmpNos = [],
+  clearOnSelect = false,
+}: EmployeeSearchSelectProps) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredEmployees = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    const available = mockEmployees.filter(
+      (emp) => !excludeEmpNos.includes(emp.employeeNo)
+    );
+    if (!q) {
+      return available.slice(0, 8); // Display first 8 directory suggestions on focus
+    }
+    return available.filter(
+      (emp) =>
+        emp.name.toLowerCase().includes(q) ||
+        emp.employeeNo.toLowerCase().includes(q) ||
+        emp.department.toLowerCase().includes(q) ||
+        (emp.category && emp.category.toLowerCase().includes(q))
+    );
+  }, [searchTerm, excludeEmpNos]);
+
+  // If single employee is selected and not in editing/multi-select mode, show selected card
+  if (selectedEmployee && !clearOnSelect && !isEditing) {
+    return (
+      <div className="flex items-center justify-between p-2.5 bg-background border border-primary/40 rounded-lg text-xs shadow-xs animate-fade-in">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center shrink-0 text-xs">
+            {selectedEmployee.name.charAt(0)}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-semibold text-foreground text-xs">
+                {selectedEmployee.name}
+              </span>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-mono">
+                {selectedEmployee.employeeNo}
+              </Badge>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                {selectedEmployee.department}
+              </Badge>
+            </div>
+            <span className="text-[11px] text-muted-foreground block truncate mt-0.5">
+              {selectedEmployee.category || "Management & Staff"} • {selectedEmployee.email}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setIsEditing(true);
+              setIsOpen(true);
+              setTimeout(() => {
+                inputRef.current?.focus();
+                inputRef.current?.select();
+              }, 40);
+            }}
+            className="h-7 text-[11px] px-2 gap-1 text-primary hover:text-primary"
+          >
+            <Pencil className="h-3 w-3" />
+            Change
+          </Button>
+          {onClear && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onClear}
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+              title="Clear selection"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative flex items-center">
+        <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <Input
+          ref={inputRef}
+          type="text"
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            if (!isOpen) setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholder}
+          className="h-9 text-xs pl-8 pr-8 bg-background border-border"
+        />
+        {searchTerm && (
+          <button
+            type="button"
+            onClick={() => setSearchTerm("")}
+            className="absolute right-2.5 text-muted-foreground hover:text-foreground"
+            title="Clear search"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Live Suggestions Popup */}
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1 bg-popover text-popover-foreground border border-border rounded-lg shadow-lg z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+          <div className="px-2.5 py-1.5 bg-muted/50 border-b flex items-center justify-between text-[11px] text-muted-foreground font-medium">
+            <span>
+              {searchTerm.trim()
+                ? `Suggestions matching "${searchTerm}" (${filteredEmployees.length} found):`
+                : `Employee Directory Suggestions (${filteredEmployees.length}):`}
+            </span>
+            <span className="text-[10px] opacity-75">Click suggestion to select</span>
+          </div>
+
+          <div className="max-h-56 overflow-y-auto divide-y divide-border/40">
+            {filteredEmployees.length > 0 ? (
+              filteredEmployees.map((emp) => (
+                <button
+                  key={emp.employeeNo}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onSelect(emp);
+                    if (clearOnSelect) {
+                      setSearchTerm("");
+                    } else {
+                      setIsEditing(false);
+                    }
+                    setIsOpen(false);
+                  }}
+                  className="w-full text-left p-2 hover:bg-muted/80 flex items-center justify-between gap-2 text-xs transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="h-7 w-7 rounded-full bg-primary/10 text-primary font-semibold flex items-center justify-center shrink-0 text-xs group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                      {emp.name.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium text-foreground">
+                          {highlightMatch(emp.name, searchTerm)}
+                        </span>
+                        <Badge variant="outline" className="text-[10px] font-mono py-0 px-1">
+                          {highlightMatch(emp.employeeNo, searchTerm)}
+                        </Badge>
+                      </div>
+                      <span className="text-[11px] text-muted-foreground block truncate">
+                        {highlightMatch(emp.department, searchTerm)} • {emp.category || "M&SS"}
+                      </span>
+                    </div>
+                  </div>
+                  <Badge variant="secondary" className="text-[10px] shrink-0 opacity-80 group-hover:opacity-100 group-hover:bg-primary group-hover:text-primary-foreground">
+                    {clearOnSelect ? "+ Add" : "Select"}
+                  </Badge>
+                </button>
+              ))
+            ) : (
+              <div className="p-4 text-center text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">No matching employees</p>
+                <p className="text-[11px] mt-0.5">
+                  No directory member matches &ldquo;{searchTerm}&rdquo;. Try another name, employee number, or department.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const ReadonlyField = ({
   icon: Icon,
@@ -335,10 +577,29 @@ const DemoNewSuggestion = () => {
       ? selectedBehalfEmployee.category ?? "Management & Staff (M&SS)"
       : "Management & Staff (M&SS)";
 
-  const suggestorMobile =
-    suggestionFor === "behalf" && selectedBehalfEmployee
-      ? (selectedBehalfEmployee as any).mobile ?? "+91 98765 43210"
-      : "+91 98765 43210";
+  // Contact Phone pre-fill logic
+  const defaultPhone = useMemo(() => {
+    if (suggestionFor === "behalf" && selectedBehalfEmployee) {
+      return (selectedBehalfEmployee as any).mobile ?? (selectedBehalfEmployee as any).phone ?? "+91 98765 43210";
+    }
+    return (user as any)?.mobile ?? (user as any)?.phone ?? "+91 98765 43210";
+  }, [suggestionFor, selectedBehalfEmployee, user]);
+
+  const [contactNumber, setContactNumber] = useState<string>(
+    () =>
+      (draftSuggestion?.formData as any)?.contactNumber ??
+      (draftSuggestion?.formData as any)?.suggestorMobile ??
+      defaultPhone
+  );
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const contactInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-sync contact number when switching suggestor on non-draft form
+  useEffect(() => {
+    if (!draftSuggestion) {
+      setContactNumber(defaultPhone);
+    }
+  }, [defaultPhone, draftSuggestion]);
 
   // Suggestion Subject
   const [subject, setSubject] = useState(
@@ -413,15 +674,25 @@ const DemoNewSuggestion = () => {
     (draftSuggestion?.formData as any)?.proposedMethodFiles ?? []
   );
 
-  // Auto-routed Superior and Planner Details
+  // Auto-routed Superior Details
   const superiorDetails = useMemo(() => {
     return DEPT_SUPERIOR_MAP[suggestorDept] || DEPT_SUPERIOR_MAP.default;
   }, [suggestorDept]);
 
+  // Area Planning Engineer (Feasibility Reviewer) — Dropdown selectable (not area derived)
+  const [selectedPlannerEmpNo, setSelectedPlannerEmpNo] = useState<string>(
+    () =>
+      (draftSuggestion?.formData as any)?.plannerEmpNo ??
+      (draftSuggestion?.formData as any)?.plannerDetails?.empNo ??
+      ""
+  );
+
   const plannerDetails = useMemo(() => {
-    if (!suggestionArea) return null;
-    return AREA_PLANNER_MAP[suggestionArea] || null;
-  }, [suggestionArea]);
+    if (!selectedPlannerEmpNo) return null;
+    return (
+      DEMO_PLANNING_ENGINEERS.find((p) => p.empNo === selectedPlannerEmpNo) || null
+    );
+  }, [selectedPlannerEmpNo]);
 
   // Group Co-suggestors
   const [isGroupSuggestion, setIsGroupSuggestion] = useState(
@@ -557,6 +828,9 @@ const DemoNewSuggestion = () => {
     setImplementationDate("");
     setIsGroupSuggestion(false);
     setCoSuggestors([]);
+    setContactNumber(defaultPhone);
+    setIsEditingContact(false);
+    setSelectedPlannerEmpNo("");
     setErrors({});
     setShowResetDialog(false);
     toast.info("Form has been reset to clean defaults");
@@ -606,6 +880,10 @@ const DemoNewSuggestion = () => {
       errs.suggestionArea = "Please select an operational area";
     }
 
+    if (!selectedPlannerEmpNo) {
+      errs.planner = "Please select an Area Planning Engineer (Feasibility Reviewer)";
+    }
+
     setErrors(errs);
     const errKeys = Object.keys(errs);
     if (errKeys.length > 0) {
@@ -621,6 +899,8 @@ const DemoNewSuggestion = () => {
           document.getElementById("section-location")?.scrollIntoView({ behavior: "smooth", block: "start" });
         } else if (firstKey === "mainSuggestor") {
           document.getElementById("section-suggestor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else if (firstKey === "planner") {
+          document.getElementById("section-reviewers")?.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       }, 60);
       return false;
@@ -651,7 +931,8 @@ const DemoNewSuggestion = () => {
         suggestionFor,
         onBehalfEmpNo: suggestionFor === "behalf" ? selectedOnBehalfEmpNo : "",
         suggestorCategory,
-        suggestorMobile,
+        suggestorMobile: contactNumber,
+        contactNumber,
         subject,
         machineRefType,
         machineRef:
@@ -678,10 +959,14 @@ const DemoNewSuggestion = () => {
         proposedMethodFiles,
         superiorDetails,
         plannerDetails,
+        plannerEmpNo: selectedPlannerEmpNo,
         isGroupSuggestion,
         coSuggestors: coSuggestors.map((id) => ({
           empNo: id,
-          name: teamMemberOptions.find((o) => o.value === id)?.label ?? id,
+          name:
+            mockEmployees.find((e) => e.employeeNo === id)?.name ??
+            teamMemberOptions.find((o) => o.value === id)?.label ??
+            id,
         })),
       },
     };
@@ -832,19 +1117,71 @@ const DemoNewSuggestion = () => {
             </div>
           </div>
 
-          {/* 1. Suggestor Profile Details (Name, Department, Category, Mobile) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+          {/* 1. Suggestor Profile Details (Name, Department, Category, Contact Number) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
             <ReadonlyField icon={User} label="Suggestor Name" value={`${suggestorName} (${suggestorEmpNo})`} />
             <ReadonlyField icon={Building2} label="Department" value={workshopDeptName} />
             <ReadonlyField icon={Tag} label="Category" value={suggestorCategory} />
-            {isJaP && (
-              <ReadonlyField
-                icon={Sparkles}
-                label="Contact Mobile"
-                value={suggestorMobile}
-                badge="Verified"
-              />
-            )}
+
+            {/* Contact Number: Pre-filled editable textbox with edit option and tick symbol on Done */}
+            <div
+              className={`flex items-center gap-2 py-1.5 px-2.5 sm:px-3 rounded-lg border text-xs transition-colors min-w-0 ${
+                isEditingContact
+                  ? "bg-background border-primary shadow-xs ring-1 ring-primary/30"
+                  : "bg-muted/40 border-border hover:bg-muted/60"
+              }`}
+            >
+              <Phone className="h-4 w-4 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <label
+                  htmlFor="contactNumber"
+                  className="text-[10px] text-muted-foreground block leading-tight cursor-pointer"
+                >
+                  Contact Number
+                </label>
+                <Input
+                  id="contactNumber"
+                  ref={contactInputRef}
+                  type="tel"
+                  value={contactNumber}
+                  onChange={(e) => {
+                    setContactNumber(e.target.value);
+                    if (!isEditingContact) setIsEditingContact(true);
+                  }}
+                  onFocus={() => setIsEditingContact(true)}
+                  placeholder="+91 98765 43210"
+                  className="h-6 w-full text-xs font-medium px-0 py-0 border-0 bg-transparent shadow-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground tracking-tight"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingContact((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setTimeout(() => {
+                        contactInputRef.current?.focus();
+                        contactInputRef.current?.select();
+                      }, 40);
+                    }
+                    return next;
+                  });
+                }}
+                className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors shrink-0 ${
+                  isEditingContact
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30"
+                    : "text-primary hover:text-primary/80 hover:bg-primary/10"
+                }`}
+                title={isEditingContact ? "Save contact number" : "Edit contact number"}
+              >
+                {isEditingContact ? (
+                  <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <Pencil className="h-2.5 w-2.5" />
+                )}
+                <span>{isEditingContact ? "Done" : "Edit"}</span>
+              </button>
+            </div>
           </div>
 
           <Separator />
@@ -873,33 +1210,30 @@ const DemoNewSuggestion = () => {
 
             {suggestionFor === "behalf" && (
               <div className="p-3 bg-muted/40 border border-border rounded-lg space-y-2 mt-2 animate-fade-in">
-                <Label className="text-xs font-medium">
-                  Select Employee <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={selectedOnBehalfEmpNo}
-                  onValueChange={(empNo) => {
-                    setSelectedOnBehalfEmpNo(empNo);
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium">
+                    Search & Select Employee <span className="text-destructive">*</span>
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground">Type name or Emp No</span>
+                </div>
+                <EmployeeSearchSelect
+                  placeholder="Type employee name, ID (e.g. Suresh, Ganesh, 10201)..."
+                  selectedEmployee={selectedBehalfEmployee}
+                  onSelect={(emp) => {
+                    setSelectedOnBehalfEmpNo(emp.employeeNo);
                     setErrors((e) => ({ ...e, mainSuggestor: undefined }));
                   }}
-                >
-                  <SelectTrigger className="text-xs bg-background">
-                    <SelectValue placeholder="Search or select employee from directory..." />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-56">
-                    {mockEmployees.map((emp) => (
-                      <SelectItem key={emp.employeeNo} value={emp.employeeNo}>
-                        {emp.name} ({emp.employeeNo}) — {emp.department}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onClear={() => {
+                    setSelectedOnBehalfEmpNo("");
+                  }}
+                  excludeEmpNos={[user?.employeeNo ?? ""]}
+                />
                 {errors.mainSuggestor && (
                   <p className="text-xs text-destructive">{errors.mainSuggestor}</p>
                 )}
                 {selectedBehalfEmployee && (
-                  <p className="text-[11px] text-muted-foreground">
-                    Selected suggestor: <strong className="text-foreground">{selectedBehalfEmployee.name}</strong> ({selectedBehalfEmployee.employeeNo}) · {selectedBehalfEmployee.department}
+                  <p className="text-[11px] text-muted-foreground pt-0.5">
+                    Submitting on behalf of: <strong className="text-foreground">{selectedBehalfEmployee.name}</strong> ({selectedBehalfEmployee.employeeNo}) · {selectedBehalfEmployee.department}
                   </p>
                 )}
               </div>
@@ -927,50 +1261,64 @@ const DemoNewSuggestion = () => {
             </div>
 
             {isGroupSuggestion && (
-              <div className="p-3 bg-muted/30 border rounded-lg space-y-2 animate-fade-in">
-                <div className="flex items-center gap-2">
-                  <Select
-                    onValueChange={(val) => {
-                      if (!coSuggestors.includes(val)) {
-                        setCoSuggestors((prev) => [...prev, val]);
+              <div className="p-3 bg-muted/30 border rounded-lg space-y-3 animate-fade-in">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <Label className="text-xs font-medium">
+                      Search & Add Team Co-Suggestor
+                    </Label>
+                    <span className="text-[10px] text-muted-foreground">Type name to search directory</span>
+                  </div>
+                  <EmployeeSearchSelect
+                    placeholder="Type colleague name or Emp No to add..."
+                    onSelect={(emp) => {
+                      if (!coSuggestors.includes(emp.employeeNo)) {
+                        setCoSuggestors((prev) => [...prev, emp.employeeNo]);
                       }
                     }}
-                  >
-                    <SelectTrigger className="text-xs bg-background h-9">
-                      <SelectValue placeholder="Add co-suggestor from employee directory..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mockEmployees
-                        .filter((e) => e.employeeNo !== suggestorEmpNo)
-                        .map((emp) => (
-                          <SelectItem key={emp.employeeNo} value={emp.employeeNo} className="text-xs">
-                            {emp.name} ({emp.employeeNo}) — {emp.department}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                    excludeEmpNos={[suggestorEmpNo, ...coSuggestors]}
+                    clearOnSelect={true}
+                  />
                 </div>
 
                 {coSuggestors.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {coSuggestors.map((id) => {
-                      const emp = mockEmployees.find((e) => e.employeeNo === id);
-                      return (
-                        <Badge key={id} variant="secondary" className="text-[11px] gap-1 py-1 px-2">
-                          <UserPlus className="h-3 w-3 text-primary" />
-                          <span>
-                            {emp?.name ?? id} ({id})
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setCoSuggestors((cs) => cs.filter((c) => c !== id))}
-                            className="ml-1 hover:text-destructive"
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Assigned Team Co-Suggestors ({coSuggestors.length}):</span>
+                      <button
+                        type="button"
+                        onClick={() => setCoSuggestors([])}
+                        className="text-[10px] text-destructive hover:underline"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {coSuggestors.map((id) => {
+                        const emp = mockEmployees.find((e) => e.employeeNo === id);
+                        return (
+                          <Badge
+                            key={id}
+                            variant="secondary"
+                            className="text-[11px] gap-1.5 py-1 px-2.5 bg-primary/10 border border-primary/20 text-foreground"
                           >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      );
-                    })}
+                            <UserPlus className="h-3 w-3 text-primary" />
+                            <span>
+                              {emp?.name ?? id} <span className="text-muted-foreground">({id})</span>
+                              {emp?.department ? ` · ${emp.department}` : ""}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setCoSuggestors((cs) => cs.filter((c) => c !== id))}
+                              className="ml-1 text-muted-foreground hover:text-destructive transition-colors"
+                              title="Remove co-suggestor"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1630,15 +1978,6 @@ const DemoNewSuggestion = () => {
             {errors.suggestionArea && (
               <p className="text-xs text-destructive">{errors.suggestionArea}</p>
             )}
-
-            {plannerDetails && (
-              <div className="flex items-center gap-2 p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-xs text-emerald-800 dark:text-emerald-300 animate-in fade-in duration-150">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                <span>
-                  Designated Area Planning Engineer: <strong>{plannerDetails.name}</strong> ({plannerDetails.empNo}) — {plannerDetails.department}
-                </span>
-              </div>
-            )}
           </div>
 
           <Separator />
@@ -1761,28 +2100,61 @@ const DemoNewSuggestion = () => {
 
           <Separator />
 
-          {/* Area Specific Planner Details */}
-          <div className="space-y-2">
+          {/* Area Planning Engineer (Feasibility Reviewer) — Dropdown Selectable */}
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+              <Label htmlFor="plannerSelect" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                 <Wrench className="h-3.5 w-3.5 text-blue-500" />
-                Area Planning Engineer (Feasibility Reviewer)
+                Area Planning Engineer (Feasibility Reviewer) <span className="text-destructive">*</span>
               </Label>
-              <Badge variant="secondary" className="text-[10px] font-normal">
-                Area-derived
+              <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+                Dropdown Selectable
               </Badge>
             </div>
 
+            <Select
+              value={selectedPlannerEmpNo}
+              onValueChange={(val) => {
+                setSelectedPlannerEmpNo(val);
+                setErrors((err) => ({ ...err, planner: undefined }));
+              }}
+            >
+              <SelectTrigger
+                id="plannerSelect"
+                className={`text-xs h-10 bg-background ${errors.planner ? "border-destructive ring-1 ring-destructive" : ""}`}
+              >
+                <SelectValue placeholder="Select Area Planning Engineer from directory..." />
+              </SelectTrigger>
+              <SelectContent className="max-h-64">
+                {DEMO_PLANNING_ENGINEERS.map((engineer) => (
+                  <SelectItem key={engineer.empNo} value={engineer.empNo} className="text-xs py-2">
+                    <div className="flex flex-col text-left">
+                      <span className="font-medium text-foreground">
+                        {engineer.name} ({engineer.empNo})
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {engineer.department} • {engineer.designation}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {errors.planner && (
+              <p className="text-xs text-destructive">{errors.planner}</p>
+            )}
+
             {plannerDetails ? (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 animate-fade-in">
-                <ReadonlyField icon={User} label="Planner Name" value={plannerDetails.name} />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 animate-fade-in">
+                <ReadonlyField icon={User} label="Planner Name" value={`${plannerDetails.name} (${plannerDetails.empNo})`} />
                 <ReadonlyField icon={Building2} label="Department" value={plannerDetails.department} />
                 <ReadonlyField icon={Tag} label="Role" value={plannerDetails.designation} />
               </div>
             ) : (
-              <div className="p-3 bg-muted/40 rounded-lg text-xs text-muted-foreground border italic">
-                Select an operational area above to automatically assign the designated area planner.
-              </div>
+              <p className="text-[11px] text-muted-foreground italic px-0.5">
+                Please select the designated Area Planning Engineer responsible for conducting technical feasibility review.
+              </p>
             )}
           </div>
         </CardContent>

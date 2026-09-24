@@ -1,5 +1,5 @@
 // Configuration and scheme registry for Demo Application
-export type DemoPlantKey = "JaP" | "BidP" | "NaP";
+export type DemoPlantKey = "JaP" | "BidP" | "NaP" | "NhP";
 
 export interface DemoSchemeOption {
   value: string;
@@ -40,13 +40,39 @@ export const DEMO_PLANTS_CONFIG: Record<DemoPlantKey, DemoPlantOption> = {
   NaP: {
     key: "NaP",
     label: "NaP",
-    fullName: "Naganathapura Plant (NaP)",
-    location: "Naganathapura, Karnataka",
+    fullName: "Nashik Plant (NaP)",
+    location: "Nashik, Maharashtra",
     schemes: [
       {
         value: "regular suggestion",
         label: "Regular Suggestion",
         description: "Formal individual process improvement proposal",
+        badge: "Standard",
+      },
+      {
+        value: "EDOI",
+        label: "EDOI",
+        description: "Every Day Operational Improvement scheme",
+        badge: "Operational",
+      },
+      {
+        value: "kaizen",
+        label: "Kaizen",
+        description: "Shopfloor 5S, ergonomics & flow optimization",
+        badge: "Fast-Track",
+      },
+    ],
+  },
+  NhP: {
+    key: "NhP",
+    label: "NhP",
+    fullName: "Naganathapura Plant (NhP)",
+    location: "Naganathapura, Karnataka",
+    schemes: [
+      {
+        value: "regular suggestion",
+        label: "Regular Suggestion",
+        description: "Standard individual process improvement proposal",
         badge: "Standard",
       },
       {

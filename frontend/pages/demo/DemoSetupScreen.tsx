@@ -138,7 +138,7 @@ const DemoSetupScreen = () => {
 
               <Select value={selectedPlant} onValueChange={handlePlantChange}>
                 <SelectTrigger className="h-11 text-sm bg-background">
-                  <SelectValue placeholder="Choose a plant (JaP, BidP, NaP)..." />
+                  <SelectValue placeholder="Choose a plant (JaP, BidP, NaP, NhP)..." />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="JaP">
@@ -156,6 +156,12 @@ const DemoSetupScreen = () => {
                   <SelectItem value="NaP">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-foreground">NaP</span>
+                      <span className="text-xs text-muted-foreground">— Nashik Plant (Maharashtra)</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="NhP">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-foreground">NhP</span>
                       <span className="text-xs text-muted-foreground">— Naganathapura Plant (Karnataka)</span>
                     </div>
                   </SelectItem>

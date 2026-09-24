@@ -62,7 +62,7 @@ import {
 } from "lucide-react";
 import { teamMemberOptions } from "@/lib/jap/suggestionConstants";
 import { getInputMethodSettings } from "@/lib/jap/inputMethodStore";
-import { getDemoSelection, type DemoPlantKey } from "@/lib/demoConfig";
+import { getDemoSelection, DEMO_PLANTS_CONFIG, type DemoPlantKey } from "@/lib/demoConfig";
 import { mockEmployees, type MockEmployee } from "@/lib/mockData";
 
 // Manufacturing Areas & Stations
@@ -522,12 +522,14 @@ const DemoNewSuggestion = () => {
   const activeScheme = (demoSelection?.scheme || "suggestion").toLowerCase();
 
   const isKaizenScheme = activeScheme.includes("kaizen");
-  const isNaP = activePlant === "NaP";
-  const isJaP = activePlant === "JaP";
+  const isNaP = activePlant === "NaP"; // Nashik Plant
+  const isNhP = activePlant === "NhP"; // Naganathapura Plant
+  const isJaP = activePlant === "JaP"; // Jaipur Plant
+  const hasDualInputMode = isNaP || isNhP;
 
   // Implementation date logic:
   // JaP: Shown only for Kaizen schemes
-  // BidP & NaP: Visible across all schemes
+  // BidP, NaP & NhP: Visible across all schemes
   const showImplementationDate = isJaP ? isKaizenScheme : true;
 
   // BPS input method control
@@ -664,7 +666,7 @@ const DemoNewSuggestion = () => {
   const [proposedMethod, setProposedMethod] = useState(draftSuggestion?.proposedMethod ?? "");
   const [benefits, setBenefits] = useState(draftSuggestion?.benefits ?? "");
 
-  // NaP Dual Mode (Write / Upload)
+  // NaP (Nashik Plant) & NhP (Naganathapura Plant) Dual Mode (Write / Upload)
   const [presentInputMode, setPresentInputMode] = useState<"write" | "upload">("write");
   const [proposedInputMode, setProposedInputMode] = useState<"write" | "upload">("write");
   const [presentMethodFiles, setPresentMethodFiles] = useState<FileUploadItem[]>(
@@ -848,7 +850,7 @@ const DemoNewSuggestion = () => {
       errs.mainSuggestor = "Please select an employee";
     }
 
-    if (isNaP && presentInputMode === "upload") {
+    if (hasDualInputMode && presentInputMode === "upload") {
       if (presentMethodFiles.length === 0 && !presentMethod.trim()) {
         errs.presentMethod = "Please upload a document or enter text for present method";
       }
@@ -856,7 +858,7 @@ const DemoNewSuggestion = () => {
       errs.presentMethod = "Present method description is required";
     }
 
-    if (isNaP && proposedInputMode === "upload") {
+    if (hasDualInputMode && proposedInputMode === "upload") {
       if (proposedMethodFiles.length === 0 && !proposedMethod.trim()) {
         errs.proposedMethod = "Please upload a document or enter text for proposed method";
       }
@@ -1015,7 +1017,7 @@ const DemoNewSuggestion = () => {
       });
 
       toast.success("Suggestion Submitted Successfully", {
-        description: `${suggNo} is now registered under ${activePlant} (${activeScheme.toUpperCase()}).`,
+        description: `${suggNo} is now registered under ${DEMO_PLANTS_CONFIG[activePlant]?.fullName || activePlant} (${activeScheme.toUpperCase()}).`,
       });
       navigate(`${plantPrefix}/employee/my-suggestions`);
     } catch {
@@ -1056,7 +1058,7 @@ const DemoNewSuggestion = () => {
             </span>
             <div className="flex items-center gap-1.5 font-medium text-foreground">
               <Building2 className="h-3.5 w-3.5 text-primary" />
-              <span>{activePlant}</span>
+              <span>{DEMO_PLANTS_CONFIG[activePlant]?.fullName || activePlant}</span>
               <span className="text-muted-foreground font-normal">/</span>
               <Layers className="h-3.5 w-3.5 text-indigo-500" />
               <span className="capitalize">{activeScheme}</span>
@@ -1123,22 +1125,51 @@ const DemoNewSuggestion = () => {
             <ReadonlyField icon={Building2} label="Department" value={workshopDeptName} />
             <ReadonlyField icon={Tag} label="Category" value={suggestorCategory} />
 
-            {/* Contact Number: Pre-filled editable textbox with edit option and tick symbol on Done */}
+            {/* Contact Number: Pre-filled editable textbox with full visibility & tick symbol on Done */}
             <div
-              className={`flex items-center gap-2 py-1.5 px-2.5 sm:px-3 rounded-lg border text-xs transition-colors min-w-0 ${
+              className={`flex items-start gap-2.5 py-2 px-3 rounded-lg border text-xs transition-colors min-w-0 ${
                 isEditingContact
                   ? "bg-background border-primary shadow-xs ring-1 ring-primary/30"
                   : "bg-muted/40 border-border hover:bg-muted/60"
               }`}
             >
-              <Phone className="h-4 w-4 text-primary shrink-0" />
+              <Phone className="h-4 w-4 text-primary shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <label
-                  htmlFor="contactNumber"
-                  className="text-[10px] text-muted-foreground block leading-tight cursor-pointer"
-                >
-                  Contact Number
-                </label>
+                <div className="flex items-center justify-between gap-1 mb-0.5">
+                  <label
+                    htmlFor="contactNumber"
+                    className="text-[10px] text-muted-foreground block leading-tight cursor-pointer font-normal"
+                  >
+                    Contact Number
+                  </label>
+                  {isEditingContact ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingContact(false)}
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 px-1.5 py-0.5 rounded transition-all cursor-pointer shrink-0 leading-none"
+                      title="Save contact number"
+                    >
+                      <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+                      <span>Done</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingContact(true);
+                        setTimeout(() => {
+                          contactInputRef.current?.focus();
+                          contactInputRef.current?.select();
+                        }, 40);
+                      }}
+                      className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:text-primary/80 hover:bg-primary/10 px-1 py-0.5 rounded transition-colors cursor-pointer shrink-0 leading-none"
+                      title="Edit contact number"
+                    >
+                      <Pencil className="h-2.5 w-2.5" />
+                      <span>Edit</span>
+                    </button>
+                  )}
+                </div>
                 <Input
                   id="contactNumber"
                   ref={contactInputRef}
@@ -1149,38 +1180,16 @@ const DemoNewSuggestion = () => {
                     if (!isEditingContact) setIsEditingContact(true);
                   }}
                   onFocus={() => setIsEditingContact(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      setIsEditingContact(false);
+                    }
+                  }}
                   placeholder="+91 98765 43210"
-                  className="h-6 w-full text-xs font-medium px-0 py-0 border-0 bg-transparent shadow-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground tracking-tight"
+                  className="h-5 w-full text-xs font-semibold px-0 py-0 border-0 bg-transparent shadow-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground tracking-normal"
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsEditingContact((prev) => {
-                    const next = !prev;
-                    if (next) {
-                      setTimeout(() => {
-                        contactInputRef.current?.focus();
-                        contactInputRef.current?.select();
-                      }, 40);
-                    }
-                    return next;
-                  });
-                }}
-                className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors shrink-0 ${
-                  isEditingContact
-                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30"
-                    : "text-primary hover:text-primary/80 hover:bg-primary/10"
-                }`}
-                title={isEditingContact ? "Save contact number" : "Edit contact number"}
-              >
-                {isEditingContact ? (
-                  <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                ) : (
-                  <Pencil className="h-2.5 w-2.5" />
-                )}
-                <span>{isEditingContact ? "Done" : "Edit"}</span>
-              </button>
             </div>
           </div>
 
@@ -1467,9 +1476,9 @@ const DemoNewSuggestion = () => {
                 Baseline conditions, proposed countermeasures, and anticipated gains / वर्तमान स्थिति, प्रस्तावित सुधार एवं अपेक्षित लाभ
               </p>
             </div>
-            {isNaP && (
+            {hasDualInputMode && (
               <Badge variant="secondary" className="text-[10px] w-fit">
-                NaP Mode: Text / Document Upload
+                {activePlant === "NaP" ? "Nashik Plant (NaP)" : "Naganathapura Plant (NhP)"} Mode: Text / Document Upload
               </Badge>
             )}
           </div>
@@ -1712,7 +1721,7 @@ const DemoNewSuggestion = () => {
                 </span>
               </Label>
 
-              {isNaP && (
+              {hasDualInputMode && (
                 <div className="flex items-center gap-1 bg-muted p-0.5 rounded-md border text-[11px]">
                   <button
                     type="button"
@@ -1740,7 +1749,7 @@ const DemoNewSuggestion = () => {
               )}
             </div>
 
-            {(!isNaP || presentInputMode === "write") && (
+            {(!hasDualInputMode || presentInputMode === "write") && (
               <VoiceHighlight
                 active={activeVoiceField === "presentMethod"}
                 voiceMode={voiceEnabled}
@@ -1762,7 +1771,7 @@ const DemoNewSuggestion = () => {
               </VoiceHighlight>
             )}
 
-            {isNaP && presentInputMode === "upload" && (
+            {hasDualInputMode && presentInputMode === "upload" && (
               <div className="p-4 border-2 border-dashed rounded-lg bg-muted/20 text-center space-y-2">
                 <Upload className="h-6 w-6 text-muted-foreground mx-auto" />
                 <p className="text-xs font-medium text-foreground">
@@ -1815,7 +1824,7 @@ const DemoNewSuggestion = () => {
                 </span>
               </Label>
 
-              {isNaP && (
+              {hasDualInputMode && (
                 <div className="flex items-center gap-1 bg-muted p-0.5 rounded-md border text-[11px]">
                   <button
                     type="button"
@@ -1843,7 +1852,7 @@ const DemoNewSuggestion = () => {
               )}
             </div>
 
-            {(!isNaP || proposedInputMode === "write") && (
+            {(!hasDualInputMode || proposedInputMode === "write") && (
               <VoiceHighlight
                 active={activeVoiceField === "proposedMethod"}
                 voiceMode={voiceEnabled}
@@ -1865,7 +1874,7 @@ const DemoNewSuggestion = () => {
               </VoiceHighlight>
             )}
 
-            {isNaP && proposedInputMode === "upload" && (
+            {hasDualInputMode && proposedInputMode === "upload" && (
               <div className="p-4 border-2 border-dashed rounded-lg bg-muted/20 text-center space-y-2">
                 <Upload className="h-6 w-6 text-muted-foreground mx-auto" />
                 <p className="text-xs font-medium text-foreground">

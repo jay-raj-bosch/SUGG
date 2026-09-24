@@ -19,13 +19,6 @@ const DemoEmployeeSidebarContent = ({ onClose }: Props) => {
 
   const menuItems = [
     {
-      title: "Home",
-      translationKey: "Home",
-      url: `${plantPrefix}/employee`,
-      icon: Home,
-      end: true,
-    },
-    {
       title: "New Suggestion",
       translationKey: "New Suggestion",
       url: `${plantPrefix}/employee/new-suggestion`,

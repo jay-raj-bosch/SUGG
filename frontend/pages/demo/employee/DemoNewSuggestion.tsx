@@ -17,6 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { useSuggestions } from "@/contexts/SuggestionContext";
@@ -47,7 +55,7 @@ import {
   FileText,
   Sliders,
   Sparkles,
-  ClipboardList,
+  RotateCcw,
 } from "lucide-react";
 import { teamMemberOptions } from "@/lib/jap/suggestionConstants";
 import { getInputMethodSettings } from "@/lib/jap/inputMethodStore";
@@ -194,61 +202,12 @@ const THEME_OPTIONS = [
   { value: "ergonomics_care", label: "Operator Ergonomics Care", labelHi: "कार्य सुगमता अभियान" },
 ];
 
-// Pre-filled Demo Templates for rapid enterprise testing
-const ENTERPRISE_DEMO_TEMPLATES = [
-  {
-    name: "Conveyor Jam Auto-Stop (Safety)",
-    subject: "Automated optical sensor for conveyor belt discharge stop mechanism",
-    area: "Assembly Line 1 - Final Inspection",
-    category: "Safety Improvement",
-    machineRefType: "name" as const,
-    machineRef: "Main Conveyor A-1",
-    componentRefType: "number" as const,
-    componentRefValue: "CV-OPT-88",
-    themeBased: "yes" as const,
-    themeName: "safety_month",
-    presentMethod: "Currently, line operators must manually monitor the accumulation chute and step on a mechanical foot pedal whenever packages back up, causing occasional jams and potential pinch hazards.",
-    proposedMethod: "Install a retroreflective optical sensor interlocked with the VFD motor drive. The conveyor stops automatically within 200ms when three consecutive boxes dwell on the sensor.",
-    benefits: "Eliminates jam hazards completely, cuts downtime by 18 hours/month, and prevents repetitive ergonomic strain on operators.",
-  },
-  {
-    name: "Tool Shadow Board (5S / Kaizen)",
-    subject: "Modular magnetic shadow board for press die changeover tools",
-    area: "Press Shop - Stamping & Blanking",
-    category: "5S & Workplace Organization",
-    machineRefType: "number" as const,
-    machineRef: "PR-200-B",
-    componentRefType: "number" as const,
-    componentRefValue: "DIE-44-HEX",
-    themeBased: "yes" as const,
-    themeName: "5s_blitz",
-    presentMethod: "Wrenches, torque sockets, and alignment pins are stored in a communal cabinet 15 meters away. Operators spend 8 to 12 minutes retrieving and returning tools during each die change.",
-    proposedMethod: "Fabricate a dedicated magnetic mobile shadow board with custom CNC-cut EVA foam silhouettes located directly adjacent to Press B.",
-    benefits: "Reduces die changeover time by 9 minutes per setup (saving 45 hrs/quarter) and completely eliminates misplaced tool incidents.",
-  },
-  {
-    name: "Smart LED Sleep Cycle (Energy)",
-    subject: "PIR motion sensor controlled intelligent lighting in inspection booths",
-    area: "Quality Control Lab & Metrology",
-    category: "Energy Conservation",
-    machineRefType: "na" as const,
-    machineRef: "",
-    componentRefType: "na" as const,
-    componentRefValue: "",
-    themeBased: "yes" as const,
-    themeName: "energy_saving",
-    presentMethod: "Inspection booth overhead luminaires remain illuminated at 100% brightness (750 lux) around the clock, even when quality inspectors are out on the production floor.",
-    proposedMethod: "Integrate a dual-channel PIR occupancy detector with 3-minute hold-time that dims the lighting to 15% standby brightness when the booth is unattended.",
-    benefits: "Saves an estimated 480 kWh monthly per inspection station, extending LED driver lifespan by over 2.5 years.",
-  },
-];
-
 type MachineRefType = "name" | "number" | "na";
 type ComponentRefType = "name" | "number" | "na";
 type VoiceFieldKey = "subject" | "presentMethod" | "proposedMethod" | "benefits";
 
 const VOICE_FIELD_LABELS: Record<VoiceFieldKey, string> = {
-  subject: "Suggestion Subject",
+  subject: "Suggestion Subject / सुझाव विषय",
   presentMethod: "Present Method / वर्तमान विधि",
   proposedMethod: "Proposed Method / प्रस्तावित विधि",
   benefits: "Expected Benefits / अपेक्षित लाभ",
@@ -476,6 +435,9 @@ const DemoNewSuggestion = () => {
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Reset Dialog state
+  const [showResetDialog, setShowResetDialog] = useState(false);
+
   // Voice Engine — matching JaP New Suggestion
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceLang, setVoiceLang] = useState("hi-IN");
@@ -578,24 +540,26 @@ const DemoNewSuggestion = () => {
     e.target.value = "";
   };
 
-  // Populate enterprise demo sample
-  const applyDemoTemplate = (template: (typeof ENTERPRISE_DEMO_TEMPLATES)[0]) => {
-    setSubject(template.subject);
-    setSuggestionArea(template.area);
-    setCategory(template.category);
-    setMachineRefType(template.machineRefType);
-    setMachineRefValue(template.machineRef);
-    setComponentRefType(template.componentRefType);
-    setComponentRefValue(template.componentRefValue);
-    setThemeBased(template.themeBased);
-    setThemeName(template.themeName);
-    setPresentMethod(template.presentMethod);
-    setProposedMethod(template.proposedMethod);
-    setBenefits(template.benefits);
+  const handleResetForm = () => {
+    setSubject("");
+    setPresentMethod("");
+    setProposedMethod("");
+    setBenefits("");
+    setSuggestionArea("");
+    setMachineRefType("na");
+    setMachineRefValue("");
+    setComponentRefType("na");
+    setComponentRefValue("");
+    setPresentMethodFiles([]);
+    setProposedMethodFiles([]);
+    setThemeBased("no");
+    setThemeName("");
+    setImplementationDate("");
+    setIsGroupSuggestion(false);
+    setCoSuggestors([]);
     setErrors({});
-    toast.info(`Loaded demo template: ${template.name}`, {
-      description: "Form populated with enterprise manufacturing data.",
-    });
+    setShowResetDialog(false);
+    toast.info("Form has been reset to clean defaults");
   };
 
   // Validation
@@ -643,7 +607,26 @@ const DemoNewSuggestion = () => {
     }
 
     setErrors(errs);
-    return Object.keys(errs).length === 0;
+    const errKeys = Object.keys(errs);
+    if (errKeys.length > 0) {
+      const firstKey = errKeys[0];
+      setTimeout(() => {
+        const el = document.getElementById(firstKey) || document.querySelector(`[name="${firstKey}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          (el as HTMLElement).focus?.();
+        } else if (firstKey === "subject" || firstKey === "presentMethod" || firstKey === "proposedMethod" || firstKey === "benefits") {
+          document.getElementById("section-improvements")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else if (firstKey === "suggestionArea") {
+          document.getElementById("section-location")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else if (firstKey === "mainSuggestor") {
+          document.getElementById("section-suggestor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 60);
+      return false;
+    }
+
+    return true;
   };
 
   const buildPayload = (status: string) => {
@@ -805,42 +788,42 @@ const DemoNewSuggestion = () => {
         </div>
       </div>
 
-      {/* ── Enterprise Demo Data Loader Bar ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-transparent border border-blue-500/20 rounded-xl p-3.5">
-        <div className="flex items-center gap-2.5">
-          <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-          <div className="text-xs">
-            <span className="font-semibold text-foreground">Auto-fill Enterprise Demo Data:</span>{" "}
-            <span className="text-muted-foreground">Load authentic shopfloor improvement scenarios</span>
+      {/* Voice Assistant Live Banner when active */}
+      {voiceEngine.isListening && (
+        <div className="sticky top-2 z-30 flex items-center justify-between gap-3 p-3 bg-red-600 text-white rounded-lg shadow-lg border border-red-700 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5 text-xs font-medium min-w-0">
+            <span className="relative flex h-3 w-3 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+            </span>
+            <span className="truncate">
+              Dictating into <strong>{listeningField ? VOICE_FIELD_LABELS[listeningField] : "Field"}</strong> in {currentLangOption.nativeName} ({currentLangOption.label})
+            </span>
           </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-7 text-xs bg-white text-red-700 hover:bg-white/90 shrink-0 font-medium"
+            onClick={() => voiceEngine.stopListening()}
+          >
+            <MicOff className="h-3 w-3 mr-1" /> Stop Voice
+          </Button>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {ENTERPRISE_DEMO_TEMPLATES.map((tmpl) => (
-            <Button
-              key={tmpl.name}
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="h-7 text-[11px] px-2.5 gap-1 bg-background hover:bg-muted border shadow-2xs"
-              onClick={() => applyDemoTemplate(tmpl)}
-            >
-              <ClipboardList className="h-3 w-3 text-primary" />
-              {tmpl.name}
-            </Button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* ══════════════════════════════════════════════════════════════════════════
-          SECTION 1: SUBMISSION OVERVIEW & SUBJECT
+          SECTION 1: SUGGESTOR DETAILS & SUBMISSION OWNERSHIP
           ══════════════════════════════════════════════════════════════════════════ */}
-      <Card className="card-shadow">
+      <Card id="section-suggestor" className="card-shadow">
         <CardContent className="pt-5 space-y-4">
           <div className="flex items-center justify-between border-b pb-3">
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Suggestion Overview</h2>
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                <User className="h-4 w-4 text-primary" />
+                Suggestor Details
+              </h2>
               <p className="text-xs text-muted-foreground">
-                Submission identity, employee ownership, and core subject
+                Employee profile, department affiliation, and submission ownership
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -849,7 +832,24 @@ const DemoNewSuggestion = () => {
             </div>
           </div>
 
-          {/* Submission Mode: Self vs On Behalf */}
+          {/* 1. Suggestor Profile Details (Name, Department, Category, Mobile) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+            <ReadonlyField icon={User} label="Suggestor Name" value={`${suggestorName} (${suggestorEmpNo})`} />
+            <ReadonlyField icon={Building2} label="Department" value={workshopDeptName} />
+            <ReadonlyField icon={Tag} label="Category" value={suggestorCategory} />
+            {isJaP && (
+              <ReadonlyField
+                icon={Sparkles}
+                label="Contact Mobile"
+                value={suggestorMobile}
+                badge="Verified"
+              />
+            )}
+          </div>
+
+          <Separator />
+
+          {/* 2. Submission Mode: Self vs On Behalf (Below Name, Department, Category) */}
           <div className="space-y-2">
             <Label className="text-xs font-medium">Submission Mode</Label>
             <RadioGroup
@@ -908,186 +908,81 @@ const DemoNewSuggestion = () => {
 
           <Separator />
 
-          {/* Suggestion Subject */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="subject" className="text-xs font-medium">
-                Suggestion Subject <span className="text-destructive">*</span>
-              </Label>
-              <span className="text-[11px] text-muted-foreground">Concise headline describing the improvement</span>
-            </div>
-            <VoiceHighlight
-              active={activeVoiceField === "subject"}
-              voiceMode={voiceEnabled}
-              onActivate={() => startVoiceForField("subject")}
-              isTranslating={voiceEngine.isTranslating && activeVoiceField === "subject"}
-              translatingLang={isNonEnglish ? currentLangOption.nativeName : undefined}
-            >
-              <Input
-                id="subject"
-                value={subject}
+          {/* 3. Add Team Co-Suggestors (Group Submission) — Below Submission Mode */}
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="groupSuggestToggle"
+                checked={isGroupSuggestion}
                 onChange={(e) => {
-                  setSubject(e.target.value);
-                  setErrors((err) => ({ ...err, subject: undefined }));
+                  setIsGroupSuggestion(e.target.checked);
+                  if (!e.target.checked) setCoSuggestors([]);
                 }}
-                placeholder="e.g. Automated optical sensor for conveyor belt indexing"
-                className={errors.subject ? "border-destructive text-sm" : "text-sm"}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
               />
-            </VoiceHighlight>
-            {errors.subject && <p className="text-xs text-destructive">{errors.subject}</p>}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ══════════════════════════════════════════════════════════════════════════
-          SECTION 2: LOCATION & EQUIPMENT DETAILS
-          ══════════════════════════════════════════════════════════════════════════ */}
-      <Card className="card-shadow">
-        <CardContent className="pt-5 space-y-4">
-          <div className="border-b pb-3">
-            <h2 className="text-sm font-semibold text-foreground">Operational Location & Equipment</h2>
-            <p className="text-xs text-muted-foreground">
-              Station, machine, tool reference, and department affiliation
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Suggestion Area / Operation */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">
-                Operational Area / Station <span className="text-destructive">*</span>
+              <Label htmlFor="groupSuggestToggle" className="text-xs cursor-pointer font-medium">
+                Add Team Co-Suggestors (Group Submission)
               </Label>
-              <Select
-                value={suggestionArea}
-                onValueChange={(val) => {
-                  setSuggestionArea(val);
-                  setErrors((e) => ({ ...e, suggestionArea: undefined }));
-                }}
-              >
-                <SelectTrigger className={`text-xs h-10 ${errors.suggestionArea ? "border-destructive" : ""}`}>
-                  <SelectValue placeholder="Choose operational area..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {DEMO_AREAS.map((area) => (
-                    <SelectItem key={area} value={area} className="text-xs">
-                      {area}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.suggestionArea && (
-                <p className="text-xs text-destructive">{errors.suggestionArea}</p>
-              )}
             </div>
 
-            {/* Workshop / Dept. Name */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Department / Workshop</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  readOnly
-                  value={workshopDeptName}
-                  className="bg-muted/50 text-muted-foreground cursor-default text-xs h-10 font-medium"
-                />
-                <Badge variant="secondary" className="text-[10px] shrink-0 font-normal">
-                  Auto-populated
-                </Badge>
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Machine Reference */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium">Machine Reference</Label>
-                <span className="text-[10px] text-muted-foreground">Optional</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(["name", "number", "na"] as MachineRefType[]).map((opt) => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => {
-                      setMachineRefType(opt);
-                      if (opt === "na") setMachineRefValue("");
+            {isGroupSuggestion && (
+              <div className="p-3 bg-muted/30 border rounded-lg space-y-2 animate-fade-in">
+                <div className="flex items-center gap-2">
+                  <Select
+                    onValueChange={(val) => {
+                      if (!coSuggestors.includes(val)) {
+                        setCoSuggestors((prev) => [...prev, val]);
+                      }
                     }}
-                    className={`px-3 py-1 rounded text-xs border transition-colors ${
-                      machineRefType === opt
-                        ? "bg-primary text-primary-foreground border-primary font-medium"
-                        : "bg-background border-input text-foreground hover:bg-muted/50"
-                    }`}
                   >
-                    {opt === "name" && "Machine Name"}
-                    {opt === "number" && "Machine No."}
-                    {opt === "na" && "N/A"}
-                  </button>
-                ))}
-              </div>
-              {machineRefType !== "na" && (
-                <Input
-                  value={machineRefValue}
-                  onChange={(e) => setMachineRefValue(e.target.value)}
-                  placeholder={
-                    machineRefType === "name"
-                      ? "Enter Machine Name (e.g. CNC Mill HP-02)"
-                      : "Enter Machine Number (e.g. MC-704)"
-                  }
-                  className="text-xs h-9"
-                />
-              )}
-            </div>
+                    <SelectTrigger className="text-xs bg-background h-9">
+                      <SelectValue placeholder="Add co-suggestor from employee directory..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mockEmployees
+                        .filter((e) => e.employeeNo !== suggestorEmpNo)
+                        .map((emp) => (
+                          <SelectItem key={emp.employeeNo} value={emp.employeeNo} className="text-xs">
+                            {emp.name} ({emp.employeeNo}) — {emp.department}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {/* Component / Tool Reference */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-medium">Component / Tool No.</Label>
-                <span className="text-[10px] text-muted-foreground">Optional</span>
+                {coSuggestors.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {coSuggestors.map((id) => {
+                      const emp = mockEmployees.find((e) => e.employeeNo === id);
+                      return (
+                        <Badge key={id} variant="secondary" className="text-[11px] gap-1 py-1 px-2">
+                          <UserPlus className="h-3 w-3 text-primary" />
+                          <span>
+                            {emp?.name ?? id} ({id})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCoSuggestors((cs) => cs.filter((c) => c !== id))}
+                            className="ml-1 hover:text-destructive"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {(["name", "number", "na"] as ComponentRefType[]).map((opt) => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => {
-                      setComponentRefType(opt);
-                      if (opt === "na") setComponentRefValue("");
-                    }}
-                    className={`px-3 py-1 rounded text-xs border transition-colors ${
-                      componentRefType === opt
-                        ? "bg-primary text-primary-foreground border-primary font-medium"
-                        : "bg-background border-input text-foreground hover:bg-muted/50"
-                    }`}
-                  >
-                    {opt === "name" && "Component Name"}
-                    {opt === "number" && "Component / Tool No."}
-                    {opt === "na" && "N/A"}
-                  </button>
-                ))}
-              </div>
-              {componentRefType !== "na" && (
-                <Input
-                  value={componentRefValue}
-                  onChange={(e) => setComponentRefValue(e.target.value)}
-                  placeholder={
-                    componentRefType === "name"
-                      ? "Enter Component / Tool Name (e.g. Optical Sensor Bracket)"
-                      : "Enter Component / Tool No. (e.g. CV-OPT-88 / DIE-44-HEX)"
-                  }
-                  className="text-xs h-9"
-                />
-              )}
-            </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
       {/* ══════════════════════════════════════════════════════════════════════════
-          SECTION 3: CLASSIFICATION & IMPLEMENTATION
+          SECTION 2: CLASSIFICATION & CAMPAIGN
           ══════════════════════════════════════════════════════════════════════════ */}
-      <Card className="card-shadow">
+      <Card id="section-classification" className="card-shadow">
         <CardContent className="pt-5 space-y-4">
           <div className="border-b pb-3">
             <h2 className="text-sm font-semibold text-foreground">Classification & Campaign</h2>
@@ -1211,9 +1106,9 @@ const DemoNewSuggestion = () => {
       </Card>
 
       {/* ══════════════════════════════════════════════════════════════════════════
-          SECTION 4: METHODS & BENEFITS (JaP Improvement Details + Voice)
+          SECTION 3: METHODS & BENEFITS (JaP Improvement Details + Voice)
           ══════════════════════════════════════════════════════════════════════════ */}
-      <Card className="card-shadow">
+      <Card id="section-improvements" className="card-shadow">
         <CardContent className="pt-5 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
             <div>
@@ -1422,6 +1317,42 @@ const DemoNewSuggestion = () => {
               </span>
             </button>
           )}
+
+          {/* Suggestion Subject */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="subject" className="text-xs font-medium">
+                Suggestion Subject <span className="text-destructive">*</span>{" "}
+                <span className="text-[10px] text-muted-foreground font-normal">
+                  / सुझाव विषय — संक्षिप्त विवरण
+                </span>
+              </Label>
+              <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                Concise headline describing the improvement
+              </span>
+            </div>
+            <VoiceHighlight
+              active={activeVoiceField === "subject"}
+              voiceMode={voiceEnabled}
+              onActivate={() => startVoiceForField("subject")}
+              isTranslating={voiceEngine.isTranslating && activeVoiceField === "subject"}
+              translatingLang={isNonEnglish ? currentLangOption.nativeName : undefined}
+            >
+              <Input
+                id="subject"
+                value={subject}
+                onChange={(e) => {
+                  setSubject(e.target.value);
+                  setErrors((err) => ({ ...err, subject: undefined }));
+                }}
+                placeholder="e.g. Automated optical sensor for conveyor belt indexing..."
+                className={`text-xs h-10 ${errors.subject ? "border-destructive" : ""}`}
+              />
+            </VoiceHighlight>
+            {errors.subject && <p className="text-xs text-destructive">{errors.subject}</p>}
+          </div>
+
+          <Separator />
 
           {/* Present Method */}
           <div className="space-y-1.5">
@@ -1662,39 +1593,153 @@ const DemoNewSuggestion = () => {
       </Card>
 
       {/* ══════════════════════════════════════════════════════════════════════════
-          SECTION 5: STAKEHOLDERS & REVIEW ROUTING
+          SECTION 4: OPERATIONAL LOCATION & EQUIPMENT
           ══════════════════════════════════════════════════════════════════════════ */}
-      <Card className="card-shadow">
+      <Card id="section-location" className="card-shadow">
         <CardContent className="pt-5 space-y-4">
           <div className="border-b pb-3">
-            <h2 className="text-sm font-semibold text-foreground">Stakeholders & Review Routing</h2>
+            <h2 className="text-sm font-semibold text-foreground">Operational Location & Equipment</h2>
             <p className="text-xs text-muted-foreground">
-              Automated routing matrix for feasibility evaluation and approvals
+              Station, machine, and component / tool reference
             </p>
           </div>
 
-          {/* Suggestor Details */}
-          <div className="space-y-2">
-            <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-              <User className="h-3.5 w-3.5 text-primary" />
-              Suggestor Details
+          {/* Suggestion Area / Operation */}
+          <div className="space-y-1.5 max-w-xl">
+            <Label className="text-xs font-medium">
+              Operational Area / Station <span className="text-destructive">*</span>
             </Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
-              <ReadonlyField icon={User} label="Suggestor Name" value={suggestorName} />
-              <ReadonlyField icon={Building2} label="Department" value={workshopDeptName} />
-              <ReadonlyField icon={Tag} label="Category" value={suggestorCategory} />
-              {isJaP && (
-                <ReadonlyField
-                  icon={Sparkles}
-                  label="Contact Mobile"
-                  value={suggestorMobile}
-                  badge="Verified"
+            <Select
+              value={suggestionArea}
+              onValueChange={(val) => {
+                setSuggestionArea(val);
+                setErrors((e) => ({ ...e, suggestionArea: undefined }));
+              }}
+            >
+              <SelectTrigger className={`text-xs h-10 ${errors.suggestionArea ? "border-destructive" : ""}`}>
+                <SelectValue placeholder="Choose operational area..." />
+              </SelectTrigger>
+              <SelectContent>
+                {DEMO_AREAS.map((area) => (
+                  <SelectItem key={area} value={area} className="text-xs">
+                    {area}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.suggestionArea && (
+              <p className="text-xs text-destructive">{errors.suggestionArea}</p>
+            )}
+
+            {plannerDetails && (
+              <div className="flex items-center gap-2 p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-xs text-emerald-800 dark:text-emerald-300 animate-in fade-in duration-150">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <span>
+                  Designated Area Planning Engineer: <strong>{plannerDetails.name}</strong> ({plannerDetails.empNo}) — {plannerDetails.department}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Machine Reference */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">Machine Reference</Label>
+                <span className="text-[10px] text-muted-foreground">Optional</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(["name", "number", "na"] as MachineRefType[]).map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => {
+                      setMachineRefType(opt);
+                      if (opt === "na") setMachineRefValue("");
+                    }}
+                    className={`px-3 py-1 rounded text-xs border transition-colors ${
+                      machineRefType === opt
+                        ? "bg-primary text-primary-foreground border-primary font-medium"
+                        : "bg-background border-input text-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    {opt === "name" && "Machine Name"}
+                    {opt === "number" && "Machine No."}
+                    {opt === "na" && "N/A"}
+                  </button>
+                ))}
+              </div>
+              {machineRefType !== "na" && (
+                <Input
+                  value={machineRefValue}
+                  onChange={(e) => setMachineRefValue(e.target.value)}
+                  placeholder={
+                    machineRefType === "name"
+                      ? "Enter Machine Name (e.g. CNC Mill HP-02)"
+                      : "Enter Machine Number (e.g. MC-704)"
+                  }
+                  className="text-xs h-9"
+                />
+              )}
+            </div>
+
+            {/* Component / Tool Reference */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium">Component / Tool No.</Label>
+                <span className="text-[10px] text-muted-foreground">Optional</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(["name", "number", "na"] as ComponentRefType[]).map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => {
+                      setComponentRefType(opt);
+                      if (opt === "na") setComponentRefValue("");
+                    }}
+                    className={`px-3 py-1 rounded text-xs border transition-colors ${
+                      componentRefType === opt
+                        ? "bg-primary text-primary-foreground border-primary font-medium"
+                        : "bg-background border-input text-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    {opt === "name" && "Component Name"}
+                    {opt === "number" && "Component / Tool No."}
+                    {opt === "na" && "N/A"}
+                  </button>
+                ))}
+              </div>
+              {componentRefType !== "na" && (
+                <Input
+                  value={componentRefValue}
+                  onChange={(e) => setComponentRefValue(e.target.value)}
+                  placeholder={
+                    componentRefType === "name"
+                      ? "Enter Component / Tool Name (e.g. Optical Sensor Bracket)"
+                      : "Enter Component / Tool No. (e.g. CV-OPT-88 / DIE-44-HEX)"
+                  }
+                  className="text-xs h-9"
                 />
               )}
             </div>
           </div>
+        </CardContent>
+      </Card>
 
-          <Separator />
+      {/* ══════════════════════════════════════════════════════════════════════════
+          SECTION 5: REVIEWERS & APPROVAL ROUTING
+          ══════════════════════════════════════════════════════════════════════════ */}
+      <Card id="section-reviewers" className="card-shadow">
+        <CardContent className="pt-5 space-y-4">
+          <div className="border-b pb-3">
+            <h2 className="text-sm font-semibold text-foreground">Reviewers & Approval Routing</h2>
+            <p className="text-xs text-muted-foreground">
+              Automated routing matrix for feasibility evaluation and approvals
+            </p>
+          </div>
 
           {/* Superior Details */}
           <div className="space-y-2">
@@ -1740,77 +1785,6 @@ const DemoNewSuggestion = () => {
               </div>
             )}
           </div>
-
-          <Separator />
-
-          {/* Optional Group Co-Suggestors */}
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="groupSuggestToggle"
-                checked={isGroupSuggestion}
-                onChange={(e) => {
-                  setIsGroupSuggestion(e.target.checked);
-                  if (!e.target.checked) setCoSuggestors([]);
-                }}
-                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-              />
-              <Label htmlFor="groupSuggestToggle" className="text-xs cursor-pointer font-medium">
-                Add Team Co-Suggestors (Group Submission)
-              </Label>
-            </div>
-
-            {isGroupSuggestion && (
-              <div className="p-3 bg-muted/30 border rounded-lg space-y-2 animate-fade-in">
-                <div className="flex items-center gap-2">
-                  <Select
-                    onValueChange={(val) => {
-                      if (!coSuggestors.includes(val)) {
-                        setCoSuggestors((prev) => [...prev, val]);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="text-xs bg-background h-9">
-                      <SelectValue placeholder="Add co-suggestor from employee directory..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mockEmployees
-                        .filter((e) => e.employeeNo !== suggestorEmpNo)
-                        .map((emp) => (
-                          <SelectItem key={emp.employeeNo} value={emp.employeeNo} className="text-xs">
-                            {emp.name} ({emp.employeeNo}) — {emp.department}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {coSuggestors.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {coSuggestors.map((id) => {
-                      const emp = mockEmployees.find((e) => e.employeeNo === id);
-                      return (
-                        <Badge key={id} variant="secondary" className="text-[11px] gap-1 py-1 px-2">
-                          <UserPlus className="h-3 w-3 text-primary" />
-                          <span>
-                            {emp?.name ?? id} ({id})
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setCoSuggestors((cs) => cs.filter((c) => c !== id))}
-                            className="ml-1 hover:text-destructive"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </CardContent>
       </Card>
 
@@ -1818,18 +1792,31 @@ const DemoNewSuggestion = () => {
           ACTION BAR
           ══════════════════════════════════════════════════════════════════════════ */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleSaveDraft}
-          disabled={isSubmitting}
-          className="w-full sm:w-auto text-xs gap-1.5"
-        >
-          <Save className="h-3.5 w-3.5" />
-          Save as Draft
-        </Button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleSaveDraft}
+            disabled={isSubmitting}
+            className="w-1/2 sm:w-auto text-xs gap-1.5"
+          >
+            <Save className="h-3.5 w-3.5" />
+            Save as Draft
+          </Button>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowResetDialog(true)}
+            disabled={isSubmitting}
+            className="text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reset
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
           <Button
             type="button"
             variant="ghost"
@@ -1860,6 +1847,43 @@ const DemoNewSuggestion = () => {
           </Button>
         </div>
       </div>
+
+      {/* Reset Form Confirmation Dialog */}
+      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <RotateCcw className="h-4 w-4 text-amber-500" />
+              Reset Suggestion Form?
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Are you sure you want to reset this form? All entered text for subject, methods, and
+              benefits will be cleared. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowResetDialog(false)}
+              className="text-xs"
+            >
+              Continue Editing
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleResetForm}
+              className="text-xs gap-1.5"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Reset All Fields
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

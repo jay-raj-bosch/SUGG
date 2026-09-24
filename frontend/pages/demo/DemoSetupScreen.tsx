@@ -85,7 +85,7 @@ const DemoSetupScreen = () => {
     toast.success("Environment Configured!", {
       description: `Active Plant: ${selectedPlant} · Scheme: ${selectedScheme}`,
     });
-    navigate("/demo/employee");
+    navigate("/demo/employee/new-suggestion");
   };
 
   return (

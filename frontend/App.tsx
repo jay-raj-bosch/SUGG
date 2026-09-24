@@ -194,8 +194,9 @@ const App = () => (
                     <Route path="/demo/employee" element={
                       <PlantGuard><EmployeeLayout /></PlantGuard>
                     }>
-                      <Route index element={<DemoEmployeeHome />} />
+                      <Route index element={<Navigate to="/demo/employee/new-suggestion" replace />} />
                       <Route path="new-suggestion" element={<DemoNewSuggestion />} />
+                      <Route path="dashboard"      element={<DemoEmployeeHome />} />
                       <Route path="my-suggestions" element={<DemoMySuggestions />} />
                       <Route path="my-rewards"     element={<DemoMyRewards />} />
                     </Route>
